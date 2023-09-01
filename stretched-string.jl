@@ -41,11 +41,11 @@ function compute_determinants(σ_range, c, Δx, nsteps)
         det = 1
 
         for i in 1:size(A, 1)
-            det *= (@inbounds BandedMatrices.inbands_getindex(LU.factors, i, i))
+            @inbounds det *= BandedMatrices.inbands_getindex(LU.factors, i, i)
         end
         
-        for (i, m) in enumerate(LU.ipiv)
-            if i != m
+        for i in 1:size(A, 1)
+            if i != @inbounds LU.ipiv[i]
                 det *= -1
             end
         end
