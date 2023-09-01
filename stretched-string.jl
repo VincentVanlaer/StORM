@@ -59,3 +59,12 @@ function compute_determinants(σ_range, c, Δx, nsteps)
     println("Minimum solution: $(min_σ) (det = $(minval))")
     println("Actual solution: $(π * c / Δx / nsteps )")
 end
+
+
+compute_determinants(range(0.6,0.6,1), 0.2, 0.1, 10)
+
+IntelITT.resume()
+
+compute_determinants(range(0.6,0.7,10001), 0.2, 0.0001, 10000)
+
+IntelITT.pause()
