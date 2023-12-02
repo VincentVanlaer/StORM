@@ -1,14 +1,11 @@
 use blas::dgemm;
 use lapack::dgeev;
 use std::{
-    iter::zip,
-    mem::{self, transmute, transmute_copy, MaybeUninit},
-    ops::{Add, AddAssign, Index, IndexMut, Mul, MulAssign, Sub, SubAssign},
+    mem::{self, transmute, transmute_copy},
+    ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
 };
 
 use num::{complex::Complex64, Zero};
-
-use crate::print_matrix;
 
 #[derive(Copy, Clone)]
 #[repr(align(64))]

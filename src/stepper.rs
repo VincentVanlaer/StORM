@@ -9,7 +9,7 @@ pub(crate) trait Step<T: Float, const N: usize, I: Interpolator<T, N>>
 where
     [(); N * N]: Sized,
 {
-    fn step(interpolator: &I, x1: T, x2: T, frequency: f64) -> Matrix<T, N, N>;
+    fn step(&self, interpolator: &I, x1: T, x2: T, frequency: f64) -> Matrix<T, N, N>;
 }
 
 pub(crate) struct MagnusGL2 {}
@@ -19,7 +19,7 @@ where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
         let mut omega = interpolator.evaluate(0.5 * (x2 + x1), frequency);
 
         omega.exp(x2 - x1);
@@ -35,8 +35,8 @@ where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
-        const SQRT_3: f64 = 1.732050807568877293;
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
+        const SQRT_3: f64 = 1.732_050_807_568_877_2;
 
         let delta = x2 - x1;
         let a1 = interpolator.evaluate(0.5 * ((x2 + x1) - delta / SQRT_3), frequency);
@@ -60,9 +60,9 @@ where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
-        const SQRT_5: f64 = 2.236067977499789696;
-        const SQRT_3: f64 = 1.732050807568877293;
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
+        const SQRT_5: f64 = 2.236_067_977_499_79;
+        const SQRT_3: f64 = 1.732_050_807_568_877_2;
 
         let delta = x2 - x1;
         let a1 = interpolator.evaluate(0.5 * ((x2 + x1) - delta / SQRT_5), frequency);

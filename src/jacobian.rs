@@ -1,19 +1,27 @@
 use std::f64::consts::PI;
 
-use crate::{linalg::Matrix, model::StellarModel, print_matrix};
+use crate::{linalg::Matrix, model::StellarModel};
 use color_eyre::Result;
 use ndarray::Array1;
 use ndarray_interp::interp1d::{CubicSpline, Interp1DBuilder};
-use num::{CheckedAdd, Float};
+use num::Float;
 
 pub(crate) trait Interpolator<T: Float, const N: usize>
 where
     [(); N * N]: Sized,
 {
     fn evaluate(&self, location: T, frequency: T) -> Matrix<T, N, N>;
+}
 
-    fn lower_boundary(&self, frequency: f64) -> [f64; 8];
-    fn upper_boundary(&self, _frequency: f64) -> [f64; 8];
+pub(crate) trait System<T: Float, const N: usize, const N_INNER: usize, const N_OUTER: usize>:
+    Interpolator<T, N>
+where
+    [(); N * N]: Sized,
+    [(); N_INNER * N]: Sized,
+    [(); N_OUTER * N]: Sized,
+{
+    fn inner_boundary(&self, frequency: f64) -> Matrix<T, N_INNER, N>;
+    fn outer_boundary(&self, _frequency: f64) -> Matrix<T, N_OUTER, N>;
 }
 
 pub(crate) struct NonRotating1D {
@@ -143,8 +151,10 @@ impl Interpolator<f64, 4> for NonRotating1D {
 
         out
     }
+}
 
-    fn lower_boundary(&self, frequency: f64) -> [f64; 8] {
+impl System<f64, 4, 2, 2> for NonRotating1D {
+    fn inner_boundary(&self, frequency: f64) -> Matrix<f64, 2, 4> {
         [
             self.c1[0] * frequency * frequency,
             0.,
@@ -155,9 +165,10 @@ impl Interpolator<f64, 4> for NonRotating1D {
             0.,
             -1.,
         ]
+        .into()
     }
 
-    fn upper_boundary(&self, _frequency: f64) -> [f64; 8] {
-        [-1., self.u_upper, -1., 0., 1., self.ell + 1.0, 0., 1.]
+    fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 2, 4> {
+        [-1., self.u_upper, -1., 0., 1., self.ell + 1.0, 0., 1.].into()
     }
 }

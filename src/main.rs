@@ -9,20 +9,17 @@
 
 use color_eyre::Result;
 use hdf5::File as hdf5File;
-use lapack::dgbtrf;
 use linalg::Matrix;
 use model::StellarModel;
 use num::Float;
-use std::{fmt::Display, mem::transmute};
+use std::fmt::Display;
 
-use crate::{
-    jacobian::{Interpolator, NonRotating1D},
-    stepper::{MagnusGL2, MagnusGL4, MagnusGL6, Step},
-};
+use crate::{jacobian::NonRotating1D, solver::determinant, stepper::MagnusGL6};
 
 mod jacobian;
 mod linalg;
 mod model;
+mod solver;
 mod stepper;
 
 extern crate blas_src;
@@ -51,78 +48,18 @@ fn main() -> Result<()> {
 
     println!("{}", model.r_coord.len());
 
-    const KL: usize = 5;
-    const KU: usize = 2;
-    const STEPS: usize = 6199;
-    const ALEN: usize = 4 * STEPS + 4;
+    const STEPS: usize = 6000;
     const FREQS: usize = 1000;
 
-    let mut ipiv: [i32; ALEN] = [0; ALEN];
-    let mut info: i32 = 0;
+    let grid = (0..STEPS + 1)
+        .map(|n| 1. / STEPS as f64 * n as f64)
+        .collect();
     let mut dets = [0.0; FREQS];
 
     for l in 0..FREQS {
-        let mut storage = [[0.0; 2 * KL + KU + 1]; ALEN];
         let freq = 1.62 + (1. / FREQS as f64) * l as f64;
-        for i in 0..STEPS {
-            // let pos1 = (i as f64) / (STEPS as f64);
-            // let pos2 = ((i + 1) as f64) / (STEPS as f64);
-            let pos1 = model.r_coord[i] / model.radius;
-            let pos2 = model.r_coord[i + 1] / model.radius;
-            let matrix = MagnusGL6::step(&interpolator, pos1, pos2, freq);
-
-            for j in 0..4 {
-                for k in 0..4 {
-                    storage[i * 4 + j][KL + KU + k - j + 2] = matrix[j][k];
-                }
-                storage[(i + 1) * 4 + j][KL + KU - 2] = -1.0;
-            }
-        }
-
-        let lower_boundary = interpolator.lower_boundary(freq);
-        let upper_boundary = interpolator.upper_boundary(freq);
-
-        for j in 0..4 {
-            for k in 0..2 {
-                storage[j][KL + KU + k - j] = lower_boundary[j * 2 + k];
-                storage[ALEN - 4 + j][KL + KU + k - j + 2] = upper_boundary[j * 2 + k];
-            }
-        }
-
-        let storage_ref: &mut [f64; ALEN * (2 * KL + KU + 1)] = unsafe { transmute(&mut storage) };
-
-        unsafe {
-            dgbtrf(
-                ALEN as i32,
-                ALEN as i32,
-                KL as i32,
-                KU as i32,
-                storage_ref,
-                (2 * KL + KU + 1) as i32,
-                &mut ipiv,
-                &mut info,
-            )
-        };
-
-        if info < 0 {
-            panic!("dgbtrf failed")
-        }
-
-        let mut det = 1.0;
-
-        for i in 0..ALEN {
-            det *= storage[i][KL + KU];
-        }
-
-        let mut sgn = 1;
-
-        for i in 0..ALEN {
-            if ipiv[i] != (i + 1) as i32 {
-                sgn *= -1;
-            }
-        }
-
-        dets[l] = sgn as f64 * det;
+        let det = determinant(&interpolator, &MagnusGL6 {}, &grid, freq);
+        dets[l] = det;
     }
 
     for (i, det) in dets.iter().enumerate() {
