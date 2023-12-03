@@ -65,9 +65,9 @@ where
         const SQRT_3: f64 = 1.732_050_807_568_877_2;
 
         let delta = x2 - x1;
-        let a1 = interpolator.evaluate(0.5 * ((x2 + x1) - delta / SQRT_5), frequency);
+        let a1 = interpolator.evaluate(0.5 * ((x2 + x1) - delta * SQRT_3 / SQRT_5), frequency);
         let a2 = interpolator.evaluate(0.5 * (x2 + x1), frequency);
-        let a3 = interpolator.evaluate(0.5 * ((x2 + x1) + delta / SQRT_5), frequency);
+        let a3 = interpolator.evaluate(0.5 * ((x2 + x1) + delta * SQRT_3 / SQRT_5), frequency);
 
         let a61 = a2;
         let a62 = (a3 - a1) * (SQRT_5 / SQRT_3);
