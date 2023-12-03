@@ -53,18 +53,18 @@ where
             storage[j][kl + ku + k - j] = inner_boundary[j][k];
         }
         for k in 0..N_OUTER {
-            storage[alen - 4 + j][kl + ku + k - j + 2] = outer_boundary[j][k];
+            storage[alen - N + j][kl + ku + N - j - N_OUTER + k] = outer_boundary[j][k];
         }
     }
 
     for (i, pos) in grid.windows(2).enumerate() {
         let matrix = stepper.step(system, pos[0], pos[1], frequency);
 
-        for j in 0..4 {
-            for k in 0..4 {
-                storage[i * 4 + j][kl + ku + k - j + 2] = matrix[j][k];
+        for j in 0..N {
+            for k in 0..N {
+                storage[i * N + j][kl + ku + k - j + N_INNER] = matrix[j][k];
             }
-            storage[(i + 1) * 4 + j][kl + ku - 2] = -1.0;
+            storage[(i + 1) * N + j][kl + ku - N + N_INNER] = -1.0;
         }
     }
 

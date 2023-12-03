@@ -172,3 +172,32 @@ impl System<f64, 4, 2, 2> for NonRotating1D {
         [-1., self.u_upper, -1., 0., 1., self.ell + 1.0, 0., 1.].into()
     }
 }
+
+
+pub(crate) struct StretchedString {
+    pub speed_generator: fn(f64) -> f64
+}
+
+pub(crate) fn constant_speed(_location: f64) -> f64 {
+    1.0
+}
+
+pub(crate) fn parabola(location: f64) -> f64 {
+    2.0 * (location - 0.5).powi(2) + 0.5
+}
+
+impl Interpolator<f64, 2> for StretchedString {
+    fn evaluate(&self, location: f64, frequency: f64) -> Matrix<f64, 2, 2> {
+        [[0.0, -frequency.powi(2) / (self.speed_generator)(location).powi(2)], [1.0, 0.0]].into()
+    }
+}
+
+impl System<f64, 2, 1, 1> for StretchedString {
+    fn inner_boundary(&self, _frequency: f64) -> Matrix<f64, 1, 2> {
+        [[1.0], [0.0]].into()
+    }
+
+    fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 1, 2> {
+        [[1.0], [0.0]].into()
+    }
+}
