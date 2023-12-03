@@ -57,6 +57,15 @@ where
     }
 }
 
+pub(crate) fn commutator<T: Zero + Copy, const N: usize>(a: Matrix<T, N, N>, b: Matrix<T, N, N>) -> Matrix<T, N, N>
+where
+    [(); N * N]: Sized,
+    T: Mul<Output = T> + AddAssign,
+    Matrix<T, N, N>: Matmul<Matrix<T, N, N>> + Sub<Matrix<T, N, N>, Output = Matrix<T, N,N>>
+{
+    a.matmul(b) - b.matmul(a)
+}
+
 impl<T, const ROWS: usize, const COLUMNS: usize> Index<usize> for Matrix<T, ROWS, COLUMNS>
 where
     [(); ROWS * COLUMNS]: Sized,
