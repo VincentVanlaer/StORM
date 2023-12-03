@@ -274,6 +274,15 @@ impl<T, const ROWS: usize, const COLUMNS: usize> From<[T; ROWS * COLUMNS]>
     }
 }
 
+impl<T, const ROWS: usize, const COLUMNS: usize> From<[[T; ROWS]; COLUMNS]>
+    for Matrix<T, ROWS, COLUMNS>
+where [(); ROWS * COLUMNS]: Sized
+{
+    fn from(data: [[T; ROWS]; COLUMNS]) -> Self {
+        Self { data }
+    }
+}
+
 impl<T, const ROWS: usize, const COLUMNS: usize> From<Matrix<T, ROWS, COLUMNS>>
     for [T; ROWS * COLUMNS]
 {
