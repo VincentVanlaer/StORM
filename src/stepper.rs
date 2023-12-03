@@ -43,9 +43,9 @@ where
         let a2 = interpolator.evaluate(0.5 * ((x2 + x1) + delta / SQRT_3), frequency);
 
         let a41 = (a1 + a2) * 0.5;
-        let a42 = (a1 - a2) * SQRT_3;
+        let a42 = (a2 - a1) * SQRT_3 * delta;
 
-        let mut omega = a41 - commutator(a41, a42) * (delta / 12.0);
+        let mut omega = a41 - commutator(a41, a42) * (1.0 / 12.0);
 
         omega.exp(delta);
 
@@ -69,14 +69,14 @@ where
         let a2 = interpolator.evaluate(0.5 * (x2 + x1), frequency);
         let a3 = interpolator.evaluate(0.5 * ((x2 + x1) + delta * SQRT_3 / SQRT_5), frequency);
 
-        let a61 = a2;
-        let a62 = (a3 - a1) * (SQRT_5 / SQRT_3);
-        let a63 = (a3 - a2 * 2.0 + a1) * (10. / 3.);
+        let a61 = a2;  // delta
+        let a62 = (a3 - a1) * (SQRT_5 / SQRT_3) * delta;
+        let a63 = (a3 - a2 * 2.0 + a1) * (10. / 3.); // delta
 
-        let c1 = commutator(a61, a62) * delta;
-        let c2 = commutator(a61, a63 * 2. + c1) * (-delta / 60.);
+        let c1 = commutator(a61, a62); // delta
+        let c2 = commutator(a61, a63 * 2. + c1) * (- 1.0 / 60.) * delta * delta;
 
-        let mut omega = a61 + a63 * (1. / 12.) + commutator(a61 * (-20.) - a63 + c1, a62 + c2) * (delta / 240.);
+        let mut omega = a61 + a63 * (1. / 12.) + commutator(a61 * (-20.) - a63 + c1, a62 + c2) * (1. / 240.); // delta
 
         omega.exp(delta);
 
