@@ -32,7 +32,7 @@ pub(crate) struct NonRotating1D {
     u_upper: f64,
 }
 
-const MAX_GRID_POWER: u64 = 1 << 15; // 2^15
+const MAX_GRID_POWER: u64 = 1_000_000;
 const GRAV: f64 = 6.67430e-8;
 
 impl NonRotating1D {
@@ -184,6 +184,15 @@ pub(crate) fn constant_speed(_location: f64) -> f64 {
 
 pub(crate) fn parabola(location: f64) -> f64 {
     2.0 * (location - 0.5).powi(2) + 0.5
+}
+
+pub(crate) fn linear_piecewise(location: f64) -> f64 {
+    0.1 * (location - 0.5).abs() + 0.5
+}
+
+pub(crate) fn smoothened_linear_piecewise(location: f64) -> f64 {
+    let offset = location - 0.5;
+    0.5 + 0.1 * (offset.powi(2) + 0.00001).sqrt()
 }
 
 impl Interpolator<f64, 2> for StretchedString {
