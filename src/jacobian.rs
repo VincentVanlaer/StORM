@@ -173,9 +173,8 @@ impl System<f64, 4, 2, 2> for NonRotating1D {
     }
 }
 
-
 pub(crate) struct StretchedString {
-    pub speed_generator: fn(f64) -> f64
+    pub speed_generator: fn(f64) -> f64,
 }
 
 pub(crate) fn constant_speed(_location: f64) -> f64 {

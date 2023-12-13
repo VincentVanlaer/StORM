@@ -132,7 +132,7 @@ where
 
     let epsilon = f64::EPSILON * upper.abs();
     let n_bisect = (((upper - lower) / (2.0 * epsilon)).log2() as i32) + N0;
-    
+
     let mut j = 0;
 
     let mut f_lower = determinant(system, stepper, grid, lower);
@@ -140,7 +140,14 @@ where
 
     if DEBUG_BRACKETS {
         println!("Max number of iterations: {n_bisect}, epsilon = {epsilon}");
-        println!("Initial bracket [{}, {}], delta = {} with values {} and {}", lower, upper, upper - lower, f_lower, f_upper);
+        println!(
+            "Initial bracket [{}, {}], delta = {} with values {} and {}",
+            lower,
+            upper,
+            upper - lower,
+            f_lower,
+            f_upper
+        );
     }
 
     if f_lower.signum() == f_upper.signum() {
@@ -191,7 +198,14 @@ where
         }
 
         if DEBUG_BRACKETS {
-        println!("Iteration done, bracket refined to [{}, {}], delta = {} with values {} and {}", lower, upper, upper - lower, f_lower, f_upper);
+            println!(
+                "Iteration done, bracket refined to [{}, {}], delta = {} with values {} and {}",
+                lower,
+                upper,
+                upper - lower,
+                f_lower,
+                f_upper
+            );
         }
     }
 
