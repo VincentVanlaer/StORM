@@ -133,9 +133,9 @@ where
     fn step(&self, interpolator: &I, x1: T, x2: T, frequency: f64) -> Matrix<T, N, N>;
 }
 
-pub(crate) struct MagnusGL2 {}
+pub(crate) struct Magnus2 {}
 
-impl<const N: usize, I: Moments<f64, N, 1>> Step<f64, N, 1, I> for MagnusGL2
+impl<const N: usize, I: Moments<f64, N, 1>> Step<f64, N, 1, I> for Magnus2
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
@@ -150,9 +150,9 @@ where
     }
 }
 
-pub(crate) struct MagnusGL4 {}
+pub(crate) struct Magnus4 {}
 
-impl<const N: usize, I: Moments<f64, N, 2>> Step<f64, N, 2, I> for MagnusGL4
+impl<const N: usize, I: Moments<f64, N, 2>> Step<f64, N, 2, I> for Magnus4
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
@@ -169,9 +169,9 @@ where
     }
 }
 
-pub(crate) struct MagnusGL6 {}
+pub(crate) struct Magnus6 {}
 
-impl<const N: usize, I: Moments<f64, N, 3>> Step<f64, N, 3, I> for MagnusGL6
+impl<const N: usize, I: Moments<f64, N, 3>> Step<f64, N, 3, I> for Magnus6
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
@@ -192,9 +192,9 @@ where
     }
 }
 
-pub(crate) struct MagnusGL8 {}
+pub(crate) struct Magnus8 {}
 
-impl<const N: usize, I: Moments<f64, N, 4>> Step<f64, N, 4, I> for MagnusGL8
+impl<const N: usize, I: Moments<f64, N, 4>> Step<f64, N, 4, I> for Magnus8
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
