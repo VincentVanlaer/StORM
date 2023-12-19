@@ -132,14 +132,15 @@ where
     }
 }
 
-impl<T: Copy + Zero, const N: usize, const M: usize> Mul<T> for Matrix<T, N, M>
+impl<T: Copy + Zero + Mul<C, Output = T>, C: Copy, const N: usize, const M: usize> Mul<C>
+    for Matrix<T, N, M>
 where
     [(); N * M]: Sized,
     T: Mul<T, Output = T>,
 {
     type Output = Matrix<T, N, M>;
 
-    fn mul(self, rhs: T) -> Self::Output {
+    fn mul(self, rhs: C) -> Self::Output {
         let mut result = Matrix {
             data: [[T::zero(); N]; M],
         };
