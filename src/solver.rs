@@ -26,8 +26,9 @@ pub(crate) fn determinant<
     const N: usize,
     const N_INNER: usize,
     const N_OUTER: usize,
-    I: System<f64, N, N_INNER, N_OUTER>,
-    S: Step<f64, N, I>,
+    const ORDER: usize,
+    I: System<f64, N, N_INNER, N_OUTER, ORDER>,
+    S: Step<f64, N, ORDER, I>,
 >(
     system: &I,
     stepper: &S,
@@ -104,15 +105,15 @@ where
     sgn as f64 * det
 }
 
-
 const DEBUG_BRACKETS: bool = true;
 
 pub(crate) fn bracket_search<
     const N: usize,
     const N_INNER: usize,
     const N_OUTER: usize,
-    I: System<f64, N, N_INNER, N_OUTER>,
-    S: Step<f64, N, I>,
+    const ORDER: usize,
+    I: System<f64, N, N_INNER, N_OUTER, ORDER>,
+    S: Step<f64, N, ORDER, I>,
 >(
     system: &I,
     stepper: &S,
