@@ -105,7 +105,7 @@ where
     sgn as f64 * det
 }
 
-const DEBUG_BRACKETS: bool = true;
+const DEBUG_BRACKETS: bool = false;
 
 pub(crate) fn bracket_search<
     const N: usize,
