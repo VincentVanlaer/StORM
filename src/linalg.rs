@@ -5,7 +5,7 @@ use std::{
     ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
 };
 
-use num::{complex::Complex64, Zero};
+use num::{complex::Complex64, Zero, range, One};
 
 #[derive(Copy, Clone)]
 #[repr(align(64))]
@@ -26,6 +26,21 @@ where
 
     pub(crate) fn as_slice_mut(&mut self) -> &mut [T; N * M] {
         unsafe { transmute(&mut self.data) }
+    }
+}
+
+impl<T: Zero + One + Copy, const N: usize> Matrix<T, N, N> 
+where
+    [(); N * N]: Sized,
+{
+    pub(crate) fn eye() -> Matrix<T, N, N> {
+        let mut data = [[T::zero(); N]; N];
+        
+        for i in 0..N {
+            data[i][i] = T::one();
+        }
+
+        data.into()
     }
 }
 
