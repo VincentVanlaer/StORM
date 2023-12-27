@@ -126,38 +126,48 @@ where
     }
 }
 
-pub(crate) trait Step<T: Float, const N: usize, const ORDER: usize, I: Moments<T, N, ORDER>>
+
+pub(crate) struct Step<T, const N: usize> 
 where
     [(); N * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: T, x2: T, frequency: f64) -> Matrix<T, N, N>;
+    pub left: Matrix<T, N, N>,
+    pub right: Matrix<T, N, N>,
+}
+
+
+pub(crate) trait Stepper<T: Float, const N: usize, const ORDER: usize, I: Moments<T, N, ORDER>>
+where
+    [(); N * N]: Sized,
+{
+    fn step(&self, interpolator: &I, x1: T, x2: T, frequency: f64) -> Step<T, N>;
 }
 
 pub(crate) struct Magnus2 {}
 
-impl<const N: usize, I: Moments<f64, N, 1>> Step<f64, N, 1, I> for Magnus2
+impl<const N: usize, I: Moments<f64, N, 1>> Stepper<f64, N, 1, I> for Magnus2
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
         let [mut omega] = interpolator.evaluate_moments(x1, x2, frequency);
 
 
         omega.exp(x2 - x1);
 
-        omega
+        Step { left: omega, right: Matrix::eye() }
     }
 }
 
 pub(crate) struct Magnus4 {}
 
-impl<const N: usize, I: Moments<f64, N, 2>> Step<f64, N, 2, I> for Magnus4
+impl<const N: usize, I: Moments<f64, N, 2>> Stepper<f64, N, 2, I> for Magnus4
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
         let delta = x2 - x1;
         let [b1, b2] = interpolator.evaluate_moments(x1, x2, frequency);
         
@@ -165,18 +175,18 @@ where
 
         omega.exp(delta);
 
-        omega
+        Step { left: omega, right: Matrix::eye() }
     }
 }
 
 pub(crate) struct Magnus6 {}
 
-impl<const N: usize, I: Moments<f64, N, 3>> Step<f64, N, 3, I> for Magnus6
+impl<const N: usize, I: Moments<f64, N, 3>> Stepper<f64, N, 3, I> for Magnus6
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
         let delta = x2 - x1;
         let [b1, b2, b3] = interpolator.evaluate_moments(x1, x2, frequency);
 
@@ -188,18 +198,18 @@ where
 
         omega.exp(delta);
 
-        omega
+        Step { left: omega, right: Matrix::eye() }
     }
 }
 
 pub(crate) struct Magnus8 {}
 
-impl<const N: usize, I: Moments<f64, N, 4>> Step<f64, N, 4, I> for Magnus8
+impl<const N: usize, I: Moments<f64, N, 4>> Stepper<f64, N, 4, I> for Magnus8
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Matrix<f64, N, N> {
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
 
         let delta = x2 - x1;
 
@@ -216,6 +226,8 @@ where
 
         omega.exp(delta);
 
-        omega
+        Step { left: omega, right: Matrix::eye() }
+    }
+}
     }
 }

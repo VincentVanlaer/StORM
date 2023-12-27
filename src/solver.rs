@@ -3,10 +3,10 @@ use std::mem::transmute;
 
 use lapack::dgbtrf;
 
-use crate::{jacobian::System, stepper::Step};
+use crate::{jacobian::System, stepper::Stepper};
 
 const fn calc_ku<const N: usize, const N_INNER: usize, const N_OUTER: usize>() -> usize {
-    N - 1
+    N - 1 + (N - N_INNER)
 }
 
 const fn calc_kl<const N: usize, const N_INNER: usize, const N_OUTER: usize>() -> usize {
@@ -28,7 +28,7 @@ pub(crate) fn determinant<
     const N_OUTER: usize,
     const ORDER: usize,
     I: System<f64, N, N_INNER, N_OUTER, ORDER>,
-    S: Step<f64, N, ORDER, I>,
+    S: Stepper<f64, N, ORDER, I>,
 >(
     system: &I,
     stepper: &S,
@@ -65,9 +65,9 @@ where
 
         for j in 0..N {
             for k in 0..N {
-                storage[i * N + j][kl + ku + k - j + N_INNER] = matrix[j][k];
+                storage[i * N + j][kl + ku + k - j + N_INNER] = matrix.left[j][k];
+                storage[(i + 1) * N + j][kl + ku + k - j - N + N_INNER] = matrix.right[j][k];
             }
-            storage[(i + 1) * N + j][kl + ku - N + N_INNER] = -1.0;
         }
     }
 
@@ -113,7 +113,7 @@ pub(crate) fn bracket_search<
     const N_OUTER: usize,
     const ORDER: usize,
     I: System<f64, N, N_INNER, N_OUTER, ORDER>,
-    S: Step<f64, N, ORDER, I>,
+    S: Stepper<f64, N, ORDER, I>,
 >(
     system: &I,
     stepper: &S,
