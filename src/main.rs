@@ -1,10 +1,4 @@
 #![feature(generic_const_exprs)]
-#![feature(generic_arg_infer)]
-#![feature(maybe_uninit_uninit_array)]
-#![feature(maybe_uninit_array_assume_init)]
-#![feature(maybe_uninit_uninit_array_transpose)]
-#![feature(min_specialization)]
-#![feature(portable_simd)]
 #![allow(incomplete_features)]
 
 use color_eyre::Result;
