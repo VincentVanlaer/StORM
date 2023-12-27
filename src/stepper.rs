@@ -5,7 +5,7 @@ use num::Float;
 
 use crate::{
     jacobian::{Moments, PointwiseInterpolator},
-    linalg::{commutator, Matrix},
+    linalg::{commutator, Matrix, Matmul},
 };
 
 impl<T: Float + Mul<f64, Output = T>, const N: usize, U: PointwiseInterpolator<T, N>>
@@ -229,5 +229,43 @@ where
         Step { left: omega, right: Matrix::eye() }
     }
 }
+
+pub(crate) struct Colloc2 {}
+
+impl<const N: usize, I: Moments<f64, N, 1>> Stepper<f64, N, 1, I> for Colloc2
+where
+    [(); N * N]: Sized,
+    [(); 1 * N]: Sized,
+{
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
+        let [b1] = interpolator.evaluate_moments(x1, x2, frequency);
+
+        let c1 = b1 * (x2 - x1) * 0.5;
+        let c2 = Matrix::eye();
+
+        Step { left: c1 + c2, right: c1 - c2 }
+    }
+}
+
+pub(crate) struct Colloc4 {}
+
+impl<const N: usize, I: Moments<f64, N, 2>> Stepper<f64, N, 2, I> for Colloc4
+where
+    [(); N * N]: Sized,
+    [(); 1 * N]: Sized,
+{
+    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
+        let [b1, b2] = interpolator.evaluate_moments(x1, x2, frequency);
+        let delta = x2 - x1;
+
+        let b1 = b1;
+        let b2 = b2 * (1. / 12.);
+
+        let inv_mat = b1.matmul((Matrix::eye() + b2 * delta).inv().unwrap()) * delta;
+
+        let c1 = (b1 - inv_mat.matmul(b2)) * (delta * 0.5);
+        let c2 = (b2 - inv_mat.matmul(b1) * (1. / 12.)) * delta - Matrix::eye();
+
+        Step { left: c1 - c2, right: c1 + c2 }
     }
 }

@@ -1,11 +1,11 @@
 use blas::dgemm;
-use lapack::dgeev;
+use lapack::{dgeev, dgetrf, dgetri};
 use std::{
     mem::{self, transmute, transmute_copy},
     ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
 };
 
-use num::{complex::Complex64, Zero, range, One};
+use num::{complex::Complex64, Zero, One};
 
 #[derive(Copy, Clone)]
 #[repr(align(64))]
@@ -69,6 +69,46 @@ where
         }
 
         result
+    }
+}
+
+
+const fn usize_to_i32<const N: usize>() -> i32 {
+    match N {
+        _ if N > (i32::MAX as usize) => { panic!("N is larger than i32::MAX") }
+        _ => { N as i32 }
+    }
+}
+
+impl<const N: usize> Matrix<f64, N, N>
+where
+    [(); N * N]: Sized,
+{
+    const AS_I32_SIZE: i32 = usize_to_i32::<N>();
+    const AS_I32_SIZE_WORK: i32 = usize_to_i32::<{N * N}>();
+
+    pub(crate) fn inv(mut self) -> Result<Matrix<f64, N, N>, i32> {
+        let mut ipiv = [0i32; N];
+        let mut work = [0.0; N * N];
+        let mut info: i32 = 0;
+
+        unsafe { dgetrf(Self::AS_I32_SIZE, Self::AS_I32_SIZE, self.as_slice_mut(), Self::AS_I32_SIZE, &mut ipiv, &mut info) };
+
+        match info {
+            i if i < 0 => { panic!("Invalid argument {i} to dgetrf") }
+            i if i > 0 => { return Err(i) }
+            _ => {}
+        };
+
+        unsafe { dgetri(Self::AS_I32_SIZE, self.as_slice_mut(), Self::AS_I32_SIZE, &ipiv, &mut work, Self::AS_I32_SIZE_WORK, &mut info) };
+        
+        match info {
+            i if i < 0 => { panic!("Invalid argument {i} to dgetri") }
+            i if i > 0 => { return Err(i) }
+            _ => {}
+        };
+
+        Ok(self)
     }
 }
 
