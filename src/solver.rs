@@ -3,7 +3,7 @@ use std::mem::transmute;
 
 use lapack::dgbtrf;
 
-use crate::{jacobian::System, stepper::Stepper};
+use crate::{stepper::Stepper, system::System};
 
 const fn calc_ku<const N: usize, const N_INNER: usize, const N_OUTER: usize>() -> usize {
     N - 1 + (N - N_INNER)

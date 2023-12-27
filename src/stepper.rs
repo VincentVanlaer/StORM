@@ -1,11 +1,10 @@
 use std::ops::Mul;
 
-
 use num::Float;
 
 use crate::{
-    jacobian::{Moments, PointwiseInterpolator},
-    linalg::{commutator, Matrix, Matmul},
+    linalg::{commutator, Matmul, Matrix},
+    system::{Moments, PointwiseInterpolator},
 };
 
 impl<T: Float + Mul<f64, Output = T>, const N: usize, U: PointwiseInterpolator<T, N>>
