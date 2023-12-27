@@ -5,7 +5,7 @@ use std::{
     ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
 };
 
-use num::{complex::Complex64, Zero, One};
+use num::{complex::Complex64, One, Zero};
 
 #[derive(Copy, Clone)]
 #[repr(align(64))]
@@ -29,13 +29,13 @@ where
     }
 }
 
-impl<T: Zero + One + Copy, const N: usize> Matrix<T, N, N> 
+impl<T: Zero + One + Copy, const N: usize> Matrix<T, N, N>
 where
     [(); N * N]: Sized,
 {
     pub(crate) fn eye() -> Matrix<T, N, N> {
         let mut data = [[T::zero(); N]; N];
-        
+
         for i in 0..N {
             data[i][i] = T::one();
         }
@@ -72,11 +72,12 @@ where
     }
 }
 
-
 const fn usize_to_i32<const N: usize>() -> i32 {
     match N {
-        _ if N > (i32::MAX as usize) => { panic!("N is larger than i32::MAX") }
-        _ => { N as i32 }
+        _ if N > (i32::MAX as usize) => {
+            panic!("N is larger than i32::MAX")
+        }
+        _ => N as i32,
     }
 }
 
@@ -85,26 +86,49 @@ where
     [(); N * N]: Sized,
 {
     const AS_I32_SIZE: i32 = usize_to_i32::<N>();
-    const AS_I32_SIZE_WORK: i32 = usize_to_i32::<{N * N}>();
+    const AS_I32_SIZE_WORK: i32 = usize_to_i32::<{ N * N }>();
 
     pub(crate) fn inv(mut self) -> Result<Matrix<f64, N, N>, i32> {
         let mut ipiv = [0i32; N];
         let mut work = [0.0; N * N];
         let mut info: i32 = 0;
 
-        unsafe { dgetrf(Self::AS_I32_SIZE, Self::AS_I32_SIZE, self.as_slice_mut(), Self::AS_I32_SIZE, &mut ipiv, &mut info) };
+        unsafe {
+            dgetrf(
+                Self::AS_I32_SIZE,
+                Self::AS_I32_SIZE,
+                self.as_slice_mut(),
+                Self::AS_I32_SIZE,
+                &mut ipiv,
+                &mut info,
+            )
+        };
 
         match info {
-            i if i < 0 => { panic!("Invalid argument {i} to dgetrf") }
-            i if i > 0 => { return Err(i) }
+            i if i < 0 => {
+                panic!("Invalid argument {i} to dgetrf")
+            }
+            i if i > 0 => return Err(i),
             _ => {}
         };
 
-        unsafe { dgetri(Self::AS_I32_SIZE, self.as_slice_mut(), Self::AS_I32_SIZE, &ipiv, &mut work, Self::AS_I32_SIZE_WORK, &mut info) };
-        
+        unsafe {
+            dgetri(
+                Self::AS_I32_SIZE,
+                self.as_slice_mut(),
+                Self::AS_I32_SIZE,
+                &ipiv,
+                &mut work,
+                Self::AS_I32_SIZE_WORK,
+                &mut info,
+            )
+        };
+
         match info {
-            i if i < 0 => { panic!("Invalid argument {i} to dgetri") }
-            i if i > 0 => { return Err(i) }
+            i if i < 0 => {
+                panic!("Invalid argument {i} to dgetri")
+            }
+            i if i > 0 => return Err(i),
             _ => {}
         };
 

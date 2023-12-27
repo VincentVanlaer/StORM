@@ -25,8 +25,11 @@ where
     }
 }
 
-impl<T: Float + Mul<f64, Output = T> + std::fmt::Display, const N: usize, U: PointwiseInterpolator<T, N>>
-    Moments<T, N, 2> for U
+impl<
+        T: Float + Mul<f64, Output = T> + std::fmt::Display,
+        const N: usize,
+        U: PointwiseInterpolator<T, N>,
+    > Moments<T, N, 2> for U
 where
     [(); N * N]: Sized,
 {
@@ -111,10 +114,22 @@ where
         const COEFF7: f64 = 18.795449407555054;
 
         let delta = upper_location - lower_location;
-        let a1 = self.evaluate((upper_location + lower_location - delta * POS2) * 0.5, frequency);
-        let a2 = self.evaluate((upper_location + lower_location - delta * POS1) * 0.5, frequency);
-        let a3 = self.evaluate((upper_location + lower_location + delta * POS1) * 0.5, frequency);
-        let a4 = self.evaluate((upper_location + lower_location + delta * POS2) * 0.5, frequency);
+        let a1 = self.evaluate(
+            (upper_location + lower_location - delta * POS2) * 0.5,
+            frequency,
+        );
+        let a2 = self.evaluate(
+            (upper_location + lower_location - delta * POS1) * 0.5,
+            frequency,
+        );
+        let a3 = self.evaluate(
+            (upper_location + lower_location + delta * POS1) * 0.5,
+            frequency,
+        );
+        let a4 = self.evaluate(
+            (upper_location + lower_location + delta * POS2) * 0.5,
+            frequency,
+        );
 
         let b1 = a1 * (-COEFF1) + a2 * COEFF2 + a3 * COEFF2 + a4 * (-COEFF1); // delta
         let b2 = a1 * COEFF3 + a2 * (-COEFF4) + a3 * COEFF4 + a4 * (-COEFF3); // delta
@@ -125,15 +140,13 @@ where
     }
 }
 
-
-pub(crate) struct Step<T, const N: usize> 
+pub(crate) struct Step<T, const N: usize>
 where
     [(); N * N]: Sized,
 {
     pub left: Matrix<T, N, N>,
     pub right: Matrix<T, N, N>,
 }
-
 
 pub(crate) trait Stepper<T: Float, const N: usize, const ORDER: usize, I: Moments<T, N, ORDER>>
 where
@@ -152,10 +165,12 @@ where
     fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
         let [mut omega] = interpolator.evaluate_moments(x1, x2, frequency);
 
-
         omega.exp(x2 - x1);
 
-        Step { left: omega, right: Matrix::eye() }
+        Step {
+            left: omega,
+            right: Matrix::eye(),
+        }
     }
 }
 
@@ -169,12 +184,15 @@ where
     fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
         let delta = x2 - x1;
         let [b1, b2] = interpolator.evaluate_moments(x1, x2, frequency);
-        
+
         let mut omega = b1 - commutator(b1, b2) * (1.0 / 12.0) * delta;
 
         omega.exp(delta);
 
-        Step { left: omega, right: Matrix::eye() }
+        Step {
+            left: omega,
+            right: Matrix::eye(),
+        }
     }
 }
 
@@ -197,7 +215,10 @@ where
 
         omega.exp(delta);
 
-        Step { left: omega, right: Matrix::eye() }
+        Step {
+            left: omega,
+            right: Matrix::eye(),
+        }
     }
 }
 
@@ -209,7 +230,6 @@ where
     [(); 4 * N]: Sized,
 {
     fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
-
         let delta = x2 - x1;
 
         let [b1, b2, b3, b4] = interpolator.evaluate_moments(x1, x2, frequency);
@@ -218,14 +238,20 @@ where
         let r1 = commutator(b1, b3 * (-1. / 14.) + s1) * (1. / 3.) * delta;
         let s2 = commutator(b1 + b3 * (1. / 28.) + s1, b2 + b4 * (3. / 28.) + r1) * delta;
         let s2_prime = commutator(b2, s1) * delta;
-        let r2 = commutator(b1 + s1 * (5./4.), b3 * 2.0 + s2 + s2_prime * 0.5) * delta;
-        let s3 = commutator(b1 + b3 * (1. / 12.) + s1 * (-7. / 3.) + s2 * (-1. / 6.), b2 * (-9.) + b4 * (-9. / 4.) + r1 * 63. + r2) * delta; // delta
+        let r2 = commutator(b1 + s1 * (5. / 4.), b3 * 2.0 + s2 + s2_prime * 0.5) * delta;
+        let s3 = commutator(
+            b1 + b3 * (1. / 12.) + s1 * (-7. / 3.) + s2 * (-1. / 6.),
+            b2 * (-9.) + b4 * (-9. / 4.) + r1 * 63. + r2,
+        ) * delta; // delta
 
-        let mut omega = b1 + b3 * (1. / 12.) + s2 * (-7. / 120.) + s3 * (1. / 360.);  // delta
+        let mut omega = b1 + b3 * (1. / 12.) + s2 * (-7. / 120.) + s3 * (1. / 360.); // delta
 
         omega.exp(delta);
 
-        Step { left: omega, right: Matrix::eye() }
+        Step {
+            left: omega,
+            right: Matrix::eye(),
+        }
     }
 }
 
@@ -242,7 +268,10 @@ where
         let c1 = b1 * (x2 - x1) * 0.5;
         let c2 = Matrix::eye();
 
-        Step { left: c1 + c2, right: c1 - c2 }
+        Step {
+            left: c1 + c2,
+            right: c1 - c2,
+        }
     }
 }
 
@@ -265,6 +294,9 @@ where
         let c1 = (b1 - inv_mat.matmul(b2)) * (delta * 0.5);
         let c2 = (b2 - inv_mat.matmul(b1) * (1. / 12.)) * delta - Matrix::eye();
 
-        Step { left: c1 - c2, right: c1 + c2 }
+        Step {
+            left: c1 - c2,
+            right: c1 + c2,
+        }
     }
 }
