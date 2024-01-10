@@ -300,3 +300,144 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod benches {
+    use std::{fmt::Display, fs, path::PathBuf};
+
+    use criterion::{AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+    use criterion_macro::criterion;
+
+    use super::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8};
+    use crate::{
+        solver::bracket_search, system::stretched_string::IntegratedLinearPiecewiseStretchedString,
+    };
+
+    fn write_accuracy_results<P: Display>(
+        benchmark_name: &str,
+        function_name: &str,
+        parameter: P,
+        result: f64,
+    ) {
+        let output_dir: PathBuf = [
+            "target",
+            "criterion",
+            benchmark_name,
+            function_name,
+            parameter.to_string().as_str(),
+        ]
+        .iter()
+        .collect();
+
+        fs::create_dir_all(&output_dir).unwrap();
+
+        fs::write(output_dir.join("result"), format!("{result}")).unwrap();
+    }
+
+    fn stretched_string_piecewise(
+        lower: f64,
+        upper: f64,
+        root: f64,
+        benchmark_name: &str,
+        c: &mut Criterion,
+    ) {
+        let system = IntegratedLinearPiecewiseStretchedString {};
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group(benchmark_name);
+        group.plot_config(plot_config);
+
+        for steps in [50, 100, 200, 400, 800, 1600, 3200, 6400, 12800] {
+            let grid = (0..steps + 1)
+                .map(|n| 1. / steps as f64 * n as f64)
+                .collect();
+
+            group.bench_function(BenchmarkId::new("colloc2", steps), |b| {
+                b.iter(|| bracket_search(&system, &Colloc2 {}, &grid, lower, upper))
+            });
+            group.bench_function(BenchmarkId::new("colloc4", steps), |b| {
+                b.iter(|| bracket_search(&system, &Colloc4 {}, &grid, lower, upper))
+            });
+            group.bench_function(BenchmarkId::new("magnus2", steps), |b| {
+                b.iter(|| bracket_search(&system, &Magnus2 {}, &grid, lower, upper))
+            });
+            group.bench_function(BenchmarkId::new("magnus4", steps), |b| {
+                b.iter(|| bracket_search(&system, &Magnus4 {}, &grid, lower, upper))
+            });
+            group.bench_function(BenchmarkId::new("magnus6", steps), |b| {
+                b.iter(|| bracket_search(&system, &Magnus6 {}, &grid, lower, upper))
+            });
+            group.bench_function(BenchmarkId::new("magnus8", steps), |b| {
+                b.iter(|| bracket_search(&system, &Magnus8 {}, &grid, lower, upper))
+            });
+
+            write_accuracy_results(
+                benchmark_name,
+                "colloc2",
+                steps,
+                bracket_search(&system, &Colloc2 {}, &grid, lower, upper) - root,
+            );
+            write_accuracy_results(
+                benchmark_name,
+                "colloc4",
+                steps,
+                bracket_search(&system, &Colloc4 {}, &grid, lower, upper) - root,
+            );
+            write_accuracy_results(
+                benchmark_name,
+                "magnus2",
+                steps,
+                bracket_search(&system, &Magnus2 {}, &grid, lower, upper) - root,
+            );
+            write_accuracy_results(
+                benchmark_name,
+                "magnus4",
+                steps,
+                bracket_search(&system, &Magnus4 {}, &grid, lower, upper) - root,
+            );
+            write_accuracy_results(
+                benchmark_name,
+                "magnus6",
+                steps,
+                bracket_search(&system, &Magnus6 {}, &grid, lower, upper) - root,
+            );
+            write_accuracy_results(
+                benchmark_name,
+                "magnus8",
+                steps,
+                bracket_search(&system, &Magnus8 {}, &grid, lower, upper) - root,
+            );
+        }
+
+        group.finish();
+    }
+
+    #[criterion(Criterion::default().sample_size(10))]
+    fn bench_stretched_string_piecewise_small(c: &mut Criterion) {
+        const LOWER: f64 = 4.38;
+        const UPPER: f64 = 4.376;
+        const ROOT: f64 = 4.378157413652409;
+        const BENCHMARK_NAME: &str = "piecewise_linear_small_freq";
+
+        stretched_string_piecewise(LOWER, UPPER, ROOT, BENCHMARK_NAME, c);
+    }
+    
+    #[criterion(Criterion::default().sample_size(10))]
+    fn bench_stretched_string_piecewise_medium(c: &mut Criterion) {
+        const LOWER: f64 = 107.;
+        const UPPER: f64 = 110.;
+        const ROOT: f64 = 108.40719198544681;
+        const BENCHMARK_NAME: &str = "piecewise_linear_medium_freq";
+
+        stretched_string_piecewise(LOWER, UPPER, ROOT, BENCHMARK_NAME, c);
+    }
+
+    #[criterion(Criterion::default().sample_size(10))]
+    fn bench_stretched_string_piecewise_large(c: &mut Criterion) {
+        const LOWER: f64 = 156.5;
+        const UPPER: f64 = 161.;
+        const ROOT: f64 = 160.4412762804863;
+        const BENCHMARK_NAME: &str = "piecewise_linear_large_freq";
+
+        stretched_string_piecewise(LOWER, UPPER, ROOT, BENCHMARK_NAME, c);
+    }
+}

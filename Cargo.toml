@@ -10,7 +10,7 @@ debug = true
 [dependencies]
 blas = "0.22.0"
 blas-src = { version = "0.9.0", features = ["openblas"] }
-openblas-src = { version = "0.10.8", features = ["static"] }
+openblas-src = { version = "0.10.8", features = ["static", "cache"] }
 color-eyre = "0.6.2"
 hdf5 = "0.8.1"
 hdf5-sys = { version = "*", features = ["static"] }
@@ -19,3 +19,7 @@ lapack-src = { version = "0.9.0", features = ["openblas"] }
 ndarray = { version = "0.15.6", default-features = false }
 ndarray-interp = "0.4.1"
 num = "0.4.1"
+
+[dev-dependencies]
+criterion = { version = "0.3", default-features = false, features = ["csv_output", "html_reports"] }
+criterion-macro = "0.3"

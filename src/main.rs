@@ -1,4 +1,6 @@
 #![feature(generic_const_exprs)]
+#![feature(custom_test_frameworks)]
+#![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
 
 use color_eyre::Result;
