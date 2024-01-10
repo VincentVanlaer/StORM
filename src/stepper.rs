@@ -1,5 +1,4 @@
 use std::ops::Mul;
-
 use num::Float;
 
 use crate::{
@@ -102,8 +101,8 @@ where
         upper_location: T,
         frequency: T,
     ) -> [Matrix<T, N, N>; 4] {
-        const POS1: f64 = 0.33998104358485626480266575910324;
-        const POS2: f64 = 0.86113631159405257522394648889280;
+        const POS1: f64 = 0.339_981_043_584_856_26;
+        const POS2: f64 = 0.861_136_311_594_052_6;
 
         const COEFF1: f64 = 0.09232659844072877;
         const COEFF2: f64 = 0.5923265984407289;
@@ -260,7 +259,7 @@ pub(crate) struct Colloc2 {}
 impl<const N: usize, I: Moments<f64, N, 1>> Stepper<f64, N, 1, I> for Colloc2
 where
     [(); N * N]: Sized,
-    [(); 1 * N]: Sized,
+    [(); N]: Sized,
 {
     fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
         let [b1] = interpolator.evaluate_moments(x1, x2, frequency);
@@ -280,7 +279,7 @@ pub(crate) struct Colloc4 {}
 impl<const N: usize, I: Moments<f64, N, 2>> Stepper<f64, N, 2, I> for Colloc4
 where
     [(); N * N]: Sized,
-    [(); 1 * N]: Sized,
+    [(); N]: Sized,
 {
     fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
         let [b1, b2] = interpolator.evaluate_moments(x1, x2, frequency);
@@ -420,7 +419,7 @@ mod benches {
 
         stretched_string_piecewise(LOWER, UPPER, ROOT, BENCHMARK_NAME, c);
     }
-    
+
     #[criterion(Criterion::default().sample_size(10))]
     fn bench_stretched_string_piecewise_medium(c: &mut Criterion) {
         const LOWER: f64 = 107.;
