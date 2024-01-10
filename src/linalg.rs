@@ -7,7 +7,7 @@ use std::{
 
 use num::{complex::Complex64, One, Zero};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(align(64))]
 pub(crate) struct Matrix<T, const ROWS: usize, const COLUMNS: usize>
 where
