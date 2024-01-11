@@ -2,6 +2,7 @@ use core::panic;
 use std::mem::transmute;
 
 use lapack::dgbtrf;
+use num::{Float, Signed};
 
 use crate::{stepper::Stepper, system::System};
 
@@ -105,8 +106,6 @@ where
     sgn as f64 * det
 }
 
-const DEBUG_BRACKETS: bool = true;
-
 pub(crate) fn bracket_search<
     const N: usize,
     const N_INNER: usize,
@@ -114,105 +113,233 @@ pub(crate) fn bracket_search<
     const ORDER: usize,
     I: System<f64, N, N_INNER, N_OUTER, ORDER>,
     S: Stepper<f64, N, ORDER, I>,
+    Searcher: BracketSearcher,
 >(
     system: &I,
     stepper: &S,
     grid: &Vec<f64>,
-    mut lower: f64,
-    mut upper: f64,
-) -> f64
+    lower: f64,
+    upper: f64,
+    searcher: &Searcher,
+) -> Result<f64, ()>
 where
     [(); N * N]: Sized,
     [(); N_INNER * N]: Sized,
     [(); N_OUTER * N]: Sized,
     [(); calc_n_bands::<N, N_INNER, N_OUTER>()]: Sized,
 {
-    const KAPPA1: f64 = 0.01;
-    const KAPPA2: f64 = 2.618;
-    const N0: i32 = 2;
+    let lower_value = determinant(system, stepper, grid, lower);
+    let upper_value = determinant(system, stepper, grid, upper);
 
-    let epsilon = f64::EPSILON * upper.abs();
-    let n_bisect = (((upper - lower) / (2.0 * epsilon)).log2() as i32) + N0;
-
-    let mut j = 0;
-
-    let mut f_lower = determinant(system, stepper, grid, lower);
-    let mut f_upper = determinant(system, stepper, grid, upper);
-
-    if DEBUG_BRACKETS {
-        println!("Max number of iterations: {n_bisect}, epsilon = {epsilon}");
-        println!(
-            "Initial bracket [{}, {}], delta = {} with values {} and {}",
-            lower,
-            upper,
-            upper - lower,
-            f_lower,
-            f_upper
-        );
-    }
-
-    if f_lower.signum() == f_upper.signum() {
-        panic!("Lower and upper values in bracket search have same values");
-    }
+    let mut searcher = searcher.init(lower, lower_value, upper, upper_value)?;
 
     loop {
-        let x12 = 0.5 * (lower + upper);
-        let xf = (upper * f_lower - lower * f_upper) / (f_lower - f_upper);
+        let value = determinant(system, stepper, grid, searcher.point());
 
-        let sigma = (x12 - xf).signum();
-        let delta = KAPPA1 * (upper - lower).powf(KAPPA2);
-        let r = epsilon * 2.0_f64.powi(n_bisect - j) - (upper - lower) / 2.0;
+        searcher = match searcher.next(value) {
+            BracketResult::Completed(lower, upper) => return Ok(0.5 * (lower + upper)),
+            BracketResult::NextPoint(s) => s,
+        };
+    }
+}
 
-        let xt = if delta < (xf - x12).abs() {
-            xf + sigma * delta
+pub(crate) trait BracketSearcher {
+    type Iterator: BracketSearchIterator;
+
+    fn init(
+        &self,
+        lower: f64,
+        lower_value: f64,
+        upper: f64,
+        upper_value: f64,
+    ) -> Result<Self::Iterator, ()>;
+}
+
+pub(crate) enum BracketResult<I: BracketSearchIterator> {
+    NextPoint(I),
+    Completed(f64, f64),
+}
+
+pub(crate) trait BracketSearchIterator: Sized {
+    fn point(&self) -> f64;
+    fn next(self, value: f64) -> BracketResult<Self>;
+}
+
+pub(crate) struct BisectionIterator {
+    rel_epsilon: f64,
+    upper: f64,
+    upper_value: f64,
+    lower: f64,
+    lower_value: f64,
+}
+
+impl BracketSearchIterator for BisectionIterator {
+    fn point(&self) -> f64 {
+        self.lower + 0.5 * (self.upper - self.lower)
+    }
+
+    fn next(mut self, value: f64) -> BracketResult<Self> {
+        if self.upper_value.signum() == value.signum() {
+            self.upper = self.point();
+            self.upper_value = value;
         } else {
-            x12
+            self.lower = self.point();
+            self.lower_value = value;
+        }
+
+        if (self.upper - self.lower) <= (self.upper.abs().max(self.lower.abs())) * self.rel_epsilon
+        {
+            BracketResult::Completed(self.lower, self.upper)
+        } else {
+            BracketResult::NextPoint(self)
+        }
+    }
+}
+
+pub(crate) struct Bisection {
+    pub rel_epsilon: f64,
+}
+
+impl BracketSearcher for Bisection {
+    type Iterator = BisectionIterator;
+
+    fn init(
+        &self,
+        lower: f64,
+        lower_value: f64,
+        upper: f64,
+        upper_value: f64,
+    ) -> Result<Self::Iterator, ()> {
+        if lower_value.signum() == upper_value.signum() {
+            Err(())
+        } else {
+            Ok(BisectionIterator {
+                rel_epsilon: self.rel_epsilon,
+                lower,
+                lower_value,
+                upper,
+                upper_value,
+            })
+        }
+    }
+}
+
+pub(crate) struct BrentIterator {
+    rel_epsilon: f64,
+    upper: f64,
+    upper_value: f64,
+    lower: f64,
+    lower_value: f64,
+    mid: f64,
+    mid_value: f64,
+    mflag: Option<f64>,
+    s: f64,
+}
+
+impl BrentIterator {
+    fn compute_point(&mut self) {
+        let mut s = if self.lower_value != self.mid_value && self.upper_value == self.mid_value {
+            let s_lower = self.lower * self.upper_value * self.mid_value
+                / ((self.lower_value - self.upper_value) * (self.lower_value - self.mid_value));
+            let s_upper = self.upper * self.lower_value * self.mid_value
+                / ((self.upper_value - self.lower_value) * (self.upper_value - self.mid_value));
+            let s_mid = self.mid * self.lower_value * self.upper_value
+                / ((self.mid_value - self.lower_value) * (self.mid_value - self.upper_value));
+
+            s_lower + s_upper + s_mid
+        } else {
+            self.upper
+                - self.upper_value * (self.upper - self.lower)
+                    / (self.upper_value - self.lower_value)
         };
 
-        let mut x_itp = xt.min(x12 + r).max(x12 - r);
+        let m = match self.mflag {
+            Some(d) => d,
+            None => self.upper,
+        };
 
-        if x_itp == lower || x_itp == upper {
-            // Floating point shenanigans
-            x_itp = x12;
-        }
-
-        let f_itp = determinant(system, stepper, grid, x_itp);
-
-        j += 1;
-
-        if f_itp == 0.0 {
-            lower = x_itp;
-            upper = x_itp;
-            break;
-        }
-
-        if f_itp.signum() == f_upper.signum() {
-            f_upper = f_itp;
-            upper = x_itp;
+        if ((s < (3. * self.lower + self.upper) / 4.) && (s < self.upper))
+            || ((s > (3. * self.lower + self.upper) / 4.) && (s > self.upper))
+            || (2. * (s - self.upper).abs() >= (m - self.mid).abs())
+            || ((m - self.mid).abs() <= self.rel_epsilon * f64::max(m.abs(), self.mid.abs()))
+        {
+            s = self.lower + 0.5 * (self.upper - self.lower);
+            self.mflag = Some(self.mid);
         } else {
-            f_lower = f_itp;
-            lower = x_itp;
+            self.mflag = None;
         }
 
-        if (upper - lower).abs() < 2.0 * epsilon {
-            break;
+        self.s = s;
+    }
+}
+
+impl BracketSearchIterator for BrentIterator {
+    fn point(&self) -> f64 {
+        self.s
+    }
+
+    fn next(mut self, value: f64) -> BracketResult<Self> {
+        self.mid = self.upper;
+        self.mid_value = self.upper_value;
+
+        if self.lower_value.signum() == value.signum() {
+            self.upper = self.s;
+            self.upper_value = value;
+        } else {
+            self.lower = self.s;
+            self.lower_value = value;
         }
 
-        if DEBUG_BRACKETS {
-            println!(
-                "Iteration done, bracket refined to [{}, {}], delta = {} with values {} and {}",
+        if self.upper_value.abs() < self.lower_value.abs() {
+            (self.lower, self.upper, self.upper_value, self.lower_value) =
+                (self.upper, self.lower, self.lower_value, self.upper_value);
+        }
+
+        if (self.upper - self.lower) <= (self.upper.abs().max(self.lower.abs())) * self.rel_epsilon
+        {
+            BracketResult::Completed(self.lower, self.upper)
+        } else {
+            self.compute_point();
+            BracketResult::NextPoint(self)
+        }
+    }
+}
+
+pub(crate) struct Brent {
+    pub rel_epsilon: f64,
+}
+
+impl BracketSearcher for Brent {
+    type Iterator = BrentIterator;
+
+    fn init(
+        &self,
+        mut lower: f64,
+        mut lower_value: f64,
+        mut upper: f64,
+        mut upper_value: f64,
+    ) -> Result<Self::Iterator, ()> {
+        if lower_value.signum() == upper_value.signum() {
+            Err(())
+        } else {
+            if upper_value.abs() < lower_value.abs() {
+                (lower, upper, upper_value, lower_value) = (upper, lower, lower_value, upper_value);
+            }
+            let mut iterator = BrentIterator {
+                rel_epsilon: self.rel_epsilon,
                 lower,
+                lower_value,
                 upper,
-                upper - lower,
-                f_lower,
-                f_upper
-            );
+                upper_value,
+                mflag: None,
+                mid: lower,
+                mid_value: lower_value,
+                s: f64::NAN,
+            };
+
+            iterator.compute_point();
+
+            Ok(iterator)
         }
     }
-
-    if DEBUG_BRACKETS {
-        println!("Total number of iterations executed: {j}");
-    }
-
-    0.5 * (upper + lower)
 }

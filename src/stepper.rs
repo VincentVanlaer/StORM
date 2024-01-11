@@ -1,5 +1,5 @@
-use std::ops::Mul;
 use num::Float;
+use std::ops::Mul;
 
 use crate::{
     linalg::{commutator, Matmul, Matrix},
@@ -309,7 +309,8 @@ mod benches {
 
     use super::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8};
     use crate::{
-        solver::bracket_search, system::stretched_string::IntegratedLinearPiecewiseStretchedString,
+        solver::{bracket_search, Bisection},
+        system::stretched_string::IntegratedLinearPiecewiseStretchedString,
     };
 
     fn write_accuracy_results<P: Display>(
@@ -342,6 +343,9 @@ mod benches {
     ) {
         let system = IntegratedLinearPiecewiseStretchedString {};
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let searcher = Bisection {
+            rel_epsilon: f64::EPSILON,
+        };
         let mut group = c.benchmark_group(benchmark_name);
         group.plot_config(plot_config);
 
@@ -351,59 +355,77 @@ mod benches {
                 .collect();
 
             group.bench_function(BenchmarkId::new("colloc2", steps), |b| {
-                b.iter(|| bracket_search(&system, &Colloc2 {}, &grid, lower, upper))
+                b.iter(|| {
+                    bracket_search(&system, &Colloc2 {}, &grid, lower, upper, &searcher).unwrap()
+                })
             });
             group.bench_function(BenchmarkId::new("colloc4", steps), |b| {
-                b.iter(|| bracket_search(&system, &Colloc4 {}, &grid, lower, upper))
+                b.iter(|| {
+                    bracket_search(&system, &Colloc4 {}, &grid, lower, upper, &searcher).unwrap()
+                })
             });
             group.bench_function(BenchmarkId::new("magnus2", steps), |b| {
-                b.iter(|| bracket_search(&system, &Magnus2 {}, &grid, lower, upper))
+                b.iter(|| {
+                    bracket_search(&system, &Magnus2 {}, &grid, lower, upper, &searcher).unwrap()
+                })
             });
             group.bench_function(BenchmarkId::new("magnus4", steps), |b| {
-                b.iter(|| bracket_search(&system, &Magnus4 {}, &grid, lower, upper))
+                b.iter(|| {
+                    bracket_search(&system, &Magnus4 {}, &grid, lower, upper, &searcher).unwrap()
+                })
             });
             group.bench_function(BenchmarkId::new("magnus6", steps), |b| {
-                b.iter(|| bracket_search(&system, &Magnus6 {}, &grid, lower, upper))
+                b.iter(|| {
+                    bracket_search(&system, &Magnus6 {}, &grid, lower, upper, &searcher).unwrap()
+                })
             });
             group.bench_function(BenchmarkId::new("magnus8", steps), |b| {
-                b.iter(|| bracket_search(&system, &Magnus8 {}, &grid, lower, upper))
+                b.iter(|| {
+                    bracket_search(&system, &Magnus8 {}, &grid, lower, upper, &searcher).unwrap()
+                })
             });
 
             write_accuracy_results(
                 benchmark_name,
                 "colloc2",
                 steps,
-                bracket_search(&system, &Colloc2 {}, &grid, lower, upper) - root,
+                bracket_search(&system, &Colloc2 {}, &grid, lower, upper, &searcher).unwrap()
+                    - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "colloc4",
                 steps,
-                bracket_search(&system, &Colloc4 {}, &grid, lower, upper) - root,
+                bracket_search(&system, &Colloc4 {}, &grid, lower, upper, &searcher).unwrap()
+                    - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus2",
                 steps,
-                bracket_search(&system, &Magnus2 {}, &grid, lower, upper) - root,
+                bracket_search(&system, &Magnus2 {}, &grid, lower, upper, &searcher).unwrap()
+                    - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus4",
                 steps,
-                bracket_search(&system, &Magnus4 {}, &grid, lower, upper) - root,
+                bracket_search(&system, &Magnus4 {}, &grid, lower, upper, &searcher).unwrap()
+                    - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus6",
                 steps,
-                bracket_search(&system, &Magnus6 {}, &grid, lower, upper) - root,
+                bracket_search(&system, &Magnus6 {}, &grid, lower, upper, &searcher).unwrap()
+                    - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus8",
                 steps,
-                bracket_search(&system, &Magnus8 {}, &grid, lower, upper) - root,
+                bracket_search(&system, &Magnus8 {}, &grid, lower, upper, &searcher).unwrap()
+                    - root,
             );
         }
 
