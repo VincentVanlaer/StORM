@@ -1,146 +1,221 @@
-use super::Boundary;
-use super::PointwiseInterpolator;
+use super::{Boundary, Moments};
 use crate::linalg::Matrix;
 use crate::model::StellarModel;
+use crate::stepper::StepMoments;
 use color_eyre::Result;
-use ndarray::Array1;
-use ndarray_interp::interp1d::CubicSpline;
-use ndarray_interp::interp1d::Interp1DBuilder;
 use std::f64::consts::PI;
 
 pub(crate) struct NonRotating1D {
-    grid_power: u64,
-    components: Vec<Matrix<f64, 4, 4>>,
-    c1: Vec<f64>,
+    components: Vec<ModelPoint>,
     ell: f64,
     u_upper: f64,
 }
 
-const MAX_GRID_POWER: u64 = 1_000_000;
 const GRAV: f64 = 6.67430e-8;
+
+#[derive(Clone, Copy, Debug)]
+struct ModelPoint {
+    a: Matrix<f64, 4, 4>,
+    c1: f64,
+    x: f64,
+}
 
 impl NonRotating1D {
     pub(crate) fn from_model(value: &StellarModel, ell: u64) -> Result<Self> {
         let ell = ell as f64;
-        let smallest_difference = value
-            .r_coord
-            .windows(2)
-            .into_iter()
-            .map(|x| x[1] - x[0])
-            .min_by(|a, b| a.total_cmp(b))
-            .expect("Model has more than one element");
-        let grid_power = ((1.0 / smallest_difference).ceil() as u64)
-            .next_power_of_two()
-            .max(MAX_GRID_POWER);
-
-        let mut components: Vec<Matrix<f64, 4, 4>> =
-            vec![
-                [0.0f64; 16].into();
-                <u64 as TryInto<usize>>::try_into(grid_power).unwrap() + 1_usize
-            ];
+        let mut components: Vec<_> = vec![
+            ModelPoint {
+                a: [0.0f64; 16].into(),
+                c1: 0.0,
+                x: 0.0
+            };
+            value.r_coord.len()
+        ];
 
         let r_cubed = value.r_coord.mapv(|a| a.powi(3));
-        let mut v = GRAV * &value.m_coord * &value.rho / (&value.p * &value.r_coord);
+        let mut v_gamma =
+            GRAV * &value.m_coord * &value.rho / (&value.p * &value.r_coord * &value.gamma1);
         let mut a_star = &r_cubed / (GRAV * &value.m_coord) * &value.nsqrd;
         let mut u = 4.0 * PI * &value.rho * &r_cubed / &value.m_coord;
         let mut c1 = &r_cubed / value.radius.powi(3) * value.mass / &value.m_coord;
         let x = &value.r_coord / value.radius;
 
-        v[0] = 0.0;
+        v_gamma[0] = 0.0;
         a_star[0] = 0.0;
         u[0] = 3.0;
         c1[0] = value.mass / value.radius.powi(3) * 3.0 / (4.0 * PI * value.rho[0]);
 
-        let v_gamma_interp = Interp1DBuilder::new(&v / &value.gamma1)
-            .x(x.clone())
-            .strategy(CubicSpline::new())
-            .build()?
-            .interp_array(&Array1::linspace(0., 1., components.len()))?;
-
-        let u_interp = Interp1DBuilder::new(u)
-            .x(x.clone())
-            .strategy(CubicSpline::new())
-            .build()?
-            .interp_array(&Array1::linspace(0., 1., components.len()))?;
-
-        let a_star_interp = Interp1DBuilder::new(a_star)
-            .x(x.clone())
-            .strategy(CubicSpline::new())
-            .build()?
-            .interp_array(&Array1::linspace(0., 1., components.len()))?;
-
         for (i, component) in components.iter_mut().enumerate() {
-            component[0][0] = v_gamma_interp[i] - 1.0 - ell;
-            component[1][0] = -v_gamma_interp[i];
-            component[2][0] = 0.0;
-            component[3][0] = 0.0;
+            component.a[0][0] = v_gamma[i] - 1.0 - ell;
+            component.a[1][0] = -v_gamma[i];
+            component.a[2][0] = 0.0;
+            component.a[3][0] = 0.0;
 
-            component[0][1] = -a_star_interp[i];
-            component[1][1] = a_star_interp[i] - u_interp[i] + 3. - ell;
-            component[2][1] = 0.;
-            component[3][1] = -1.;
+            component.a[0][1] = -a_star[i];
+            component.a[1][1] = a_star[i] - u[i] + 3. - ell;
+            component.a[2][1] = 0.;
+            component.a[3][1] = -1.;
 
-            component[0][2] = 0.0;
-            component[1][2] = 0.0;
-            component[2][2] = 3. - u_interp[i] - ell;
-            component[3][2] = 1.;
+            component.a[0][2] = 0.0;
+            component.a[1][2] = 0.0;
+            component.a[2][2] = 3. - u[i] - ell;
+            component.a[3][2] = 1.;
 
-            component[0][3] = u_interp[i] * a_star_interp[i];
-            component[1][3] = u_interp[i] * v_gamma_interp[i];
-            component[2][3] = ell * (ell + 1.);
-            component[3][3] = -u_interp[i] + 2. - ell;
+            component.a[0][3] = u[i] * a_star[i];
+            component.a[1][3] = u[i] * v_gamma[i];
+            component.a[2][3] = ell * (ell + 1.);
+            component.a[3][3] = -u[i] + 2. - ell;
+
+            component.c1 = c1[i];
+            component.x = x[i];
         }
 
-        let c1_interp = Interp1DBuilder::new(c1)
-            .x(x.clone())
-            .strategy(CubicSpline::new())
-            .build()?
-            .interp_array(&Array1::linspace(0., 1., components.len()))?;
-
         Ok(NonRotating1D {
-            grid_power,
             components,
-            c1: c1_interp.into_raw_vec(),
             ell,
-            u_upper: *u_interp.last().unwrap(),
+            u_upper: *u.last().unwrap(),
         })
     }
 }
 
-impl PointwiseInterpolator<f64, 4> for NonRotating1D {
-    fn evaluate(&self, location: f64, frequency: f64) -> Matrix<f64, 4, 4> {
-        let index = (location * self.grid_power as f64).floor() as usize;
-        let fraction = (location * self.grid_power as f64) - index as f64;
+struct ModelPointsIterator<'model> {
+    model: &'model NonRotating1D,
+    pos: usize,
+    subpos: usize,
+    total_subpos: usize,
+    frequency: f64,
+}
 
-        let first_point = self.components[index];
-        let second_point = self.components[index + 1];
-        let omega_sqrd = frequency * frequency;
+impl ModelPointsIterator<'_> {
+    fn new(scale: u32, model: &NonRotating1D, frequency: f64) -> ModelPointsIterator {
+        if scale == 0 {
+            ModelPointsIterator {
+                model,
+                pos: 1,
+                subpos: 0,
+                total_subpos: 1,
+                frequency,
+            }
+        } else {
+            ModelPointsIterator {
+                model,
+                pos: 0,
+                subpos: 1,
+                total_subpos: 2_usize.pow(scale),
+                frequency,
+            }
+        }
+    }
+}
 
-        let mut out =
-            first_point * ((1.0 - fraction) / location) + second_point * (fraction / location);
+impl Iterator for ModelPointsIterator<'_> {
+    type Item = (f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>);
 
-        out[1][0] += ((1. - fraction) / self.c1[index] + fraction / self.c1[index + 1])
-            / omega_sqrd
-            * self.ell
-            * (self.ell + 1.)
-            / location;
-        out[2][0] += ((1. - fraction) / self.c1[index] + fraction / self.c1[index + 1])
-            / omega_sqrd
-            * self.ell
-            * (self.ell + 1.)
-            / location;
-        out[0][1] += ((1. - fraction) * self.c1[index] + fraction * self.c1[index + 1])
-            * omega_sqrd
-            / location;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.model.components.len() == 0 || (self.pos + 1) == self.model.components.len() {
+            return None;
+        }
 
-        out
+        let omega_sqrd = self.frequency.powi(2);
+
+        let lower = self.model.components[self.pos];
+        let mut lower_a = lower.a.clone();
+        lower_a[1][0] += self.model.ell * (self.model.ell + 1.) / (omega_sqrd * lower.c1);
+        lower_a[2][0] = self.model.ell * (self.model.ell + 1.) / (omega_sqrd * lower.c1);
+        lower_a[0][1] += lower.c1 * omega_sqrd;
+
+        let upper = self.model.components[self.pos + 1];
+        let mut upper_a = upper.a.clone();
+        upper_a[1][0] += self.model.ell * (self.model.ell + 1.) / (omega_sqrd * upper.c1);
+        upper_a[2][0] = self.model.ell * (self.model.ell + 1.) / (omega_sqrd * upper.c1);
+        upper_a[0][1] += upper.c1 * omega_sqrd;
+
+        let i = lower_a * (1.0 / lower.x)
+            + (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x)) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
+        let s = (upper_a * (1.0 / upper.x)  - lower_a * (1.0 / lower.x)) * (1.0 / (self.total_subpos as f64));
+
+        let delta = (upper.x - lower.x) / (self.total_subpos as f64);
+        let sublower = lower.x + delta * (self.subpos as f64);
+        let subupper = lower.x + delta * (self.subpos as f64 + 1.);
+
+        self.subpos += 1;
+
+        if self.subpos == self.total_subpos {
+            self.pos += 1;
+            self.subpos = 0;
+        }
+
+        Some((subupper - sublower, s, i))
+    }
+}
+
+impl ExactSizeIterator for ModelPointsIterator<'_> {
+    fn len(&self) -> usize {
+        self.model.components.len() * TryInto::<usize>::try_into(self.total_subpos).unwrap() - 2
+    }
+}
+
+impl Moments<f64, ModelGrid, 4, 1> for NonRotating1D {
+    fn evaluate_moments(
+        &self,
+        grid: &ModelGrid,
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 1>> {
+        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, _s, i)| {
+            StepMoments {
+                moments: [i],
+                delta,
+            }
+        })
+    }
+}
+impl Moments<f64, ModelGrid, 4, 2> for NonRotating1D {
+    fn evaluate_moments(
+        &self,
+        grid: &ModelGrid,
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 2>> {
+        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, s, i)| {
+            StepMoments {
+                moments: [i, s],
+                delta,
+            }
+        })
+    }
+}
+impl Moments<f64, ModelGrid, 4, 3> for NonRotating1D {
+    fn evaluate_moments(
+        &self,
+        grid: &ModelGrid,
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 3>> {
+        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, s, i)| {
+            StepMoments {
+                moments: [i, s, [0.0; 16].into()],
+                delta,
+            }
+        })
+    }
+}
+impl Moments<f64, ModelGrid, 4, 4> for NonRotating1D {
+    fn evaluate_moments(
+        &self,
+        grid: &ModelGrid,
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 4>> {
+        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, s, i)| {
+            StepMoments {
+                moments: [i, s, [0.0; 16].into(), [0.0; 16].into()],
+                delta,
+            }
+        })
     }
 }
 
 impl Boundary<f64, 4, 2, 2> for NonRotating1D {
     fn inner_boundary(&self, frequency: f64) -> Matrix<f64, 2, 4> {
         [
-            self.c1[0] * frequency * frequency,
+            self.components[0].c1 * frequency * frequency,
             0.,
             -self.ell,
             0.,
@@ -155,4 +230,8 @@ impl Boundary<f64, 4, 2, 2> for NonRotating1D {
     fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 2, 4> {
         [-1., self.u_upper, -1., 0., 1., self.ell + 1.0, 0., 1.].into()
     }
+}
+
+pub(crate) struct ModelGrid {
+    pub scale: u32,
 }

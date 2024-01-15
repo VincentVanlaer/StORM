@@ -1,49 +1,10 @@
-use num::Float;
-
 use super::Boundary;
 use super::Moments;
-use super::PointwiseInterpolator;
 use crate::linalg::Matrix;
-
-pub(crate) struct StretchedString {
-    pub speed_generator: fn(f64) -> f64,
-}
-
-pub(crate) fn constant_speed(_location: f64) -> f64 {
-    1.0
-}
-
-pub(crate) fn parabola(location: f64) -> f64 {
-    2.0 * (location - 0.5).powi(2) + 0.5
-}
+use crate::stepper::StepMoments;
 
 pub(crate) fn linear_piecewise(location: f64) -> f64 {
     0.1 * (location - 0.5).abs() + 0.5
-}
-
-pub(crate) fn smoothened_linear_piecewise(location: f64) -> f64 {
-    let offset = location - 0.5;
-    0.5 + 0.1 * (offset.powi(2) + 0.00001).sqrt()
-}
-
-impl PointwiseInterpolator<f64, 2> for StretchedString {
-    fn evaluate(&self, location: f64, frequency: f64) -> Matrix<f64, 2, 2> {
-        [
-            [0.0, -frequency.powi(2) * (self.speed_generator)(location)],
-            [1.0, 0.0],
-        ]
-        .into()
-    }
-}
-
-impl Boundary<f64, 2, 1, 1> for StretchedString {
-    fn inner_boundary(&self, _frequency: f64) -> Matrix<f64, 1, 2> {
-        [[1.0], [0.0]].into()
-    }
-
-    fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 1, 2> {
-        [[1.0], [0.0]].into()
-    }
 }
 
 pub(crate) struct IntegratedLinearPiecewiseStretchedString {}
@@ -90,60 +51,109 @@ fn compute_moment(lower: f64, upper: f64, moment: fn(f64, f64, f64) -> f64, n: i
     }
 }
 
-impl Moments<f64, 2, 1> for IntegratedLinearPiecewiseStretchedString {
-    fn evaluate_moments(&self, lower: f64, upper: f64, frequency: f64) -> [Matrix<f64, 2, 2>; 1] {
-        let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
+impl Moments<f64, [f64], 2, 1> for IntegratedLinearPiecewiseStretchedString {
+    fn evaluate_moments(
+        &self,
+        grid: &[f64],
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = StepMoments<f64, 2, 1>> {
+        grid.windows(2).map(move |range| {
+            let lower = range[0];
+            let upper = range[1];
+            let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
 
-        [[[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into()]
+            StepMoments {
+                delta: upper - lower,
+                moments: [[[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into()],
+            }
+        })
     }
 }
 
-impl Moments<f64, 2, 2> for IntegratedLinearPiecewiseStretchedString {
-    fn evaluate_moments(&self, lower: f64, upper: f64, frequency: f64) -> [Matrix<f64, 2, 2>; 2] {
-        let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
-        let second_order = compute_moment(lower, upper, linear_first_moment, 1);
+impl Moments<f64, [f64], 2, 2> for IntegratedLinearPiecewiseStretchedString {
+    fn evaluate_moments(
+        &self,
+        grid: &[f64],
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = StepMoments<f64, 2, 2>> {
+        grid.windows(2).map(move |range| {
+            let lower = range[0];
+            let upper = range[1];
+            let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
+            let second_order = compute_moment(lower, upper, linear_first_moment, 1);
 
-        [
-            [[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into(),
-            [[0.0, -frequency.powi(2) * second_order * 12.], [0.0, 0.0]].into(),
-        ]
+            StepMoments {
+                delta: upper - lower,
+                moments: [
+                    [[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into(),
+                    [[0.0, -frequency.powi(2) * second_order * 12.], [0.0, 0.0]].into(),
+                ],
+            }
+        })
     }
 }
 
-impl Moments<f64, 2, 3> for IntegratedLinearPiecewiseStretchedString {
-    fn evaluate_moments(&self, lower: f64, upper: f64, frequency: f64) -> [Matrix<f64, 2, 2>; 3] {
-        let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
-        let second_order = compute_moment(lower, upper, linear_first_moment, 1);
-        let third_order = compute_moment(lower, upper, linear_second_moment, 2);
+impl Moments<f64, [f64], 2, 3> for IntegratedLinearPiecewiseStretchedString {
+    fn evaluate_moments(
+        &self,
+        grid: &[f64],
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = StepMoments<f64, 2, 3>> {
+        grid.windows(2).map(move |range| {
+            let lower = range[0];
+            let upper = range[1];
+            let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
+            let second_order = compute_moment(lower, upper, linear_first_moment, 1);
+            let third_order = compute_moment(lower, upper, linear_second_moment, 2);
 
-        let b0: Matrix<f64, 2, 2> = [[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into();
-        let b1: Matrix<f64, 2, 2> = [[0.0, -frequency.powi(2) * second_order], [0.0, 0.0]].into();
-        let b2: Matrix<f64, 2, 2> =
-            [[0.0, -frequency.powi(2) * third_order], [1. / 12., 0.0]].into();
+            let b0: Matrix<f64, 2, 2> =
+                [[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into();
+            let b1: Matrix<f64, 2, 2> =
+                [[0.0, -frequency.powi(2) * second_order], [0.0, 0.0]].into();
+            let b2: Matrix<f64, 2, 2> =
+                [[0.0, -frequency.powi(2) * third_order], [1. / 12., 0.0]].into();
 
-        [b0 * (9. / 4.) - b2 * 15., b1 * 12., b0 * (-15.) + b2 * 180.]
+            StepMoments {
+                delta: upper - lower,
+                moments: [b0 * (9. / 4.) - b2 * 15., b1 * 12., b0 * (-15.) + b2 * 180.],
+            }
+        })
     }
 }
 
-impl Moments<f64, 2, 4> for IntegratedLinearPiecewiseStretchedString {
-    fn evaluate_moments(&self, lower: f64, upper: f64, frequency: f64) -> [Matrix<f64, 2, 2>; 4] {
-        let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
-        let second_order = compute_moment(lower, upper, linear_first_moment, 1);
-        let third_order = compute_moment(lower, upper, linear_second_moment, 2);
-        let fourth_order = compute_moment(lower, upper, linear_third_moment, 3);
+impl Moments<f64, [f64], 2, 4> for IntegratedLinearPiecewiseStretchedString {
+    fn evaluate_moments(
+        &self,
+        grid: &[f64],
+        frequency: f64,
+    ) -> impl ExactSizeIterator<Item = StepMoments<f64, 2, 4>> {
+        grid.windows(2).map(move |range| {
+            let lower = range[0];
+            let upper = range[1];
+            let first_order = compute_moment(lower, upper, linear_zeroth_moment, 0);
+            let second_order = compute_moment(lower, upper, linear_first_moment, 1);
+            let third_order = compute_moment(lower, upper, linear_second_moment, 2);
+            let fourth_order = compute_moment(lower, upper, linear_third_moment, 3);
 
-        let b0: Matrix<f64, 2, 2> = [[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into();
-        let b1: Matrix<f64, 2, 2> = [[0.0, -frequency.powi(2) * second_order], [0.0, 0.0]].into();
-        let b2: Matrix<f64, 2, 2> =
-            [[0.0, -frequency.powi(2) * third_order], [1. / 12., 0.0]].into();
-        let b3: Matrix<f64, 2, 2> = [[0.0, -frequency.powi(2) * fourth_order], [0.0, 0.0]].into();
+            let b0: Matrix<f64, 2, 2> =
+                [[0.0, -frequency.powi(2) * first_order], [1.0, 0.0]].into();
+            let b1: Matrix<f64, 2, 2> =
+                [[0.0, -frequency.powi(2) * second_order], [0.0, 0.0]].into();
+            let b2: Matrix<f64, 2, 2> =
+                [[0.0, -frequency.powi(2) * third_order], [1. / 12., 0.0]].into();
+            let b3: Matrix<f64, 2, 2> =
+                [[0.0, -frequency.powi(2) * fourth_order], [0.0, 0.0]].into();
 
-        [
-            b0 * (9. / 4.) - b2 * 15.,
-            b1 * 75. - b3 * 420.,
-            b0 * (-15.) + b2 * 180.,
-            b1 * (-420.) + b3 * 2800.,
-        ]
+            StepMoments {
+                delta: upper - lower,
+                moments: [
+                    b0 * (9. / 4.) - b2 * 15.,
+                    b1 * 75. - b3 * 420.,
+                    b0 * (-15.) + b2 * 180.,
+                    b1 * (-420.) + b3 * 2800.,
+                ],
+            }
+        })
     }
 }
 

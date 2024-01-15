@@ -2,7 +2,6 @@ use core::panic;
 use std::mem::transmute;
 
 use lapack::dgbtrf;
-use num::{Float, Signed};
 
 use crate::{stepper::Stepper, system::System};
 
@@ -28,12 +27,13 @@ pub(crate) fn determinant<
     const N_INNER: usize,
     const N_OUTER: usize,
     const ORDER: usize,
-    I: System<f64, N, N_INNER, N_OUTER, ORDER>,
-    S: Stepper<f64, N, ORDER, I>,
+    G: ?Sized,
+    I: System<f64, G, N, N_INNER, N_OUTER, ORDER>,
+    S: Stepper<f64, N, ORDER>,
 >(
     system: &I,
     stepper: &S,
-    grid: &Vec<f64>,
+    grid: &G,
     frequency: f64,
 ) -> f64
 where
@@ -42,9 +42,10 @@ where
     [(); N_OUTER * N]: Sized,
     [(); calc_n_bands::<N, N_INNER, N_OUTER>()]: Sized,
 {
+    let iterator = system.evaluate_moments(grid, frequency);
+    let alen: usize = (iterator.len() + 1) * N;
     let ku: usize = calc_ku::<N, N_INNER, N_OUTER>();
     let kl: usize = calc_kl::<N, N_INNER, N_OUTER>();
-    let alen: usize = grid.len() * N;
     let mut storage = vec![[0.0; calc_n_bands::<N, N_INNER, N_OUTER>()]; alen];
 
     let mut ipiv = vec![0; alen];
@@ -61,13 +62,11 @@ where
         }
     }
 
-    for (i, pos) in grid.windows(2).enumerate() {
-        let matrix = stepper.step(system, pos[0], pos[1], frequency);
-
+    for (i, step) in iterator.map(|x| stepper.step(x)).enumerate() {
         for j in 0..N {
             for k in 0..N {
-                storage[i * N + j][kl + ku + k - j + N_INNER] = matrix.left[j][k];
-                storage[(i + 1) * N + j][kl + ku + k - j - N + N_INNER] = matrix.right[j][k];
+                storage[i * N + j][kl + ku + k - j + N_INNER] = step.left[j][k];
+                storage[(i + 1) * N + j][kl + ku + k - j - N + N_INNER] = step.right[j][k];
             }
         }
     }
@@ -111,13 +110,14 @@ pub(crate) fn bracket_search<
     const N_INNER: usize,
     const N_OUTER: usize,
     const ORDER: usize,
-    I: System<f64, N, N_INNER, N_OUTER, ORDER>,
-    S: Stepper<f64, N, ORDER, I>,
+    G: ?Sized,
+    I: System<f64, G, N, N_INNER, N_OUTER, ORDER>,
+    S: Stepper<f64, N, ORDER>,
     Searcher: BracketSearcher,
 >(
     system: &I,
     stepper: &S,
-    grid: &Vec<f64>,
+    grid: &G,
     lower: f64,
     upper: f64,
     searcher: &Searcher,

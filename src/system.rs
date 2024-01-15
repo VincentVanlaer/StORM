@@ -1,23 +1,15 @@
-use crate::linalg::Matrix;
+use crate::{linalg::Matrix, stepper::StepMoments};
 use num::Float;
 
-pub(crate) trait PointwiseInterpolator<T: Float, const N: usize>
-where
-    [(); N * N]: Sized,
-{
-    fn evaluate(&self, location: T, frequency: T) -> Matrix<T, N, N>;
-}
-
-pub(crate) trait Moments<T: Float, const N: usize, const ORDER: usize>
+pub(crate) trait Moments<T: Float, G: ?Sized, const N: usize, const ORDER: usize>
 where
     [(); N * N]: Sized,
 {
     fn evaluate_moments(
         &self,
-        lower_location: T,
-        upper_location: T,
+        grid: &G,
         frequency: T,
-    ) -> [Matrix<T, N, N>; ORDER];
+    ) -> impl ExactSizeIterator<Item = StepMoments<T, N, ORDER>>;
 }
 
 pub(crate) trait Boundary<T: Float, const N: usize, const N_INNER: usize, const N_OUTER: usize>
@@ -31,11 +23,12 @@ where
 
 pub(crate) trait System<
     T: Float,
+    G: ?Sized,
     const N: usize,
     const N_INNER: usize,
     const N_OUTER: usize,
     const ORDER: usize,
->: Moments<T, N, ORDER> + Boundary<T, N, N_INNER, N_OUTER> where
+>: Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER, N_OUTER> where
     [(); N * N]: Sized,
     [(); N_INNER * N]: Sized,
     [(); N_OUTER * N]: Sized,
@@ -44,14 +37,15 @@ pub(crate) trait System<
 
 impl<
         T: Float,
+        G: ?Sized,
         const N: usize,
         const N_INNER: usize,
         const N_OUTER: usize,
         const ORDER: usize,
         U,
-    > System<T, N, N_INNER, N_OUTER, ORDER> for U
+    > System<T, G, N, N_INNER, N_OUTER, ORDER> for U
 where
-    U: Moments<T, N, ORDER> + Boundary<T, N, N_INNER, N_OUTER>,
+    U: Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER, N_OUTER>,
     [(); N * N]: Sized,
     [(); N_INNER * N]: Sized,
     [(); N_OUTER * N]: Sized,

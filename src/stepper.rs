@@ -1,142 +1,13 @@
 use num::Float;
-use std::ops::Mul;
 
-use crate::{
-    linalg::{commutator, Matmul, Matrix},
-    system::{Moments, PointwiseInterpolator},
-};
+use crate::linalg::{commutator, Matmul, Matrix};
 
-impl<T: Float + Mul<f64, Output = T>, const N: usize, U: PointwiseInterpolator<T, N>>
-    Moments<T, N, 1> for U
+pub(crate) struct StepMoments<T, const N: usize, const ORDER: usize>
 where
     [(); N * N]: Sized,
 {
-    fn evaluate_moments(
-        &self,
-        lower_location: T,
-        upper_location: T,
-        frequency: T,
-    ) -> [Matrix<T, N, N>; 1] {
-        [self.evaluate(
-            lower_location + (upper_location - lower_location) * 0.5,
-            frequency,
-        )]
-    }
-}
-
-impl<
-        T: Float + Mul<f64, Output = T> + std::fmt::Display,
-        const N: usize,
-        U: PointwiseInterpolator<T, N>,
-    > Moments<T, N, 2> for U
-where
-    [(); N * N]: Sized,
-{
-    fn evaluate_moments(
-        &self,
-        lower_location: T,
-        upper_location: T,
-        frequency: T,
-    ) -> [Matrix<T, N, N>; 2] {
-        const SQRT_3: f64 = 1.732_050_807_568_87;
-        let delta = upper_location - lower_location;
-
-        let a1 = self.evaluate(
-            ((upper_location + lower_location) - delta * (1.0 / SQRT_3)) * 0.5,
-            frequency,
-        );
-        let a2 = self.evaluate(
-            ((upper_location + lower_location) + delta * (1.0 / SQRT_3)) * 0.5,
-            frequency,
-        );
-
-        let b1 = (a1 + a2) * 0.5; // delta
-        let b2 = (a2 - a1) * SQRT_3; // delta
-
-        [b1, b2]
-    }
-}
-
-impl<T: Float + Mul<f64, Output = T>, const N: usize, U: PointwiseInterpolator<T, N>>
-    Moments<T, N, 3> for U
-where
-    [(); N * N]: Sized,
-{
-    fn evaluate_moments(
-        &self,
-        lower_location: T,
-        upper_location: T,
-        frequency: T,
-    ) -> [Matrix<T, N, N>; 3] {
-        const SQRT_5: f64 = 2.236_067_977_499_79;
-        const SQRT_3: f64 = 1.732_050_807_568_87;
-
-        let delta = upper_location - lower_location;
-        let a1 = self.evaluate(
-            ((lower_location + upper_location) - delta * (SQRT_3 / SQRT_5)) * 0.5,
-            frequency,
-        );
-        let a2 = self.evaluate((lower_location + upper_location) * 0.5, frequency);
-        let a3 = self.evaluate(
-            ((lower_location + upper_location) + delta * (SQRT_3 / SQRT_5)) * 0.5,
-            frequency,
-        );
-
-        let b1 = a2; // delta
-        let b2 = (a3 - a1) * (SQRT_5 / SQRT_3); // delta
-        let b3 = (a3 - a2 * 2.0 + a1) * (10. / 3.); // delta
-
-        [b1, b2, b3]
-    }
-}
-
-impl<T: Float + Mul<f64, Output = T>, const N: usize, U: PointwiseInterpolator<T, N>>
-    Moments<T, N, 4> for U
-where
-    [(); N * N]: Sized,
-{
-    fn evaluate_moments(
-        &self,
-        lower_location: T,
-        upper_location: T,
-        frequency: T,
-    ) -> [Matrix<T, N, N>; 4] {
-        const POS1: f64 = 0.339_981_043_584_856_26;
-        const POS2: f64 = 0.861_136_311_594_052_6;
-
-        const COEFF1: f64 = 0.09232659844072877;
-        const COEFF2: f64 = 0.5923265984407289;
-        const COEFF3: f64 = 0.21442969527047984;
-        const COEFF4: f64 = 3.4844683820901863;
-        const COEFF5: f64 = 3.19504825211347;
-        const COEFF6: f64 = 7.420540068038946;
-        const COEFF7: f64 = 18.795449407555054;
-
-        let delta = upper_location - lower_location;
-        let a1 = self.evaluate(
-            (upper_location + lower_location - delta * POS2) * 0.5,
-            frequency,
-        );
-        let a2 = self.evaluate(
-            (upper_location + lower_location - delta * POS1) * 0.5,
-            frequency,
-        );
-        let a3 = self.evaluate(
-            (upper_location + lower_location + delta * POS1) * 0.5,
-            frequency,
-        );
-        let a4 = self.evaluate(
-            (upper_location + lower_location + delta * POS2) * 0.5,
-            frequency,
-        );
-
-        let b1 = a1 * (-COEFF1) + a2 * COEFF2 + a3 * COEFF2 + a4 * (-COEFF1); // delta
-        let b2 = a1 * COEFF3 + a2 * (-COEFF4) + a3 * COEFF4 + a4 * (-COEFF3); // delta
-        let b3 = a1 * COEFF5 + a2 * (-COEFF5) + a3 * (-COEFF5) + a4 * COEFF5; // delta
-        let b4 = a1 * (-COEFF6) + a2 * COEFF7 + a3 * (-COEFF7) + a4 * COEFF6; // delta
-
-        [b1, b2, b3, b4]
-    }
+    pub delta: f64,
+    pub moments: [Matrix<T, N, N>; ORDER],
 }
 
 pub(crate) struct Step<T, const N: usize>
@@ -147,24 +18,24 @@ where
     pub right: Matrix<T, N, N>,
 }
 
-pub(crate) trait Stepper<T: Float, const N: usize, const ORDER: usize, I: Moments<T, N, ORDER>>
+pub(crate) trait Stepper<T: Float, const N: usize, const ORDER: usize>
 where
     [(); N * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: T, x2: T, frequency: f64) -> Step<T, N>;
+    fn step(&self, step_input: StepMoments<T, N, ORDER>) -> Step<T, N>;
 }
 
 pub(crate) struct Magnus2 {}
 
-impl<const N: usize, I: Moments<f64, N, 1>> Stepper<f64, N, 1, I> for Magnus2
+impl<const N: usize> Stepper<f64, N, 1> for Magnus2
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
-        let [mut omega] = interpolator.evaluate_moments(x1, x2, frequency);
+    fn step(&self, step_input: StepMoments<f64, N, 1>) -> Step<f64, N> {
+        let [mut omega] = step_input.moments;
 
-        omega.exp(x2 - x1);
+        omega.exp(step_input.delta);
 
         Step {
             left: omega,
@@ -175,14 +46,14 @@ where
 
 pub(crate) struct Magnus4 {}
 
-impl<const N: usize, I: Moments<f64, N, 2>> Stepper<f64, N, 2, I> for Magnus4
+impl<const N: usize> Stepper<f64, N, 2> for Magnus4
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
-        let delta = x2 - x1;
-        let [b1, b2] = interpolator.evaluate_moments(x1, x2, frequency);
+    fn step(&self, step_input: StepMoments<f64, N, 2>) -> Step<f64, N> {
+        let [b1, b2] = step_input.moments;
+        let delta = step_input.delta;
 
         let mut omega = b1 - commutator(b1, b2) * (1.0 / 12.0) * delta;
 
@@ -197,14 +68,14 @@ where
 
 pub(crate) struct Magnus6 {}
 
-impl<const N: usize, I: Moments<f64, N, 3>> Stepper<f64, N, 3, I> for Magnus6
+impl<const N: usize> Stepper<f64, N, 3> for Magnus6
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
-        let delta = x2 - x1;
-        let [b1, b2, b3] = interpolator.evaluate_moments(x1, x2, frequency);
+    fn step(&self, step_input: StepMoments<f64, N, 3>) -> Step<f64, N> {
+        let [b1, b2, b3] = step_input.moments;
+        let delta = step_input.delta;
 
         let c1 = commutator(b1, b2) * delta; // delta
         let c2 = commutator(b1, b3 * 2. + c1) * (-1.0 / 60.) * delta; // delta
@@ -223,15 +94,14 @@ where
 
 pub(crate) struct Magnus8 {}
 
-impl<const N: usize, I: Moments<f64, N, 4>> Stepper<f64, N, 4, I> for Magnus8
+impl<const N: usize> Stepper<f64, N, 4> for Magnus8
 where
     [(); N * N]: Sized,
     [(); 4 * N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
-        let delta = x2 - x1;
-
-        let [b1, b2, b3, b4] = interpolator.evaluate_moments(x1, x2, frequency);
+    fn step(&self, step_input: StepMoments<f64, N, 4>) -> Step<f64, N> {
+        let [b1, b2, b3, b4] = step_input.moments;
+        let delta = step_input.delta;
 
         let s1 = commutator(b1 + b3 * (1. / 28.), b2 + b4 * (3. / 28.)) * (-1. / 28.) * delta;
         let r1 = commutator(b1, b3 * (-1. / 14.) + s1) * (1. / 3.) * delta;
@@ -256,15 +126,15 @@ where
 
 pub(crate) struct Colloc2 {}
 
-impl<const N: usize, I: Moments<f64, N, 1>> Stepper<f64, N, 1, I> for Colloc2
+impl<const N: usize> Stepper<f64, N, 1> for Colloc2
 where
     [(); N * N]: Sized,
     [(); N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
-        let [b1] = interpolator.evaluate_moments(x1, x2, frequency);
+    fn step(&self, step_input: StepMoments<f64, N, 1>) -> Step<f64, N> {
+        let [b1] = step_input.moments;
 
-        let c1 = b1 * (x2 - x1) * 0.5;
+        let c1 = b1 * step_input.delta * 0.5;
         let c2 = Matrix::eye();
 
         Step {
@@ -276,14 +146,14 @@ where
 
 pub(crate) struct Colloc4 {}
 
-impl<const N: usize, I: Moments<f64, N, 2>> Stepper<f64, N, 2, I> for Colloc4
+impl<const N: usize> Stepper<f64, N, 2> for Colloc4
 where
     [(); N * N]: Sized,
     [(); N]: Sized,
 {
-    fn step(&self, interpolator: &I, x1: f64, x2: f64, frequency: f64) -> Step<f64, N> {
-        let [b1, b2] = interpolator.evaluate_moments(x1, x2, frequency);
-        let delta = x2 - x1;
+    fn step(&self, step_input: StepMoments<f64, N, 2>) -> Step<f64, N> {
+        let [b1, b2] = step_input.moments;
+        let delta = step_input.delta;
 
         let b1 = b1;
         let b2 = b2 * (1. / 12.);
@@ -350,38 +220,86 @@ mod benches {
         group.plot_config(plot_config);
 
         for steps in [50, 100, 200, 400, 800, 1600, 3200, 6400, 12800] {
-            let grid = (0..steps + 1)
+            let grid: Vec<_> = (0..steps + 1)
                 .map(|n| 1. / steps as f64 * n as f64)
                 .collect();
 
             group.bench_function(BenchmarkId::new("colloc2", steps), |b| {
                 b.iter(|| {
-                    bracket_search(&system, &Colloc2 {}, &grid, lower, upper, &searcher).unwrap()
+                    bracket_search(
+                        &system,
+                        &Colloc2 {},
+                        grid.as_slice(),
+                        lower,
+                        upper,
+                        &searcher,
+                    )
+                    .unwrap()
                 })
             });
             group.bench_function(BenchmarkId::new("colloc4", steps), |b| {
                 b.iter(|| {
-                    bracket_search(&system, &Colloc4 {}, &grid, lower, upper, &searcher).unwrap()
+                    bracket_search(
+                        &system,
+                        &Colloc4 {},
+                        grid.as_slice(),
+                        lower,
+                        upper,
+                        &searcher,
+                    )
+                    .unwrap()
                 })
             });
             group.bench_function(BenchmarkId::new("magnus2", steps), |b| {
                 b.iter(|| {
-                    bracket_search(&system, &Magnus2 {}, &grid, lower, upper, &searcher).unwrap()
+                    bracket_search(
+                        &system,
+                        &Magnus2 {},
+                        grid.as_slice(),
+                        lower,
+                        upper,
+                        &searcher,
+                    )
+                    .unwrap()
                 })
             });
             group.bench_function(BenchmarkId::new("magnus4", steps), |b| {
                 b.iter(|| {
-                    bracket_search(&system, &Magnus4 {}, &grid, lower, upper, &searcher).unwrap()
+                    bracket_search(
+                        &system,
+                        &Magnus4 {},
+                        grid.as_slice(),
+                        lower,
+                        upper,
+                        &searcher,
+                    )
+                    .unwrap()
                 })
             });
             group.bench_function(BenchmarkId::new("magnus6", steps), |b| {
                 b.iter(|| {
-                    bracket_search(&system, &Magnus6 {}, &grid, lower, upper, &searcher).unwrap()
+                    bracket_search(
+                        &system,
+                        &Magnus6 {},
+                        grid.as_slice(),
+                        lower,
+                        upper,
+                        &searcher,
+                    )
+                    .unwrap()
                 })
             });
             group.bench_function(BenchmarkId::new("magnus8", steps), |b| {
                 b.iter(|| {
-                    bracket_search(&system, &Magnus8 {}, &grid, lower, upper, &searcher).unwrap()
+                    bracket_search(
+                        &system,
+                        &Magnus8 {},
+                        grid.as_slice(),
+                        lower,
+                        upper,
+                        &searcher,
+                    )
+                    .unwrap()
                 })
             });
 
@@ -389,42 +307,90 @@ mod benches {
                 benchmark_name,
                 "colloc2",
                 steps,
-                bracket_search(&system, &Colloc2 {}, &grid, lower, upper, &searcher).unwrap()
+                bracket_search(
+                    &system,
+                    &Colloc2 {},
+                    grid.as_slice(),
+                    lower,
+                    upper,
+                    &searcher,
+                )
+                .unwrap()
                     - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "colloc4",
                 steps,
-                bracket_search(&system, &Colloc4 {}, &grid, lower, upper, &searcher).unwrap()
+                bracket_search(
+                    &system,
+                    &Colloc4 {},
+                    grid.as_slice(),
+                    lower,
+                    upper,
+                    &searcher,
+                )
+                .unwrap()
                     - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus2",
                 steps,
-                bracket_search(&system, &Magnus2 {}, &grid, lower, upper, &searcher).unwrap()
+                bracket_search(
+                    &system,
+                    &Magnus2 {},
+                    grid.as_slice(),
+                    lower,
+                    upper,
+                    &searcher,
+                )
+                .unwrap()
                     - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus4",
                 steps,
-                bracket_search(&system, &Magnus4 {}, &grid, lower, upper, &searcher).unwrap()
+                bracket_search(
+                    &system,
+                    &Magnus4 {},
+                    grid.as_slice(),
+                    lower,
+                    upper,
+                    &searcher,
+                )
+                .unwrap()
                     - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus6",
                 steps,
-                bracket_search(&system, &Magnus6 {}, &grid, lower, upper, &searcher).unwrap()
+                bracket_search(
+                    &system,
+                    &Magnus6 {},
+                    grid.as_slice(),
+                    lower,
+                    upper,
+                    &searcher,
+                )
+                .unwrap()
                     - root,
             );
             write_accuracy_results(
                 benchmark_name,
                 "magnus8",
                 steps,
-                bracket_search(&system, &Magnus8 {}, &grid, lower, upper, &searcher).unwrap()
+                bracket_search(
+                    &system,
+                    &Magnus8 {},
+                    grid.as_slice(),
+                    lower,
+                    upper,
+                    &searcher,
+                )
+                .unwrap()
                     - root,
             );
         }
