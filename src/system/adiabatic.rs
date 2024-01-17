@@ -131,8 +131,10 @@ impl Iterator for ModelPointsIterator<'_> {
         upper_a[0][1] += upper.c1 * omega_sqrd;
 
         let i = lower_a * (1.0 / lower.x)
-            + (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x)) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
-        let s = (upper_a * (1.0 / upper.x)  - lower_a * (1.0 / lower.x)) * (1.0 / (self.total_subpos as f64));
+            + (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
+                * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
+        let s = (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
+            * (1.0 / (self.total_subpos as f64));
 
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
         let sublower = lower.x + delta * (self.subpos as f64);
