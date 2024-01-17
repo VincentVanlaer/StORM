@@ -105,95 +105,18 @@ where
     sgn as f64 * det
 }
 
-pub(crate) fn bracket_search<
-    const N: usize,
-    const N_INNER: usize,
-    const N_OUTER: usize,
-    const ORDER: usize,
-    G: ?Sized,
-    I: System<f64, G, N, N_INNER, N_OUTER, ORDER>,
-    S: Stepper<f64, N, ORDER>,
-    Searcher: BracketSearcher,
->(
-    system: &I,
-    stepper: &S,
-    grid: &G,
-    lower: f64,
-    upper: f64,
-    searcher: &Searcher,
-) -> Result<f64, ()>
-where
-    [(); N * N]: Sized,
-    [(); N_INNER * N]: Sized,
-    [(); N_OUTER * N]: Sized,
-    [(); calc_n_bands::<N, N_INNER, N_OUTER>()]: Sized,
-{
-    let lower_value = determinant(system, stepper, grid, lower);
-    let upper_value = determinant(system, stepper, grid, upper);
-
-    let mut searcher = searcher.init(lower, lower_value, upper, upper_value)?;
-
-    loop {
-        let value = determinant(system, stepper, grid, searcher.point());
-
-        searcher = match searcher.next(value) {
-            BracketResult::Completed(lower, upper) => return Ok(0.5 * (lower + upper)),
-            BracketResult::NextPoint(s) => s,
-        };
-    }
+pub(crate) struct BracketResult {
+    pub freq: f64,
+    pub evals: u64,
 }
 
 pub(crate) trait BracketSearcher {
-    type Iterator: BracketSearchIterator;
-
-    fn init(
+    fn search<F: Fn(f64) -> f64>(
         &self,
-        lower: f64,
-        lower_value: f64,
-        upper: f64,
-        upper_value: f64,
-    ) -> Result<Self::Iterator, ()>;
-}
-
-pub(crate) enum BracketResult<I: BracketSearchIterator> {
-    NextPoint(I),
-    Completed(f64, f64),
-}
-
-pub(crate) trait BracketSearchIterator: Sized {
-    fn point(&self) -> f64;
-    fn next(self, value: f64) -> BracketResult<Self>;
-}
-
-pub(crate) struct BisectionIterator {
-    rel_epsilon: f64,
-    upper: f64,
-    upper_value: f64,
-    lower: f64,
-    lower_value: f64,
-}
-
-impl BracketSearchIterator for BisectionIterator {
-    fn point(&self) -> f64 {
-        self.lower + 0.5 * (self.upper - self.lower)
-    }
-
-    fn next(mut self, value: f64) -> BracketResult<Self> {
-        if self.upper_value.signum() == value.signum() {
-            self.upper = self.point();
-            self.upper_value = value;
-        } else {
-            self.lower = self.point();
-            self.lower_value = value;
-        }
-
-        if (self.upper - self.lower) <= (self.upper.abs().max(self.lower.abs())) * self.rel_epsilon
-        {
-            BracketResult::Completed(self.lower, self.upper)
-        } else {
-            BracketResult::NextPoint(self)
-        }
-    }
+        lower: Point,
+        upper: Point,
+        f: F,
+    ) -> Result<BracketResult, ()>;
 }
 
 pub(crate) struct Bisection {
@@ -201,108 +124,43 @@ pub(crate) struct Bisection {
 }
 
 impl BracketSearcher for Bisection {
-    type Iterator = BisectionIterator;
-
-    fn init(
+    fn search<F: Fn(f64) -> f64>(
         &self,
-        lower: f64,
-        lower_value: f64,
-        upper: f64,
-        upper_value: f64,
-    ) -> Result<Self::Iterator, ()> {
-        if lower_value.signum() == upper_value.signum() {
-            Err(())
-        } else {
-            Ok(BisectionIterator {
-                rel_epsilon: self.rel_epsilon,
-                lower,
-                lower_value,
-                upper,
-                upper_value,
-            })
+        mut lower: Point,
+        mut upper: Point,
+        f: F,
+    ) -> Result<BracketResult, ()> {
+        if lower.f.signum() == upper.f.signum() {
+            return Err(());
+        }
+
+        let mut evals = 0;
+
+        loop {
+            let delta = (upper.x - lower.x).abs();
+            let x = lower.x + 0.5 * (upper.x - lower.x);
+
+            if delta <= f64::max(upper.x.abs(), lower.x.abs()) * (self.rel_epsilon + f64::EPSILON) {
+                return Ok(BracketResult { freq: x, evals });
+            }
+
+            let next = Point { x, f: f(x) };
+
+            evals += 1;
+
+            if upper.f.signum() == next.f.signum() {
+                upper = next;
+            } else {
+                lower = next;
+            }
         }
     }
 }
 
-pub(crate) struct BrentIterator {
-    rel_epsilon: f64,
-    upper: f64,
-    upper_value: f64,
-    lower: f64,
-    lower_value: f64,
-    mid: f64,
-    mid_value: f64,
-    mflag: Option<f64>,
-    s: f64,
-}
-
-impl BrentIterator {
-    fn compute_point(&mut self) {
-        let mut s = if self.lower_value != self.mid_value && self.upper_value == self.mid_value {
-            let s_lower = self.lower * self.upper_value * self.mid_value
-                / ((self.lower_value - self.upper_value) * (self.lower_value - self.mid_value));
-            let s_upper = self.upper * self.lower_value * self.mid_value
-                / ((self.upper_value - self.lower_value) * (self.upper_value - self.mid_value));
-            let s_mid = self.mid * self.lower_value * self.upper_value
-                / ((self.mid_value - self.lower_value) * (self.mid_value - self.upper_value));
-
-            s_lower + s_upper + s_mid
-        } else {
-            self.upper
-                - self.upper_value * (self.upper - self.lower)
-                    / (self.upper_value - self.lower_value)
-        };
-
-        let m = match self.mflag {
-            Some(d) => d,
-            None => self.upper,
-        };
-
-        if ((s < (3. * self.lower + self.upper) / 4.) && (s < self.upper))
-            || ((s > (3. * self.lower + self.upper) / 4.) && (s > self.upper))
-            || (2. * (s - self.upper).abs() >= (m - self.mid).abs())
-            || ((m - self.mid).abs() <= self.rel_epsilon * f64::max(m.abs(), self.mid.abs()))
-        {
-            s = self.lower + 0.5 * (self.upper - self.lower);
-            self.mflag = Some(self.mid);
-        } else {
-            self.mflag = None;
-        }
-
-        self.s = s;
-    }
-}
-
-impl BracketSearchIterator for BrentIterator {
-    fn point(&self) -> f64 {
-        self.s
-    }
-
-    fn next(mut self, value: f64) -> BracketResult<Self> {
-        self.mid = self.upper;
-        self.mid_value = self.upper_value;
-
-        if self.lower_value.signum() == value.signum() {
-            self.upper = self.s;
-            self.upper_value = value;
-        } else {
-            self.lower = self.s;
-            self.lower_value = value;
-        }
-
-        if self.upper_value.abs() < self.lower_value.abs() {
-            (self.lower, self.upper, self.upper_value, self.lower_value) =
-                (self.upper, self.lower, self.lower_value, self.upper_value);
-        }
-
-        if (self.upper - self.lower) <= (self.upper.abs().max(self.lower.abs())) * self.rel_epsilon
-        {
-            BracketResult::Completed(self.lower, self.upper)
-        } else {
-            self.compute_point();
-            BracketResult::NextPoint(self)
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Point {
+    pub x: f64,
+    pub f: f64,
 }
 
 pub(crate) struct Brent {
@@ -310,36 +168,97 @@ pub(crate) struct Brent {
 }
 
 impl BracketSearcher for Brent {
-    type Iterator = BrentIterator;
-
-    fn init(
+    fn search<F: Fn(f64) -> f64>(
         &self,
-        mut lower: f64,
-        mut lower_value: f64,
-        mut upper: f64,
-        mut upper_value: f64,
-    ) -> Result<Self::Iterator, ()> {
-        if lower_value.signum() == upper_value.signum() {
-            Err(())
-        } else {
-            if upper_value.abs() < lower_value.abs() {
-                (lower, upper, upper_value, lower_value) = (upper, lower, lower_value, upper_value);
+        lower: Point,
+        upper: Point,
+        f: F,
+    ) -> Result<BracketResult, ()> {
+        if lower.f.signum() == upper.f.signum() {
+            return Err(());
+        }
+
+        let mut previous = lower;
+        let mut current = upper;
+        let mut counterpoint = current;
+        let mut d = 0.0;
+        let mut e = 0.0;
+        let mut evals = 0;
+        let mut method: &str = "Initial";
+
+        loop {
+            if counterpoint.f.signum() == current.f.signum() {
+                counterpoint = previous;
+                d = current.x - previous.x;
+                e = d;
             }
-            let mut iterator = BrentIterator {
-                rel_epsilon: self.rel_epsilon,
-                lower,
-                lower_value,
-                upper,
-                upper_value,
-                mflag: None,
-                mid: lower,
-                mid_value: lower_value,
-                s: f64::NAN,
-            };
 
-            iterator.compute_point();
+            if counterpoint.f.abs() < current.f.abs() {
+                previous = current;
+                (counterpoint, current) = (current, counterpoint);
+            }
 
-            Ok(iterator)
+            // dbg!((method, &current, &previous, &counterpoint, d, e));
+
+            let accuracy = 0.5 * (counterpoint.x - current.x);
+            let tolerance =
+                (f64::EPSILON + self.rel_epsilon) * f64::max(current.x.abs(), counterpoint.x.abs());
+
+            if accuracy.abs() <= tolerance || current.f == 0.0 {
+                return Ok(BracketResult {
+                    freq: current.x + accuracy,
+                    evals,
+                });
+            }
+
+            if e.abs() >= tolerance && previous.f.abs() >= current.f.abs() {
+                let slope = current.f / previous.f;
+                let mut p;
+                let mut q;
+
+                if previous.f == counterpoint.f {
+                    p = 2.0 * accuracy * slope;
+                    q = 1.0 - slope;
+                    method = "Secant";
+                } else {
+                    let slope_ac = previous.f / counterpoint.f;
+                    let slope_bc = current.f / counterpoint.f;
+
+                    p = slope
+                        * (2.0 * accuracy * slope_ac * (slope_ac - slope_bc)
+                            - (current.x - previous.x) * (slope_bc - 1.0));
+                    q = (slope_ac - 1.0) * (slope_bc - 1.0) * (slope - 1.0);
+                    method = "QIP";
+                }
+
+                if p > 0.0 {
+                    q = -q;
+                } else {
+                    p = -p;
+                }
+
+                let min1 = 3.0 * accuracy * q - (tolerance * q).abs();
+                let min2 = (e * q).abs();
+
+                if 2.0 * p < f64::min(min1, min2) {
+                    e = d;
+                    d = p / q;
+                } else {
+                    d = accuracy;
+                    e = d;
+                    method = "Bisect (rejected)";
+                }
+            } else {
+                d = accuracy;
+                e = d;
+                method = "Bisect (wrong direction or tolerance)";
+            }
+
+            previous = current;
+
+            current.x += d;
+            current.f = f(current.x);
+            evals += 1;
         }
     }
 }
