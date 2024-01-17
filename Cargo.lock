@@ -794,17 +794,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ndarray-interp"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8158249c71147ce8818363aa76fb7590f4239988265150960132a16cbe0c6fda"
-dependencies = [
- "ndarray",
- "num-traits",
- "thiserror",
-]
-
-[[package]]
 name = "num"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1320,7 +1309,6 @@ dependencies = [
  "lapack",
  "lapack-src",
  "ndarray",
- "ndarray-interp",
  "num",
  "openblas-src",
 ]
