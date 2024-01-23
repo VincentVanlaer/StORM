@@ -99,9 +99,9 @@ impl ModelPointsIterator<'_> {
         } else {
             ModelPointsIterator {
                 model,
-                pos: 0,
-                subpos: 1,
-                total_subpos: 2_usize.pow(scale),
+                pos: 1,
+                subpos: 0,
+                total_subpos: 2usize.pow(scale),
                 frequency,
             }
         }
@@ -153,7 +153,7 @@ impl Iterator for ModelPointsIterator<'_> {
 
 impl ExactSizeIterator for ModelPointsIterator<'_> {
     fn len(&self) -> usize {
-        self.model.components.len() * TryInto::<usize>::try_into(self.total_subpos).unwrap() - 2
+        (self.model.components.len() - 2) * self.total_subpos
     }
 }
 
