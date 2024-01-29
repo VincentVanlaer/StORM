@@ -90,7 +90,7 @@ phi_prime = dphi * r * x ** (l - 2) * y3
 dphi_prime = dphi * x ** (l - 2) * y4
 
 # Adiabatic approximation
-rho_prime = rho / (gamma1 * p) * p_prime + xi_r * a_star * rho / r
+rho_prime = rho / (gamma1 * p) * p_prime + xi_r * a_star * rho / r * sigma / rsigma
 
 # EoM horizontal
 xi_h = Function("xi_h")(x)
@@ -103,7 +103,7 @@ xi_h = solve(
 
 # Mass conservation (y1)
 eq = (
-    rho_prime
+    rsigma / sigma * rho_prime
     + 1 / r**2 * Derivative(rho * r**2 * xi_r, x) / R
     - l * (l + 1) / r * rho * xi_h
 )
@@ -114,7 +114,7 @@ ensure_equal(
     V / gamma1 - 1 - l - 2 * Omega * m * l * (l + 1) / (omega + m * Omega), y1_term
 )
 ensure_equal(
-    l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1 - V / gamma1, y2_term
+    l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1 - (omega - m * Omega) / omega * V / gamma1, y2_term
 )
 ensure_equal(l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1, y3_term)
 ensure_equal(0, y4_term)
@@ -129,7 +129,7 @@ eq = (
 
 y1_term, y2_term, y3_term, y4_term = get_deriv_terms(eq, y2)
 
-ensure_equal(c1 * (omega - m * Omega) ** 2 - a_star, y1_term)
+ensure_equal(c1 * (omega - m * Omega) ** 2 - (omega / (omega - m * Omega)) * a_star, y1_term)
 ensure_equal(3 - U + a_star - l, y2_term.subs(Derivative(p, x, x), ddp * R**2))
 ensure_equal(0, y3_term)
 ensure_equal(-1, y4_term)
@@ -154,6 +154,6 @@ eq = (
 y1_term, y2_term, y3_term, y4_term = get_deriv_terms(eq, y4)
 
 ensure_equal(V / gamma1 * U, y2_term)
-ensure_equal(a_star * U, y1_term)
+ensure_equal((omega / (omega - m * Omega)) * a_star * U, y1_term)
 ensure_equal(l * (l + 1), y3_term)
 ensure_equal(-U - l + 2, y4_term.subs(Derivative(p, x, x), ddp * R**2))
