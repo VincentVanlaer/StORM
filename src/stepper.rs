@@ -39,7 +39,7 @@ where
 
         Step {
             left: omega,
-            right: Matrix::eye(),
+            right: Matrix::eye() * (-1.),
         }
     }
 }
@@ -61,7 +61,7 @@ where
 
         Step {
             left: omega,
-            right: Matrix::eye(),
+            right: Matrix::eye() * (-1.),
         }
     }
 }
@@ -87,7 +87,7 @@ where
 
         Step {
             left: omega,
-            right: Matrix::eye(),
+            right: Matrix::eye() * (-1.),
         }
     }
 }
@@ -119,7 +119,7 @@ where
 
         Step {
             left: omega,
-            right: Matrix::eye(),
+            right: Matrix::eye() * (-1.),
         }
     }
 }
