@@ -9,6 +9,7 @@ use std::time::Instant;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
+use ndarray::aview0;
 
 use crate::bracket::{BracketResult, BracketSearcher as _, Brent, Point};
 use crate::model::StellarModel;
@@ -105,6 +106,8 @@ fn main() -> Result<()> {
                 }
 
                 let group = output.create_group(format!("{i}").as_str())?;
+
+                group.new_attr_builder().with_data(aview0(&result.freq)).create("freq")?;
 
                 group
                     .new_dataset_builder()
