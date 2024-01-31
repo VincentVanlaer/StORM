@@ -233,20 +233,22 @@ impl Moments<f64, ModelGrid, 4, 4> for NonRotating1D {
 impl Boundary<f64, 4, 2, 2> for NonRotating1D {
     fn inner_boundary(&self, frequency: f64) -> Matrix<f64, 2, 4> {
         [
-            self.components[0].c1 * frequency * frequency,
-            0.,
-            -self.ell,
-            0.,
-            0.,
-            self.ell,
-            0.,
-            -1.,
+            [self.components[0].c1 * frequency * frequency, 0.],
+            [-self.ell, 0.],
+            [-1., self.ell],
+            [0., -1.],
         ]
         .into()
     }
 
     fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 2, 4> {
-        [-1., self.u_upper, -1., 0., 1., self.ell + 1.0, 0., 1.].into()
+        [
+            [1., self.u_upper],
+            [-1., 0.],
+            [0., self.ell + 1.0],
+            [0., 1.],
+        ]
+        .into()
     }
 }
 
