@@ -2,6 +2,8 @@ use color_eyre::Result;
 use hdf5::File;
 use ndarray::Array1;
 
+pub(crate) const GRAV: f64 = 6.67430e-8;
+
 pub(crate) struct StellarModel {
     pub(crate) radius: f64,
     pub(crate) mass: f64,
@@ -11,26 +13,39 @@ pub(crate) struct StellarModel {
     pub(crate) p: Array1<f64>,
     pub(crate) gamma1: Array1<f64>,
     pub(crate) nsqrd: Array1<f64>,
+    pub(crate) rot: Array1<f64>,
 }
 
 impl StellarModel {
     pub(crate) fn from_gsm(input: &File) -> Result<StellarModel> {
+        let radius: f64 = input.attr("R_star")?.read_scalar()?;
+        let mass: f64 = input.attr("M_star")?.read_scalar()?;
         let r_coord = input.dataset("r")?.read_1d::<f64>()?;
         let m_coord = input.dataset("M_r")?.read_1d::<f64>()?;
         let rho = input.dataset("rho")?.read_1d::<f64>()?;
         let p = input.dataset("P")?.read_1d::<f64>()?;
         let gamma1 = input.dataset("Gamma_1")?.read_1d::<f64>()?;
         let nsqrd = input.dataset("N2")?.read_1d::<f64>()?;
+        let lower_rot = 2. / 86400. * (radius.powi(3) / GRAV / mass).sqrt();
+        let peak = 1. / 86400. * (radius.powi(3) / GRAV / mass).sqrt();
+        dbg!(lower_rot + peak);
+        let rot = Array1::from_iter(r_coord.iter().map(|pos| {
+            let rel_pos = pos / radius;
+
+            lower_rot + rel_pos * (1. - rel_pos) * peak * 4.
+        }));
+        // let rot = Array1::from_elem((r_coord.len()), 0.0);
 
         Ok(StellarModel {
-            radius: input.attr("R_star")?.read_scalar()?,
-            mass: input.attr("M_star")?.read_scalar()?,
+            radius,
+            mass,
             r_coord,
             m_coord,
             rho,
             p,
             gamma1,
             nsqrd,
+            rot,
         })
     }
 }

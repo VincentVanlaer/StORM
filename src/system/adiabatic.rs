@@ -1,6 +1,6 @@
 use super::{Boundary, Moments};
 use crate::linalg::Matrix;
-use crate::model::StellarModel;
+use crate::model::{StellarModel, GRAV};
 use crate::stepper::StepMoments;
 use color_eyre::Result;
 use std::f64::consts::PI;
@@ -8,26 +8,27 @@ use std::f64::consts::PI;
 pub(crate) struct NonRotating1D {
     components: Vec<ModelPoint>,
     ell: f64,
+    m: f64,
     u_upper: f64,
 }
-
-const GRAV: f64 = 6.67430e-8;
 
 #[derive(Clone, Copy, Debug)]
 struct ModelPoint {
     a: Matrix<f64, 4, 4>,
     c1: f64,
+    rot: f64,
     x: f64,
 }
 
 impl NonRotating1D {
-    pub(crate) fn from_model(value: &StellarModel, ell: u64) -> Result<Self> {
+    pub(crate) fn from_model(value: &StellarModel, ell: u64, m: i64) -> Result<Self> {
         let ell = ell as f64;
         let mut components: Vec<_> = vec![
             ModelPoint {
                 a: [0.0f64; 16].into(),
                 c1: 0.0,
-                x: 0.0
+                x: 0.0,
+                rot: 0.0,
             };
             value.r_coord.len()
         ];
@@ -66,6 +67,7 @@ impl NonRotating1D {
             component.a[2][3] = ell * (ell + 1.);
             component.a[3][3] = -u[i] + 2. - ell;
 
+            component.rot = value.rot[i];
             component.c1 = c1[i];
             component.x = x[i];
         }
@@ -73,6 +75,7 @@ impl NonRotating1D {
         Ok(NonRotating1D {
             components,
             ell,
+            m: m as f64,
             u_upper: *u.last().unwrap(),
         })
     }
@@ -115,25 +118,38 @@ impl Iterator for ModelPointsIterator<'_> {
         if self.model.components.len() == 0 || (self.pos + 1) == self.model.components.len() {
             return None;
         }
-
+        let l = self.model.ell;
+        let m = self.model.m;
+        let omega = self.frequency;
         let omega_sqrd = self.frequency.powi(2);
 
+        let add_frequency = |point: ModelPoint| {
+            let mut a = point.a.clone();
+            let omega_rsq = omega_sqrd - (self.model.m * point.rot).powi(2);
+            let omega_rot = omega - m * point.rot;
+
+            // mass conservation
+            a[0][0] = a[0][0] - 2. * point.rot * m * l * (l + 1.) / (omega + m * point.rot);
+            a[1][0] = omega_rot / omega * a[1][0] + l * (l + 1.) / (omega_rsq * point.c1);
+            a[2][0] = l * (l + 1.) / (omega_rsq * point.c1);
+
+            a[0][1] = omega / omega_rot * a[0][1] + point.c1 * omega_rsq;
+
+            a[1][3] = omega / omega_rot * a[1][3];
+
+            a
+        };
+
         let lower = self.model.components[self.pos];
-        let mut lower_a = lower.a.clone();
-        lower_a[1][0] += self.model.ell * (self.model.ell + 1.) / (omega_sqrd * lower.c1);
-        lower_a[2][0] = self.model.ell * (self.model.ell + 1.) / (omega_sqrd * lower.c1);
-        lower_a[0][1] += lower.c1 * omega_sqrd;
+        let lower_a = add_frequency(lower);
 
         let upper = self.model.components[self.pos + 1];
-        let mut upper_a = upper.a.clone();
-        upper_a[1][0] += self.model.ell * (self.model.ell + 1.) / (omega_sqrd * upper.c1);
-        upper_a[2][0] = self.model.ell * (self.model.ell + 1.) / (omega_sqrd * upper.c1);
-        upper_a[0][1] += upper.c1 * omega_sqrd;
+        let upper_a = add_frequency(upper);
 
-        let i = lower_a * (1.0 / lower.x)
+        let intercept = lower_a * (1.0 / lower.x)
             + (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
                 * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
-        let s = (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
+        let slope = (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
             * (1.0 / (self.total_subpos as f64));
 
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
@@ -147,7 +163,7 @@ impl Iterator for ModelPointsIterator<'_> {
             self.subpos = 0;
         }
 
-        Some((subupper - sublower, s, i))
+        Some((subupper - sublower, slope, intercept))
     }
 }
 
