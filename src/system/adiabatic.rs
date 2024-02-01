@@ -148,11 +148,9 @@ impl Iterator for ModelPointsIterator<'_> {
         let upper = self.model.components[self.pos + 1];
         let upper_a = add_frequency(upper);
 
-        let intercept = lower_a * (1.0 / lower.x)
-            + (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
-                * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
-        let slope = (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
-            * (1.0 / (self.total_subpos as f64));
+        let intercept = lower_a
+            + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
+        let slope = (upper_a - lower_a) * (1.0 / (self.total_subpos as f64));
 
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
         let sublower = lower.x + delta * (self.subpos as f64);
@@ -165,7 +163,7 @@ impl Iterator for ModelPointsIterator<'_> {
             self.subpos = 0;
         }
 
-        Some((subupper - sublower, slope, intercept))
+        Some((subupper.ln() - sublower.ln(), slope, intercept))
     }
 }
 
