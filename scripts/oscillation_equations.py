@@ -114,7 +114,9 @@ ensure_equal(
     V / gamma1 - 1 - l - 2 * Omega * m * l * (l + 1) / (omega + m * Omega), y1_term
 )
 ensure_equal(
-    l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1 - (omega - m * Omega) / omega * V / gamma1, y2_term
+    l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1
+    - (omega - m * Omega) / omega * V / gamma1,
+    y2_term,
 )
 ensure_equal(l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1, y3_term)
 ensure_equal(0, y4_term)
@@ -125,13 +127,23 @@ eq = (
     - Derivative(p_prime, x) / R
     - rho_prime * dphi
     - rho * dphi_prime
+    + 2 * rho * m * rsigma * sOmega * xi_h
 )
 
 y1_term, y2_term, y3_term, y4_term = get_deriv_terms(eq, y2)
 
-ensure_equal(c1 * (omega - m * Omega) ** 2 - (omega / (omega - m * Omega)) * a_star, y1_term)
-ensure_equal(3 - U + a_star - l, y2_term.subs(Derivative(p, x, x), ddp * R**2))
-ensure_equal(0, y3_term)
+ensure_equal(
+    c1
+    * (omega - m * Omega) ** 2
+    * (1 - 4 * m**2 * Omega**2 / (omega**2 - m**2 * Omega**2))
+    - (omega / (omega - m * Omega)) * a_star,
+    y1_term,
+)
+ensure_equal(
+    3 - U + a_star - l + 2 * m * Omega / (m * Omega + omega),
+    y2_term.subs(Derivative(p, x, x), ddp * R**2),
+)
+ensure_equal(2 * m * Omega / (m * Omega + omega), y3_term)
 ensure_equal(-1, y4_term)
 
 # Gravity (y3)
