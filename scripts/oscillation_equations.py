@@ -72,6 +72,10 @@ ddp = (
     - rho * G / r**2 * 4 * pi * r**2 * rho
 )  # expanded form of d^2(p)/dx^2
 
+Λ = l * (l + 1)
+rel_rot = 2 * m * Omega / (Λ * (omega - m * Omega) + 2 * m * Omega)
+omega_rsq = (Λ * (omega - m * Omega) + 2 * m * Omega) * (omega - m * Omega)
+
 # Dimensionless structure coefficients
 V = -x / p * Derivative(p, x)
 U = 4 * pi * r**2 * rho * (r / Mr)
@@ -97,7 +101,7 @@ xi_h = Function("xi_h")(x)
 xi_h = solve(
     -1 / r * (p_prime + rho * phi_prime)
     + rsigma**2 * rho * xi_h
-    + 2 * rho * m * rsigma * sOmega * (xi_r + xi_h),
+    + 2 * rho * m * rsigma * sOmega * (xi_r + xi_h) / Λ,
     xi_h,
 )[0]
 
@@ -111,14 +115,14 @@ eq = (
 y1_term, y2_term, y3_term, y4_term = get_deriv_terms(eq, y1)
 
 ensure_equal(
-    V / gamma1 - 1 - l - 2 * Omega * m * l * (l + 1) / (omega + m * Omega), y1_term
+    V / gamma1 - 1 - l - Λ * rel_rot,
+    y1_term,
 )
 ensure_equal(
-    l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1
-    - V / gamma1,
+    Λ**2 / (omega_rsq * c1) - V / gamma1,
     y2_term,
 )
-ensure_equal(l * (l + 1) / (omega**2 - m**2 * Omega**2) / c1, y3_term)
+ensure_equal(Λ**2 / (omega_rsq * c1), y3_term)
 ensure_equal(0, y4_term)
 
 # Vertical EoM (y2)
@@ -133,17 +137,16 @@ eq = (
 y1_term, y2_term, y3_term, y4_term = get_deriv_terms(eq, y2)
 
 ensure_equal(
-    c1
-    * (omega - m * Omega) ** 2
-    * (1 - 4 * m**2 * Omega**2 / (omega**2 - m**2 * Omega**2))
+    (omega - m * Omega) ** 2 * (1 - (2 * m * Omega)**2 / omega_rsq)
+    * c1
     - a_star,
     y1_term,
 )
 ensure_equal(
-    3 - U + a_star - l + 2 * m * Omega / (m * Omega + omega),
+    3 - U + a_star - l + Λ * rel_rot,
     y2_term.subs(Derivative(p, x, x), ddp * R**2),
 )
-ensure_equal(2 * m * Omega / (m * Omega + omega), y3_term)
+ensure_equal(Λ * rel_rot, y3_term)
 ensure_equal(-1, y4_term)
 
 # Gravity (y3)
