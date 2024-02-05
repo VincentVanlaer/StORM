@@ -8,7 +8,7 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ cmake gcc pkg-config gfortran (python3.withPackages (p: [ p.numpy p.scipy p.matplotlib p.mypy p.pyqt6 p.sympy ])) gnuplot openssl ];
+          nativeBuildInputs = with pkgs; [ cmake gcc pkg-config gfortran (python3.withPackages (p: [ p.numpy p.scipy p.matplotlib p.mypy p.pyqt6 p.sympy p.h5py ])) gnuplot openssl ];
         };
       });
 }
