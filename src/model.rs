@@ -1,4 +1,4 @@
-use color_eyre::Result;
+use color_eyre::{Result, eyre::eyre};
 use hdf5::File;
 use ndarray::Array1;
 
@@ -39,5 +39,17 @@ impl StellarModel {
             nsqrd,
             rot,
         })
+    }
+
+    pub(crate) fn overlay_rot(&mut self, input: &File) -> Result<()> {
+        let rot = input.dataset("Omega_rot")?.read_1d::<f64>()?;
+
+        if rot.len() != self.rot.len() {
+            return Err(eyre!("Rotation overlay has invalid length"))
+        }
+
+        self.rot = rot;
+
+        Ok(())
     }
 }

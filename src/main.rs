@@ -11,7 +11,7 @@ use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
 use ndarray::aview0;
 
-use crate::bracket::{BracketResult, BracketSearcher as _, Brent, Point};
+use crate::bracket::{BracketSearcher as _, Brent, Point};
 use crate::model::StellarModel;
 use crate::solver::{decompose_system_matrix, DecomposedSystemMatrix};
 use crate::stepper::{Colloc2, Magnus2, Magnus8};
@@ -30,28 +30,40 @@ extern crate lapack_src;
 #[derive(Parser)]
 #[command()]
 struct Main {
+    #[arg(long)]
     input: String,
+    #[arg(long)]
+    overlay_rot: Option<String>,
+    #[arg(long)]
     output: String,
+    #[arg(long)]
     lower: f64,
+    #[arg(long)]
     upper: f64,
+    #[arg(long)]
     n_steps: usize,
+    #[arg(long)]
+    degree: u32,
 }
 
 fn main() -> Result<()> {
     color_eyre::install()?;
 
     let args = Main::parse();
-    let model = &StellarModel::from_gsm(&hdf5::File::open(&args.input)?)?;
+    let mut model = StellarModel::from_gsm(&hdf5::File::open(&args.input)?)?;
     let output = hdf5::File::create(args.output)?;
 
-    output.new_dataset_builder().with_data(&(&model.r_coord / model.radius)).create("x")?;
+    if let Some(overlay) = args.overlay_rot {
+        model.overlay_rot(&hdf5::File::open(&overlay)?)?;
+    }
 
-    for m in -1..=1 {
-        let system = NonRotating1D::from_model(
-            model,
-            1,
-            m,
-        )?;
+    output
+        .new_dataset_builder()
+        .with_data(&(&model.r_coord / model.radius))
+        .create("x")?;
+
+    for m in -(args.degree as i64)..=args.degree.into() {
+        let system = NonRotating1D::from_model(&model, args.degree.into(), m)?;
         let mut dets = vec![Point { x: 0.0, f: 0.0 }; args.n_steps];
 
         let start = Instant::now();
@@ -85,7 +97,6 @@ fn main() -> Result<()> {
                     None
                 }
             })
-            .inspect(|(lower, upper)| println!("{lower:?}, {upper:?}"))
             .map(|(lower, upper)| {
                 (Brent { rel_epsilon: 1e-15 }).search(lower, upper, |point| {
                     system_matrix(point).map(|x| x.determinant())
@@ -95,6 +106,7 @@ fn main() -> Result<()> {
         for (i, solution) in solutions.iter().enumerate() {
             match solution {
                 Ok(result) => {
+                    println!("{:.20} {}", result.freq, result.evals);
                     let eigenvector = system_matrix(result.freq)?.eigenvector();
 
                     let (chunks, _) = eigenvector.as_chunks::<4>();
