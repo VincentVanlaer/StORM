@@ -26,15 +26,7 @@ impl StellarModel {
         let p = input.dataset("P")?.read_1d::<f64>()?;
         let gamma1 = input.dataset("Gamma_1")?.read_1d::<f64>()?;
         let nsqrd = input.dataset("N2")?.read_1d::<f64>()?;
-        let lower_rot = 2. / 86400. * (radius.powi(3) / GRAV / mass).sqrt();
-        let peak = 1. / 86400. * (radius.powi(3) / GRAV / mass).sqrt();
-        dbg!(lower_rot + peak);
-        let rot = Array1::from_iter(r_coord.iter().map(|pos| {
-            let rel_pos = pos / radius;
-
-            lower_rot + rel_pos * (1. - rel_pos) * peak * 4.
-        }));
-        // let rot = Array1::from_elem((r_coord.len()), 0.0);
+        let rot = input.dataset("Omega_rot")?.read_1d::<f64>()?;
 
         Ok(StellarModel {
             radius,
