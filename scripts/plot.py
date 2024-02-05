@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from cycler import cycler
 import matplotlib as mpl
 
+
 def set_style() -> None:
     mpl.rcParams.update(
         {
@@ -45,6 +46,7 @@ def set_style() -> None:
         }
     )
 
+
 set_style()
 
 for test_target in Path("target/criterion").iterdir():
@@ -53,13 +55,14 @@ for test_target in Path("target/criterion").iterdir():
 
     data = defaultdict(list)
 
-
     for result in test_target.glob("*/*/result"):
         error = float(result.read_text())
         npoints = float(result.parent.name)
         method = result.parent.parent.name
-        timings = np.genfromtxt(result.parent / "new" / "raw.csv", delimiter=",", names=True)
-        time =  timings[-1]["sample_measured_value"] / timings[-1]["iteration_count"]
+        timings = np.genfromtxt(
+            result.parent / "new" / "raw.csv", delimiter=",", names=True
+        )
+        time = timings[-1]["sample_measured_value"] / timings[-1]["iteration_count"]
 
         data[method].append((npoints, error, time))
 

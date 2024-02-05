@@ -5,8 +5,12 @@ init_printing()
 one_half = Integer(1) / Integer(2)
 x = symbols("x")
 
+
 def solution(n: int):
-    return expand(((-x + one_half)**(n + 2)  - (-x - one_half)**(n + 2)) / (n + 2) + x * ((-x + one_half)**(n + 1) - (-x - one_half)**(n + 1)) / (n + 1)), expand(((-x + one_half)**(n + 1) - (-x - one_half)**(n + 1)) / (n + 1))
+    return expand(
+        ((-x + one_half) ** (n + 2) - (-x - one_half) ** (n + 2)) / (n + 2)
+        + x * ((-x + one_half) ** (n + 1) - (-x - one_half) ** (n + 1)) / (n + 1)
+    ), expand(((-x + one_half) ** (n + 1) - (-x - one_half) ** (n + 1)) / (n + 1))
 
 
 r = []
