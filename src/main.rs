@@ -9,7 +9,7 @@ use std::time::Instant;
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
-use ndarray::aview0;
+use ndarray::{aview0, s};
 
 use crate::bracket::{BracketSearcher as _, Brent, Point};
 use crate::model::StellarModel;
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
 
     output
         .new_dataset_builder()
-        .with_data(&(&model.r_coord / model.radius))
+        .with_data(&(&model.r_coord / model.radius).slice(s![1..]))
         .create("x")?;
 
     for m in -(args.degree as i64)..=args.degree.into() {
