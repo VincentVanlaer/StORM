@@ -237,7 +237,7 @@ impl Boundary<f64, 4, 2, 2> for NonRotating1D {
         [
             [self.components[0].c1 * frequency * frequency, 0.],
             [-self.ell, 0.],
-            [-1., self.ell],
+            [-self.ell, self.ell],
             [0., -1.],
         ]
         .into()
