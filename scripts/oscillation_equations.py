@@ -170,3 +170,6 @@ ensure_equal(V / gamma1 * U, y2_term)
 ensure_equal(a_star * U, y1_term)
 ensure_equal(l * (l + 1), y3_term)
 ensure_equal(-U - l + 2, y4_term.subs(Derivative(p, x, x), ddp * R**2))
+
+# check that dy1 and dy2 regularity conditions are the same
+ensure_equal(omega_rsq * c1 / Λ**2 * (Λ * rel_rot - l) * (-1 - l - Λ * rel_rot), (omega - m * Omega) ** 2 * (1 - (2 * m * Omega) ** 2 / omega_rsq) * c1)

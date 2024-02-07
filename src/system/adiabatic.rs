@@ -240,11 +240,30 @@ impl Moments<f64, ModelGrid, 4, 4> for NonRotating1D {
 }
 
 impl Boundary<f64, 4, 2, 2> for NonRotating1D {
-    fn inner_boundary(&self, frequency: f64) -> Matrix<f64, 2, 4> {
+    fn inner_boundary(&self, omega: f64) -> Matrix<f64, 2, 4> {
+        let l = self.ell;
+        let lambda = l * (l + 1.);
+        let m = self.m;
+        let rot = self.components[0].rot;
+        let omega_rsq;
+        let rel_rot;
+        if l == 0. {
+            omega_rsq = 1.;
+            rel_rot = 1.;
+        } else {
+            omega_rsq = (lambda * (omega - m * rot) + 2. * m * rot) * (omega - m * rot);
+            rel_rot = 2. * m * rot / (lambda * (omega - m * rot) + 2. * m * rot);
+        }
+
         [
-            [self.components[0].c1 * frequency * frequency, 0.],
-            [-self.ell, 0.],
-            [-self.ell, self.ell],
+            [
+                self.components[0].c1
+                    * (omega - m * rot).powi(2)
+                    * (1. - (2. * m * rot).powi(2) / omega_rsq),
+                0.,
+            ],
+            [lambda * rel_rot - self.ell, 0.],
+            [lambda * rel_rot - self.ell, self.ell],
             [0., -1.],
         ]
         .into()
