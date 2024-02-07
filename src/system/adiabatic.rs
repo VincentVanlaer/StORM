@@ -125,10 +125,17 @@ impl Iterator for ModelPointsIterator<'_> {
 
         let add_frequency = |point: ModelPoint| {
             let mut a = point.a.clone();
-            let omega_rsq =
-                (lambda * (omega - m * point.rot) + 2. * m * point.rot) * (omega - m * point.rot);
-            let rel_rot =
-                2. * m * point.rot / (lambda * (omega - m * point.rot) + 2. * m * point.rot);
+            let omega_rsq;
+            let rel_rot;
+            if l == 0. {
+                omega_rsq = 1.;
+                rel_rot = 1.;
+            } else {
+                omega_rsq = (lambda * (omega - m * point.rot) + 2. * m * point.rot)
+                    * (omega - m * point.rot);
+                rel_rot =
+                    2. * m * point.rot / (lambda * (omega - m * point.rot) + 2. * m * point.rot);
+            }
 
             a[0][0] += -lambda * rel_rot;
             a[1][0] += lambda.powi(2) / (omega_rsq * point.c1);
