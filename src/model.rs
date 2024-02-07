@@ -1,4 +1,4 @@
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::{eyre::eyre, Result};
 use hdf5::File;
 use ndarray::Array1;
 
@@ -45,7 +45,7 @@ impl StellarModel {
         let rot = input.dataset("Omega_rot")?.read_1d::<f64>()?;
 
         if rot.len() != self.rot.len() {
-            return Err(eyre!("Rotation overlay has invalid length"))
+            return Err(eyre!("Rotation overlay has invalid length"));
         }
 
         self.rot = rot;

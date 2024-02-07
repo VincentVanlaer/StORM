@@ -137,9 +137,7 @@ eq = (
 y1_term, y2_term, y3_term, y4_term = get_deriv_terms(eq, y2)
 
 ensure_equal(
-    (omega - m * Omega) ** 2 * (1 - (2 * m * Omega)**2 / omega_rsq)
-    * c1
-    - a_star,
+    (omega - m * Omega) ** 2 * (1 - (2 * m * Omega) ** 2 / omega_rsq) * c1 - a_star,
     y1_term,
 )
 ensure_equal(
