@@ -25,7 +25,7 @@ where
     fn step(&self, step_input: StepMoments<T, N, ORDER>) -> Step<T, N>;
 }
 
-pub(crate) struct Magnus2 {}
+pub struct Magnus2 {}
 
 impl<const N: usize> Stepper<f64, N, 1> for Magnus2
 where
@@ -44,7 +44,7 @@ where
     }
 }
 
-pub(crate) struct Magnus4 {}
+pub struct Magnus4 {}
 
 impl<const N: usize> Stepper<f64, N, 2> for Magnus4
 where
@@ -66,7 +66,7 @@ where
     }
 }
 
-pub(crate) struct Magnus6 {}
+pub struct Magnus6 {}
 
 impl<const N: usize> Stepper<f64, N, 3> for Magnus6
 where
@@ -92,7 +92,7 @@ where
     }
 }
 
-pub(crate) struct Magnus8 {}
+pub struct Magnus8 {}
 
 impl<const N: usize> Stepper<f64, N, 4> for Magnus8
 where
@@ -124,7 +124,7 @@ where
     }
 }
 
-pub(crate) struct Colloc2 {}
+pub struct Colloc2 {}
 
 impl<const N: usize> Stepper<f64, N, 1> for Colloc2
 where
@@ -144,7 +144,7 @@ where
     }
 }
 
-pub(crate) struct Colloc4 {}
+pub struct Colloc4 {}
 
 impl<const N: usize> Stepper<f64, N, 2> for Colloc4
 where

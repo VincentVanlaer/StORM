@@ -4,20 +4,20 @@ use ndarray::Array1;
 
 pub(crate) const GRAV: f64 = 6.67430e-8;
 
-pub(crate) struct StellarModel {
-    pub(crate) radius: f64,
-    pub(crate) mass: f64,
-    pub(crate) r_coord: Array1<f64>,
-    pub(crate) m_coord: Array1<f64>,
-    pub(crate) rho: Array1<f64>,
-    pub(crate) p: Array1<f64>,
-    pub(crate) gamma1: Array1<f64>,
-    pub(crate) nsqrd: Array1<f64>,
-    pub(crate) rot: Array1<f64>,
+pub struct StellarModel {
+    pub radius: f64,
+    pub mass: f64,
+    pub r_coord: Array1<f64>,
+    pub m_coord: Array1<f64>,
+    pub rho: Array1<f64>,
+    pub p: Array1<f64>,
+    pub gamma1: Array1<f64>,
+    pub nsqrd: Array1<f64>,
+    pub rot: Array1<f64>,
 }
 
 impl StellarModel {
-    pub(crate) fn from_gsm(input: &File) -> Result<StellarModel> {
+    pub fn from_gsm(input: &File) -> Result<StellarModel> {
         let radius: f64 = input.attr("R_star")?.read_scalar()?;
         let mass: f64 = input.attr("M_star")?.read_scalar()?;
         let r_coord = input.dataset("r")?.read_1d::<f64>()?;
@@ -41,7 +41,7 @@ impl StellarModel {
         })
     }
 
-    pub(crate) fn overlay_rot(&mut self, input: &File) -> Result<()> {
+    pub fn overlay_rot(&mut self, input: &File) -> Result<()> {
         let rot = input.dataset("Omega_rot")?.read_1d::<f64>()?;
 
         if rot.len() != self.rot.len() {

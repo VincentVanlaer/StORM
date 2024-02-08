@@ -1,9 +1,9 @@
-pub(crate) struct BracketResult {
+pub struct BracketResult {
     pub freq: f64,
     pub evals: u64,
 }
 
-pub(crate) trait BracketSearcher<E> {
+pub trait BracketSearcher<E> {
     fn search<F: Fn(f64) -> Result<f64, E>>(
         &self,
         lower: Point,
@@ -51,12 +51,12 @@ impl<E> BracketSearcher<E> for Bisection {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Point {
+pub struct Point {
     pub x: f64,
     pub f: f64,
 }
 
-pub(crate) struct Brent {
+pub struct Brent {
     pub rel_epsilon: f64,
 }
 

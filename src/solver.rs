@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::cmp::min;
 
 use lapack::dgbtrf;
 
@@ -22,12 +22,11 @@ const fn to_band_coord(ku: usize, kl: usize, i: usize, j: usize) -> usize {
     bandwith * j + kl + ku + i - j
 }
 
-pub(crate) const fn calc_n_bands<const N: usize, const N_INNER: usize, const N_OUTER: usize>(
-) -> usize {
+pub const fn calc_n_bands<const N: usize, const N_INNER: usize, const N_OUTER: usize>() -> usize {
     2 * calc_kl::<N, N_INNER, N_OUTER>() + calc_ku::<N, N_INNER, N_OUTER>() + 1
 }
 
-pub(crate) struct DecomposedSystemMatrix {
+pub struct DecomposedSystemMatrix {
     band_storage: Vec<f64>,
     ku: usize,
     kl: usize,
@@ -35,7 +34,7 @@ pub(crate) struct DecomposedSystemMatrix {
 }
 
 impl DecomposedSystemMatrix {
-    pub(crate) fn determinant(&self) -> f64 {
+    pub fn determinant(&self) -> f64 {
         let alen = self.ipiv.len();
 
         let mut det = 1.0;
@@ -59,7 +58,7 @@ impl DecomposedSystemMatrix {
         self.band_storage[to_band_coord(self.ku, self.kl, i, j)]
     }
 
-    pub(crate) fn eigenvector(&self) -> Vec<f64> {
+    pub fn eigenvector(&self) -> Vec<f64> {
         let alen = self.ipiv.len();
         let u_diagonals = self.kl + self.ku + 1;
 
@@ -81,7 +80,7 @@ impl DecomposedSystemMatrix {
     }
 }
 
-pub(crate) fn decompose_system_matrix<
+pub fn decompose_system_matrix<
     const N: usize,
     const N_INNER: usize,
     const N_OUTER: usize,

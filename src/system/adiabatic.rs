@@ -5,7 +5,7 @@ use crate::stepper::StepMoments;
 use color_eyre::Result;
 use std::f64::consts::PI;
 
-pub(crate) struct NonRotating1D {
+pub struct NonRotating1D {
     components: Vec<ModelPoint>,
     ell: f64,
     m: f64,
@@ -21,7 +21,7 @@ struct ModelPoint {
 }
 
 impl NonRotating1D {
-    pub(crate) fn from_model(value: &StellarModel, ell: u64, m: i64) -> Result<Self> {
+    pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Result<Self> {
         let ell = ell as f64;
         let mut components: Vec<_> = vec![
             ModelPoint {
@@ -280,6 +280,6 @@ impl Boundary<f64, 4, 2, 2> for NonRotating1D {
     }
 }
 
-pub(crate) struct ModelGrid {
+pub struct ModelGrid {
     pub scale: u32,
 }

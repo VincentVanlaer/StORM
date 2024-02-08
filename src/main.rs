@@ -1,8 +1,5 @@
-#![feature(generic_const_exprs)]
 #![feature(slice_as_chunks)]
-#![feature(custom_test_frameworks)]
-#![test_runner(criterion::runner)]
-#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 
 use std::time::Instant;
 
@@ -11,21 +8,11 @@ use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
 use ndarray::{aview0, s};
 
-use crate::bracket::{BracketSearcher as _, Brent, Point};
-use crate::model::StellarModel;
-use crate::solver::{decompose_system_matrix, DecomposedSystemMatrix};
-use crate::stepper::{Colloc2, Magnus2, Magnus8};
-use crate::system::adiabatic::{ModelGrid, NonRotating1D};
-
-mod bracket;
-mod linalg;
-mod model;
-mod solver;
-mod stepper;
-mod system;
-
-extern crate blas_src;
-extern crate lapack_src;
+use storm::bracket::{BracketSearcher as _, Brent, Point};
+use storm::model::StellarModel;
+use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
+use storm::stepper::{Colloc2, Magnus2, Magnus6};
+use storm::system::adiabatic::{ModelGrid, NonRotating1D};
 
 #[derive(Parser)]
 #[command()]
@@ -72,7 +59,7 @@ fn main() -> Result<()> {
     let start = Instant::now();
 
     let system_matrix = |freq: f64| -> Result<DecomposedSystemMatrix> {
-        decompose_system_matrix(&system, &Magnus2 {}, &ModelGrid { scale: 0 }, freq)
+        decompose_system_matrix(&system, &Magnus6 {}, &ModelGrid { scale: 0 }, freq)
             .or(Err(eyre!("Failed determinant")))
     };
 
