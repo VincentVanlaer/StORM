@@ -33,7 +33,7 @@ fn main() -> Result<()> {
                 "input" => {
                     let mut bare_input = load_model(args[1])?;
                     if args.len() == 3 {
-                        bare_input.overlay_rot(&hdf5::File::open(args[3])?)?;
+                        bare_input.overlay_rot(&hdf5::File::open(args[2])?)?;
                     }
                     input = Some(bare_input)
                 }
