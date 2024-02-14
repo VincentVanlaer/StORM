@@ -52,7 +52,7 @@ fn main() -> Result<()> {
 
                     let mut dets = vec![Point { x: 0.0, f: 0.0 }; steps];
                     for i in 0..steps {
-                        let freq = lower + i as f64 / steps as f64 * (upper - lower);
+                        let freq = lower + i as f64 / (steps - 1) as f64 * (upper - lower);
                         dets[i] = Point {
                             x: freq,
                             f: system_matrix(freq)
