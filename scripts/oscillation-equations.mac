@@ -1,0 +1,124 @@
+/* [wxMaxima: input   start ] */
+kill(all)$
+declare(R, constant)$
+declare(M, constant)$
+declare(G, constant)$
+declare(l, constant)$
+declare(m, constant)$
+P: P(x)$
+rho: ρ(x)$
+gamma1: Γ[1](x)$
+Omega: Omega(x)$
+omega: ω$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+scale: sqrt(M * G / R^3)$
+sigma: scale * omega$
+sOmega: scale * Omega$
+rsigma: sigma - m * sOmega$
+r: x * R$
+A: 1 / gamma1 * x / P * diff(P, x) - x / rho * diff(rho, x)$
+dphi: - diff(P, x) / R / rho$
+Mr: r^2 * dphi / G$
+Λ: l*(l+1)$
+rel_rot: 2 * m * Omega / (Λ * (omega - m * Omega) + 2 * m * Omega)$
+omega_rsq: (Λ * (omega - m * Omega) + 2 * m * Omega) * (omega - m * Omega)$
+ddp: - diff(rho, x) / R * dphi + 2 * rho / r^3 * G * Mr - rho * G / r^2 * 4 * pi * r^2 * rho$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+y1: y1(x)$
+y2: y2(x)$
+y3: y3(x)$
+y4: y4(x)$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+V: -x / P * diff(P, x)$
+U: 4 * pi * r^2 * rho * (r / Mr)$
+c1: (r^3 / R^3) * (M / Mr)$
+
+xi_r: y1 * r * x^(l - 2)$
+p_prime: y2 * rho * dphi * r * x^(l - 2)$
+phi_prime: dphi * r * x^(l - 2) * y3$
+dphi_prime: dphi * x^(l - 2) * y4$
+
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+rho_prime: rho / (gamma1 * P) * p_prime + xi_r * A * rho / r$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+xi_h: ξ[h](x)$
+xi_h: rhs(solve(
+    -1 / r * (p_prime + rho * phi_prime)
+    + rsigma^2 * rho * xi_h
+    + 2 * rho * m * rsigma * sOmega * (xi_r + xi_h) / Λ,
+    xi_h
+)[1])$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+eq: (
+    rho_prime
+    + 1 / r^2 * diff(rho * r^2 * xi_r, x) / R
+    - l * (l + 1) / r * rho * xi_h
+)$
+eq: rhs(solve(eq, diff(y1, x))[1]) * x$
+is(equal(eq, (V / gamma1 - 1 - l - Λ * rel_rot) * y1
+  + (Λ^2 / (omega_rsq * c1) - V / gamma1) * y2
+  + Λ^2 / (omega_rsq * c1) * y3));
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+eq: (
+    rsigma^2 * rho * xi_r
+    - diff(p_prime, x) / R
+    - rho_prime * dphi
+    - rho * dphi_prime
+    + 2 * rho * m * rsigma * sOmega * xi_h
+)$
+eq: rhs(solve(eq, diff(y2, x))[1]) * x$
+is(equal(subst( R^2 * ddp,
+            diff(P, x, 2),  eq),
+            (
+        ((omega - m * Omega) ^ 2 * (1 - (2 * m * Omega) ^ 2 / omega_rsq) * c1 - A) * y1
+        + (3 - U + A - l + Λ * rel_rot) * y2
+        + Λ * rel_rot * y3 - y4)));
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+eq: diff(phi_prime, x) / R * x ^ (2 - l) / dphi - y4$
+eq: rhs(solve(eq, diff(y3, x))[1]) * x$
+is(equal(
+        subst(R^2 * ddp, diff(P, x, 2),  eq),
+        (3 - U - l) * y3 + y4
+));
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+eq: (
+    1 / r^2 * diff(r^2 * dphi_prime, x) / R
+    - l * (l + 1) / r^2 * phi_prime
+    - 4 * pi * G * rho_prime
+)$
+eq: rhs(solve(eq, diff(y4, x))[1]) * x$
+is(equal(
+    subst(R^2 * ddp, diff(P, x, 2),  eq),     
+    A * U * y1 + V / gamma1 * U * y2 + l * (l + 1) * y3 + (-U - l + 2) * y4
+));
+/* [wxMaxima: input   end   ] */
+
+
+is(equal(omega_rsq * c1 / Λ**2 * (Λ * rel_rot - l) * (-1 - l - Λ * rel_rot), (omega - m * Omega) ** 2 * (1 - (2 * m * Omega) ** 2 / omega_rsq) * c1));
