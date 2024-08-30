@@ -115,7 +115,7 @@ impl Iterator for ModelPointsIterator<'_> {
     type Item = (f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.model.components.len() == 0 || (self.pos + 1) == self.model.components.len() {
+        if self.model.components.is_empty() || (self.pos + 1) == self.model.components.len() {
             return None;
         }
         let l = self.model.ell;
@@ -124,7 +124,7 @@ impl Iterator for ModelPointsIterator<'_> {
         let omega = self.frequency;
 
         let add_frequency = |point: ModelPoint| {
-            let mut a = point.a.clone();
+            let mut a = point.a;
             let omega_rsq;
             let rel_rot;
             if l == 0. {
@@ -190,7 +190,7 @@ impl Moments<f64, ModelGrid, 4, 1> for NonRotating1D {
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 1>> {
-        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, _s, i)| {
+        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, _s, i)| {
             StepMoments {
                 moments: [i],
                 delta,
@@ -204,7 +204,7 @@ impl Moments<f64, ModelGrid, 4, 2> for NonRotating1D {
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 2>> {
-        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, s, i)| {
+        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, s, i)| {
             StepMoments {
                 moments: [i, s],
                 delta,
@@ -218,7 +218,7 @@ impl Moments<f64, ModelGrid, 4, 3> for NonRotating1D {
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 3>> {
-        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, s, i)| {
+        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, s, i)| {
             StepMoments {
                 moments: [i, s, [0.0; 16].into()],
                 delta,
@@ -232,7 +232,7 @@ impl Moments<f64, ModelGrid, 4, 4> for NonRotating1D {
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 4>> {
-        ModelPointsIterator::new(grid.scale, &self, frequency).map(move |(delta, s, i)| {
+        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, s, i)| {
             StepMoments {
                 moments: [i, s, [0.0; 16].into(), [0.0; 16].into()],
                 delta,

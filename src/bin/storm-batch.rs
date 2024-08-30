@@ -3,13 +3,13 @@
 
 use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
-use ndarray::{aview0, s};
+use ndarray::aview0;
 use std::io::{self, BufRead};
 
 use storm::bracket::{BracketResult, BracketSearcher as _, Brent, Point};
 use storm::model::StellarModel;
 use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
-use storm::stepper::{Colloc2, Magnus2, Magnus6};
+use storm::stepper::Magnus6;
 use storm::system::adiabatic::{ModelGrid, NonRotating1D};
 
 struct Solution {
