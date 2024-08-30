@@ -12,13 +12,13 @@ where
     ) -> impl ExactSizeIterator<Item = StepMoments<T, N, ORDER>>;
 }
 
-pub(crate) trait Boundary<T: Float, const N: usize, const N_INNER: usize, const N_OUTER: usize>
+pub(crate) trait Boundary<T: Float, const N: usize, const N_INNER: usize>
 where
     [(); N_INNER * N]: Sized,
-    [(); N_OUTER * N]: Sized,
+    [(); {N - N_INNER} * N]: Sized,
 {
     fn inner_boundary(&self, frequency: f64) -> Matrix<T, N_INNER, N>;
-    fn outer_boundary(&self, _frequency: f64) -> Matrix<T, N_OUTER, N>;
+    fn outer_boundary(&self, _frequency: f64) -> Matrix<T, {N - N_INNER}, N>;
 }
 
 pub(crate) trait System<
@@ -26,12 +26,11 @@ pub(crate) trait System<
     G: ?Sized,
     const N: usize,
     const N_INNER: usize,
-    const N_OUTER: usize,
     const ORDER: usize,
->: Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER, N_OUTER> where
+>: Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER> where
     [(); N * N]: Sized,
     [(); N_INNER * N]: Sized,
-    [(); N_OUTER * N]: Sized,
+    [(); {N - N_INNER} * N]: Sized,
 {
 }
 
@@ -40,15 +39,14 @@ impl<
         G: ?Sized,
         const N: usize,
         const N_INNER: usize,
-        const N_OUTER: usize,
         const ORDER: usize,
         U,
-    > System<T, G, N, N_INNER, N_OUTER, ORDER> for U
+    > System<T, G, N, N_INNER, ORDER> for U
 where
-    U: Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER, N_OUTER>,
+    U: Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER>,
     [(); N * N]: Sized,
     [(); N_INNER * N]: Sized,
-    [(); N_OUTER * N]: Sized,
+    [(); {N - N_INNER} * N]: Sized,
 {
 }
 

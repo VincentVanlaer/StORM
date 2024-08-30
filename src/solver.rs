@@ -4,16 +4,12 @@ use lapack::dgbtrf;
 
 use crate::{stepper::Stepper, system::System};
 
-const fn calc_ku<const N: usize, const N_INNER: usize, const N_OUTER: usize>() -> usize {
+const fn calc_ku<const N: usize, const N_INNER: usize>() -> usize {
     N - 1 + (N - N_INNER)
 }
 
-const fn calc_kl<const N: usize, const N_INNER: usize, const N_OUTER: usize>() -> usize {
-    if N >= N_OUTER {
-        N_INNER - 1 + N
-    } else {
-        N_INNER - 1 + N_OUTER
-    }
+const fn calc_kl<const N: usize, const N_INNER: usize>() -> usize {
+    N_INNER - 1 + N
 }
 
 const fn to_band_coord(ku: usize, kl: usize, i: usize, j: usize) -> usize {
@@ -22,8 +18,8 @@ const fn to_band_coord(ku: usize, kl: usize, i: usize, j: usize) -> usize {
     bandwith * j + kl + ku + i - j
 }
 
-pub const fn calc_n_bands<const N: usize, const N_INNER: usize, const N_OUTER: usize>() -> usize {
-    2 * calc_kl::<N, N_INNER, N_OUTER>() + calc_ku::<N, N_INNER, N_OUTER>() + 1
+pub const fn calc_n_bands<const N: usize, const N_INNER: usize>() -> usize {
+    2 * calc_kl::<N, N_INNER>() + calc_ku::<N, N_INNER>() + 1
 }
 
 pub struct DecomposedSystemMatrix {
@@ -83,10 +79,9 @@ impl DecomposedSystemMatrix {
 pub fn decompose_system_matrix<
     const N: usize,
     const N_INNER: usize,
-    const N_OUTER: usize,
     const ORDER: usize,
     G: ?Sized,
-    I: System<f64, G, N, N_INNER, N_OUTER, ORDER>,
+    I: System<f64, G, N, N_INNER, ORDER>,
     S: Stepper<f64, N, ORDER>,
 >(
     system: &I,
@@ -97,16 +92,16 @@ pub fn decompose_system_matrix<
 where
     [(); N * N]: Sized,
     [(); N_INNER * N]: Sized,
-    [(); N_OUTER * N]: Sized,
-    [(); calc_n_bands::<N, N_INNER, N_OUTER>()]: Sized,
+    [(); {N - N_INNER} * N]: Sized,
+    [(); calc_n_bands::<N, N_INNER>()]: Sized,
 {
     let iterator = system.evaluate_moments(grid, frequency);
     let alen: usize = (iterator.len() + 1) * N;
-    let ku: usize = calc_ku::<N, N_INNER, N_OUTER>();
-    let kl: usize = calc_kl::<N, N_INNER, N_OUTER>();
-    let mut band_storage = vec![0.0; calc_n_bands::<N, N_INNER, N_OUTER>() * alen];
+    let ku: usize = calc_ku::<N, N_INNER>();
+    let kl: usize = calc_kl::<N, N_INNER>();
+    let mut band_storage = vec![0.0; calc_n_bands::<N, N_INNER>() * alen];
 
-    let (storage, _): (&mut [[f64; calc_n_bands::<N, N_INNER, N_OUTER>()]], _) =
+    let (storage, _): (&mut [[f64; calc_n_bands::<N, N_INNER>()]], _) =
         band_storage.as_chunks_mut();
 
     let mut ipiv = vec![0; alen];
@@ -118,8 +113,8 @@ where
         for k in 0..N_INNER {
             storage[j][kl + ku + k - j] = inner_boundary[j][k];
         }
-        for k in 0..N_OUTER {
-            storage[alen - N + j][kl + ku + N - j - N_OUTER + k] = outer_boundary[j][k];
+        for k in 0..(N - N_INNER) {
+            storage[alen - N + j][kl + ku + N - j - (N - N_INNER) + k] = outer_boundary[j][k];
         }
     }
 
@@ -139,7 +134,7 @@ where
             kl as i32,
             ku as i32,
             band_storage.as_mut(),
-            calc_n_bands::<N, N_INNER, N_OUTER>() as i32,
+            calc_n_bands::<N, N_INNER>() as i32,
             ipiv.as_mut_slice(),
             &mut info,
         )

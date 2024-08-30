@@ -157,7 +157,7 @@ impl Moments<f64, [f64], 2, 4> for IntegratedLinearPiecewiseStretchedString {
     }
 }
 
-impl Boundary<f64, 2, 1, 1> for IntegratedLinearPiecewiseStretchedString {
+impl Boundary<f64, 2, 1> for IntegratedLinearPiecewiseStretchedString {
     fn inner_boundary(&self, _frequency: f64) -> Matrix<f64, 1, 2> {
         [[1.0], [0.0]].into()
     }
