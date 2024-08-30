@@ -220,7 +220,7 @@ impl Moments<f64, ModelGrid, 4, 3> for NonRotating1D {
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 3>> {
         ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, s, i)| {
             StepMoments {
-                moments: [i, s, [0.0; 16].into()],
+                moments: [i, s, [[0.0; 4]; 4].into()],
                 delta,
             }
         })
@@ -241,7 +241,7 @@ impl Moments<f64, ModelGrid, 4, 4> for NonRotating1D {
     }
 }
 
-impl Boundary<f64, 4, 2, 2> for NonRotating1D {
+impl Boundary<f64, 4, 2> for NonRotating1D {
     fn inner_boundary(&self, omega: f64) -> Matrix<f64, 2, 4> {
         let l = self.ell;
         let lambda = l * (l + 1.);
