@@ -11,7 +11,7 @@ use ndarray::{aview0, s};
 use storm::bracket::{Balanced, BracketSearcher as _, Point};
 use storm::model::StellarModel;
 use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
-use storm::stepper::{Colloc2, Magnus2, Magnus6};
+use storm::stepper::Colloc2;
 use storm::system::adiabatic::{ModelGrid, NonRotating1D};
 
 #[derive(Parser)]
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
     let start = Instant::now();
 
     let system_matrix = |freq: f64| -> Result<DecomposedSystemMatrix> {
-        decompose_system_matrix(&system, &Magnus6 {}, &ModelGrid { scale: 0 }, freq)
+        decompose_system_matrix(&system, &Colloc2 {}, &ModelGrid { scale: 0 }, freq)
             .or(Err(eyre!("Failed determinant")))
     };
 
