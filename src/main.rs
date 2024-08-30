@@ -8,7 +8,7 @@ use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
 use ndarray::{aview0, s};
 
-use storm::bracket::{BracketSearcher as _, Brent, Point};
+use storm::bracket::{Balanced, BracketSearcher as _, Point};
 use storm::model::StellarModel;
 use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
 use storm::stepper::{Colloc2, Magnus2, Magnus6};
@@ -88,9 +88,12 @@ fn main() -> Result<()> {
             }
         })
         .map(|(lower, upper)| {
-            (Brent { rel_epsilon: 1e-15 }).search(lower, upper, |point| {
-                system_matrix(point).map(|x| x.determinant())
-            })
+            (Balanced { rel_epsilon: 1e-12 }).search(
+                lower,
+                upper,
+                |point| system_matrix(point).map(|x| x.determinant()),
+                None,
+            )
         })
         .collect();
     for (i, solution) in solutions.iter().enumerate() {

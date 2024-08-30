@@ -75,9 +75,12 @@ fn main() -> Result<()> {
                             })
                             .map(|(lower, upper)| {
                                 let bracket = (Brent { rel_epsilon: 1e-15 })
-                                    .search(lower, upper, |point| {
-                                        system_matrix(point).map(|x| x.determinant())
-                                    })
+                                    .search(
+                                        lower,
+                                        upper,
+                                        |point| system_matrix(point).map(|x| x.determinant()),
+                                        None,
+                                    )
                                     .expect("Bracket failed");
 
                                 Solution {
