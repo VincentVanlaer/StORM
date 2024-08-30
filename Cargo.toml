@@ -17,10 +17,9 @@ panic = "abort"
 [dependencies]
 blas = "0.22.0"
 blas-src = { version = "0.9.0", features = ["openblas"] }
-openblas-src = { version = "0.10.8", features = ["static", "cache"] }
+openblas-src = { version = "0.10.8", features = ["cache"] }
 color-eyre = "0.6.2"
-hdf5 = "0.8.1"
-hdf5-sys = { version = "*", features = ["static"] }
+hdf5 = { path = "hdf5-rust/hdf5" }
 lapack = "0.19.0"
 lapack-src = { version = "0.9.0", features = ["openblas"] }
 ndarray = { version = "0.15.6", default-features = false }
