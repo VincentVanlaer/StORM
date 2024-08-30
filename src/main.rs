@@ -64,7 +64,7 @@ fn main() -> Result<()> {
     };
 
     for i in 0..args.n_steps {
-        let freq = args.lower + i as f64 / args.n_steps as f64 * (args.upper - args.lower);
+        let freq = args.lower + i as f64 / (args.n_steps - 1) as f64 * (args.upper - args.lower);
         dets[i] = Point {
             x: freq,
             f: system_matrix(freq)
