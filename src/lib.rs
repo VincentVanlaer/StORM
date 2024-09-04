@@ -2,6 +2,8 @@
 #![feature(slice_as_chunks)]
 #![feature(custom_test_frameworks)]
 #![feature(float_next_up_down)]
+#![feature(split_array)]
+#![feature(generic_arg_infer)]
 #![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
 

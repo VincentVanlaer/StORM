@@ -76,6 +76,135 @@ impl DecomposedSystemMatrix {
     }
 }
 
+pub fn direct_determinant<
+    const N: usize,
+    const N_INNER: usize,
+    const ORDER: usize,
+    G: ?Sized,
+    I: System<f64, G, N, N_INNER, ORDER>,
+    S: Stepper<f64, N, ORDER>,
+>(
+    system: &I,
+    stepper: &S,
+    grid: &G,
+    frequency: f64,
+) -> f64
+where
+    [(); N * N]: Sized,
+    [(); N_INNER * N]: Sized,
+    [(); { N - N_INNER } * N]: Sized,
+    [(); 2 * N]: Sized,
+    [(); N + N_INNER]: Sized,
+{
+    let iterator = system.evaluate_moments(grid, frequency);
+    let outer_boundary = system.outer_boundary(frequency);
+    let inner_boundary = system.inner_boundary(frequency);
+
+    let mut bands = [[0.0; 2 * N]; N + N_INNER];
+
+    for i in 0..N_INNER {
+        for j in 0..N {
+            bands[i][j] = inner_boundary[j][i];
+        }
+    }
+
+    let mut det = 1.0;
+    for (nstep, step) in iterator.map(|x| stepper.step(x)).enumerate() {
+        for i in 0..N {
+            for j in 0..N {
+                bands[i + 2][j] = step.left[j][i];
+                bands[i + 2][j + N] = step.right[j][i];
+            }
+        }
+
+        for k in 0..N {
+            let mut max_idx = 0;
+            let mut max_val: f64 = 0.;
+
+            for i in k..(N + N_INNER) {
+                if bands[i][k].abs() > max_val.abs() {
+                    max_idx = i;
+                    max_val = bands[i][k];
+                }
+            }
+
+            if max_val == 0. {
+                panic!("Bail at {nstep}");
+            }
+
+            if max_idx != k {
+                (bands[max_idx], bands[k]) = (bands[k], bands[max_idx]);
+                det *= -1.;
+            }
+
+            let pivot = bands[k][k];
+
+            for j in 0..(2 * N) {
+                bands[k][j] /= pivot;
+            }
+
+            det *= pivot;
+
+            for i in (k + 1)..(N + N_INNER) {
+                let m = bands[i][k];
+                for j in 0..(2 * N) {
+                    bands[i][j] -= bands[k][j] * m;
+                }
+            }
+        }
+
+        for i in 0..N_INNER {
+            *bands[i].split_array_mut::<N>().0 = *bands[i + N].rsplit_array_ref::<N>().1;
+            *bands[i].rsplit_array_mut::<N>().1 = [0.0; _];
+        }
+    }
+
+    // Outer boundary
+    for i in 0..(N - N_INNER) {
+        for j in 0..N {
+            bands[N_INNER + i][j] = outer_boundary[j][i];
+        }
+    }
+
+    for k in 0..(N - 1) {
+        let mut max_idx = 0;
+        let mut max_val: f64 = 0.;
+
+        for i in k..N {
+            if bands[i][k].abs() > max_val.abs() {
+                max_idx = i;
+                max_val = bands[i][k];
+            }
+        }
+
+        if max_val == 0. {
+            panic!("Bail at end");
+        }
+
+        if max_idx != k {
+            (bands[max_idx], bands[k]) = (bands[k], bands[max_idx]);
+            det *= -1.;
+        }
+
+        let pivot = bands[k][k];
+
+        for j in 0..N {
+            bands[k][j] /= pivot;
+        }
+
+        det *= pivot;
+
+        for i in (k + 1)..N {
+            let m = bands[i][k];
+            for j in 0..N {
+                bands[i][j] -= bands[k][j] * m;
+            }
+        }
+    }
+
+    det * bands[N - 1][N - 1]
+}
+
 pub fn decompose_system_matrix<
     const N: usize,
     const N_INNER: usize,
@@ -92,7 +221,7 @@ pub fn decompose_system_matrix<
 where
     [(); N * N]: Sized,
     [(); N_INNER * N]: Sized,
-    [(); {N - N_INNER} * N]: Sized,
+    [(); { N - N_INNER } * N]: Sized,
     [(); calc_n_bands::<N, N_INNER>()]: Sized,
 {
     let iterator = system.evaluate_moments(grid, frequency);

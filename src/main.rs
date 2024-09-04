@@ -1,4 +1,5 @@
 #![feature(slice_as_chunks)]
+#![feature(never_type)]
 #![feature(generic_const_exprs)]
 
 use std::time::Instant;
@@ -10,8 +11,8 @@ use ndarray::{aview0, s};
 
 use storm::bracket::{Balanced, BracketSearcher as _, Point};
 use storm::model::StellarModel;
-use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
-use storm::stepper::Colloc2;
+use storm::solver::{decompose_system_matrix, direct_determinant, DecomposedSystemMatrix};
+use storm::stepper::{Colloc2, Colloc4, Magnus6};
 use storm::system::adiabatic::{ModelGrid, NonRotating1D};
 
 #[derive(Parser)]
@@ -65,12 +66,11 @@ fn main() -> Result<()> {
 
     for i in 0..args.n_steps {
         let freq = args.lower + i as f64 / (args.n_steps - 1) as f64 * (args.upper - args.lower);
-        dets[i] = Point {
-            x: freq,
-            f: system_matrix(freq)
-                .wrap_err("Frequency scan failed")?
-                .determinant(),
-        };
+        let det = direct_determinant(&system, &Colloc2 {}, &ModelGrid { scale: 0 }, freq);
+        // let det = system_matrix(freq)
+        //         .wrap_err("Frequency scan failed")?
+        //         .determinant();
+        dets[i] = Point { x: freq, f: det };
     }
 
     println!("Scan done, took {:?}", start.elapsed());
@@ -91,7 +91,14 @@ fn main() -> Result<()> {
             (Balanced { rel_epsilon: 1e-12 }).search(
                 lower,
                 upper,
-                |point| system_matrix(point).map(|x| x.determinant()),
+                |point| {
+                    Ok::<_, !>(direct_determinant(
+                        &system,
+                        &Colloc2 {},
+                        &ModelGrid { scale: 0 },
+                        point,
+                    ))
+                },
                 None,
             )
         })

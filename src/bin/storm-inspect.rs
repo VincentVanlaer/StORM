@@ -6,10 +6,7 @@ use color_eyre::{
 };
 use ndarray::aview0;
 use storm::{
-    bracket::{
-        Balanced, BalancedState, BracketResult, BracketSearcher, BrentState,
-        Point,
-    },
+    bracket::{Balanced, BalancedState, BracketResult, BracketSearcher, BrentState, Point},
     model::StellarModel,
     solver::{decompose_system_matrix, DecomposedSystemMatrix},
     stepper::Colloc2,
