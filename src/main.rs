@@ -13,7 +13,7 @@ use storm::bracket::{Balanced, BracketSearcher as _, Point};
 use storm::model::StellarModel;
 use storm::solver::{decompose_system_matrix, direct_determinant, DecomposedSystemMatrix};
 use storm::stepper::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8};
-use storm::system::adiabatic::{ModelGrid, NonRotating1D};
+use storm::system::adiabatic::{ModelGrid, Rotating1D};
 
 #[derive(clap::ValueEnum, Clone, Copy, Default)]
 enum DifferenceSchemes {
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
         .with_data(&(&model.r_coord / model.radius).slice(s![1..]))
         .create("x")?;
 
-    let system = NonRotating1D::from_model(&model, args.degree, args.order)?;
+    let system = Rotating1D::from_model(&model, args.degree, args.order)?;
     let mut dets = vec![Point { x: 0.0, f: 0.0 }; args.n_steps];
 
     let start = Instant::now();

@@ -10,7 +10,7 @@ use storm::{
     model::StellarModel,
     solver::{decompose_system_matrix, DecomposedSystemMatrix},
     stepper::Colloc2,
-    system::adiabatic::{ModelGrid, NonRotating1D},
+    system::adiabatic::{ModelGrid, Rotating1D},
 };
 
 struct IntermediateState {
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     let upper: f64 = 6.0;
     let steps: usize = 6;
     let model = StellarModel::from_gsm(&hdf5::File::open("test-data/test-model.GSM")?)?;
-    let system = NonRotating1D::from_model(&model, 0, 0)?;
+    let system = Rotating1D::from_model(&model, 0, 0)?;
     let system_matrix = |freq: f64| -> Result<DecomposedSystemMatrix> {
         decompose_system_matrix(&system, &Colloc2 {}, &ModelGrid { scale: 0 }, freq)
             .or(Err(eyre!("Failed determinant")))

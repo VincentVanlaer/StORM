@@ -5,7 +5,7 @@ use crate::stepper::StepMoments;
 use color_eyre::Result;
 use std::f64::consts::PI;
 
-pub struct NonRotating1D {
+pub struct Rotating1D {
     components: Vec<ModelPoint>,
     ell: f64,
     m: f64,
@@ -20,7 +20,7 @@ struct ModelPoint {
     x: f64,
 }
 
-impl NonRotating1D {
+impl Rotating1D {
     pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Result<Self> {
         let ell = ell as f64;
         let mut components: Vec<_> = vec![
@@ -72,7 +72,7 @@ impl NonRotating1D {
             component.x = x[i];
         }
 
-        Ok(NonRotating1D {
+        Ok(Rotating1D {
             components,
             ell,
             m: m as f64,
@@ -82,7 +82,7 @@ impl NonRotating1D {
 }
 
 struct ModelPointsIterator<'model> {
-    model: &'model NonRotating1D,
+    model: &'model Rotating1D,
     pos: usize,
     subpos: usize,
     total_subpos: usize,
@@ -90,7 +90,7 @@ struct ModelPointsIterator<'model> {
 }
 
 impl ModelPointsIterator<'_> {
-    fn new(scale: u32, model: &NonRotating1D, frequency: f64) -> ModelPointsIterator {
+    fn new(scale: u32, model: &Rotating1D, frequency: f64) -> ModelPointsIterator {
         if scale == 0 {
             ModelPointsIterator {
                 model,
@@ -184,7 +184,7 @@ impl ExactSizeIterator for ModelPointsIterator<'_> {
     }
 }
 
-impl Moments<f64, ModelGrid, 4, 1> for NonRotating1D {
+impl Moments<f64, ModelGrid, 4, 1> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &ModelGrid,
@@ -198,7 +198,7 @@ impl Moments<f64, ModelGrid, 4, 1> for NonRotating1D {
         })
     }
 }
-impl Moments<f64, ModelGrid, 4, 2> for NonRotating1D {
+impl Moments<f64, ModelGrid, 4, 2> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &ModelGrid,
@@ -212,7 +212,7 @@ impl Moments<f64, ModelGrid, 4, 2> for NonRotating1D {
         })
     }
 }
-impl Moments<f64, ModelGrid, 4, 3> for NonRotating1D {
+impl Moments<f64, ModelGrid, 4, 3> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &ModelGrid,
@@ -226,7 +226,7 @@ impl Moments<f64, ModelGrid, 4, 3> for NonRotating1D {
         })
     }
 }
-impl Moments<f64, ModelGrid, 4, 4> for NonRotating1D {
+impl Moments<f64, ModelGrid, 4, 4> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &ModelGrid,
@@ -241,7 +241,7 @@ impl Moments<f64, ModelGrid, 4, 4> for NonRotating1D {
     }
 }
 
-impl Boundary<f64, 4, 2> for NonRotating1D {
+impl Boundary<f64, 4, 2> for Rotating1D {
     fn inner_boundary(&self, omega: f64) -> Matrix<f64, 2, 4> {
         let l = self.ell;
         let lambda = l * (l + 1.);

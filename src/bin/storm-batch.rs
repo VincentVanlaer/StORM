@@ -10,7 +10,7 @@ use storm::bracket::{BracketResult, BracketSearcher as _, Brent, Point};
 use storm::model::StellarModel;
 use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
 use storm::stepper::Magnus6;
-use storm::system::adiabatic::{ModelGrid, NonRotating1D};
+use storm::system::adiabatic::{ModelGrid, Rotating1D};
 
 struct Solution {
     bracket: BracketResult,
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
                     let upper: f64 = args[4].parse()?;
                     let steps: usize = args[5].parse()?;
 
-                    let system = NonRotating1D::from_model(input.as_ref().unwrap(), ell, m)?;
+                    let system = Rotating1D::from_model(input.as_ref().unwrap(), ell, m)?;
                     let system_matrix = |freq: f64| -> Result<DecomposedSystemMatrix> {
                         decompose_system_matrix(&system, &Magnus6 {}, &ModelGrid { scale: 0 }, freq)
                             .or(Err(eyre!("Failed determinant")))
