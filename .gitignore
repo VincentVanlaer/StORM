@@ -1,3 +1,4 @@
 /target
 /hdf5-rust
 /test-data/generated
+__pycache__
