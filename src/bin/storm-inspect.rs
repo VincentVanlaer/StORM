@@ -110,7 +110,7 @@ fn main() -> Result<()> {
     //     })
     //     .collect();
 
-    // let output = hdf5::File::create("test-data/brent-inspect.hdf5")?;
+    // let output = hdf5::File::create("test-data/generated/brent-inspect.hdf5")?;
 
     // let scan_group = output.create_group("scan")?;
 
@@ -250,7 +250,7 @@ fn main() -> Result<()> {
         })
         .collect();
 
-    let output = hdf5::File::create("test-data/balanced-inspect.hdf5")?;
+    let output = hdf5::File::create("test-data/generated/balanced-inspect.hdf5")?;
 
     let scan_group = output.create_group("scan")?;
 

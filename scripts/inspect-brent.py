@@ -1,7 +1,7 @@
 import h5py
 import matplotlib.pyplot as plt
 
-data = h5py.File("test-data/brent-inspect.hdf5")
+data = h5py.File("test-data/generated/brent-inspect.hdf5")
 
 plt.plot(data["scan"]["freq"][:], data["scan"]["value"][:])
 
