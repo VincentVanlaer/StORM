@@ -90,8 +90,6 @@ pub fn direct_determinant<
     frequency: f64,
 ) -> f64
 where
-    [(); N * N]: Sized,
-    [(); N_INNER * N]: Sized,
     [(); { N - N_INNER } * N]: Sized,
     [(); 2 * N]: Sized,
     [(); N + N_INNER]: Sized,
@@ -219,8 +217,6 @@ pub fn decompose_system_matrix<
     frequency: f64,
 ) -> Result<DecomposedSystemMatrix, ()>
 where
-    [(); N * N]: Sized,
-    [(); N_INNER * N]: Sized,
     [(); { N - N_INNER } * N]: Sized,
     [(); calc_n_bands::<N, N_INNER>()]: Sized,
 {

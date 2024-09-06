@@ -2,36 +2,23 @@ use num::Float;
 
 use crate::linalg::{commutator, Matmul, Matrix};
 
-pub(crate) struct StepMoments<T, const N: usize, const ORDER: usize>
-where
-    [(); N * N]: Sized,
-{
+pub(crate) struct StepMoments<T, const N: usize, const ORDER: usize> {
     pub delta: f64,
     pub moments: [Matrix<T, N, N>; ORDER],
 }
 
-pub(crate) struct Step<T, const N: usize>
-where
-    [(); N * N]: Sized,
-{
+pub(crate) struct Step<T, const N: usize> {
     pub left: Matrix<T, N, N>,
     pub right: Matrix<T, N, N>,
 }
 
-pub(crate) trait Stepper<T: Float, const N: usize, const ORDER: usize>
-where
-    [(); N * N]: Sized,
-{
+pub(crate) trait Stepper<T: Float, const N: usize, const ORDER: usize> {
     fn step(&self, step_input: StepMoments<T, N, ORDER>) -> Step<T, N>;
 }
 
 pub struct Magnus2 {}
 
-impl<const N: usize> Stepper<f64, N, 1> for Magnus2
-where
-    [(); N * N]: Sized,
-    [(); 4 * N]: Sized,
-{
+impl<const N: usize> Stepper<f64, N, 1> for Magnus2 {
     fn step(&self, step_input: StepMoments<f64, N, 1>) -> Step<f64, N> {
         let [mut omega] = step_input.moments;
 
@@ -46,11 +33,7 @@ where
 
 pub struct Magnus4 {}
 
-impl<const N: usize> Stepper<f64, N, 2> for Magnus4
-where
-    [(); N * N]: Sized,
-    [(); 4 * N]: Sized,
-{
+impl<const N: usize> Stepper<f64, N, 2> for Magnus4 {
     fn step(&self, step_input: StepMoments<f64, N, 2>) -> Step<f64, N> {
         let [b1, b2] = step_input.moments;
         let delta = step_input.delta;
@@ -68,11 +51,7 @@ where
 
 pub struct Magnus6 {}
 
-impl<const N: usize> Stepper<f64, N, 3> for Magnus6
-where
-    [(); N * N]: Sized,
-    [(); 4 * N]: Sized,
-{
+impl<const N: usize> Stepper<f64, N, 3> for Magnus6 {
     fn step(&self, step_input: StepMoments<f64, N, 3>) -> Step<f64, N> {
         let [b1, b2, b3] = step_input.moments;
         let delta = step_input.delta;
@@ -94,11 +73,7 @@ where
 
 pub struct Magnus8 {}
 
-impl<const N: usize> Stepper<f64, N, 4> for Magnus8
-where
-    [(); N * N]: Sized,
-    [(); 4 * N]: Sized,
-{
+impl<const N: usize> Stepper<f64, N, 4> for Magnus8 {
     fn step(&self, step_input: StepMoments<f64, N, 4>) -> Step<f64, N> {
         let [b1, b2, b3, b4] = step_input.moments;
         let delta = step_input.delta;
@@ -126,11 +101,7 @@ where
 
 pub struct Colloc2 {}
 
-impl<const N: usize> Stepper<f64, N, 1> for Colloc2
-where
-    [(); N * N]: Sized,
-    [(); N]: Sized,
-{
+impl<const N: usize> Stepper<f64, N, 1> for Colloc2 {
     fn step(&self, step_input: StepMoments<f64, N, 1>) -> Step<f64, N> {
         let [b1] = step_input.moments;
 
@@ -146,11 +117,7 @@ where
 
 pub struct Colloc4 {}
 
-impl<const N: usize> Stepper<f64, N, 2> for Colloc4
-where
-    [(); N * N]: Sized,
-    [(); N]: Sized,
-{
+impl<const N: usize> Stepper<f64, N, 2> for Colloc4 {
     fn step(&self, step_input: StepMoments<f64, N, 2>) -> Step<f64, N> {
         let [b1, b2] = step_input.moments;
         let delta = step_input.delta;
@@ -179,7 +146,7 @@ mod benches {
 
     use super::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8};
     use crate::{
-        solver::{bracket_search, Bisection},
+        bracket::{Bisection, BracketSearcher},
         system::stretched_string::IntegratedLinearPiecewiseStretchedString,
     };
 

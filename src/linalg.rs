@@ -1,38 +1,32 @@
 use blas::dgemm;
 use lapack::{dgeev, dgetrf, dgetri};
 use std::{
-    mem::{self, transmute, transmute_copy},
+    mem::{self, transmute_copy},
     ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
+    ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
 };
 
 use num::{complex::Complex64, One, Zero};
 
 #[derive(Copy, Clone, Debug)]
 #[repr(align(64))]
-pub(crate) struct Matrix<T, const ROWS: usize, const COLUMNS: usize>
-where
-    [(); ROWS * COLUMNS]: Sized,
-{
+pub(crate) struct Matrix<T, const ROWS: usize, const COLUMNS: usize> {
     pub data: [[T; ROWS]; COLUMNS],
 }
 
-impl<T, const N: usize, const M: usize> Matrix<T, N, M>
-where
-    [(); N * M]: Sized,
-{
-    pub(crate) fn as_slice(&self) -> &[T; N * M] {
-        unsafe { transmute(&self.data) }
+impl<T, const N: usize, const M: usize> Matrix<T, N, M> {
+    pub(crate) fn as_slice(&mut self) -> &[T] {
+        let slice = slice_from_raw_parts(self.data.as_ptr() as *const T, N * M);
+        unsafe { &*slice }
     }
 
-    pub(crate) fn as_slice_mut(&mut self) -> &mut [T; N * M] {
-        unsafe { transmute(&mut self.data) }
+    pub(crate) fn as_slice_mut(&mut self) -> &mut [T] {
+        let slice = slice_from_raw_parts_mut(self.data.as_mut_ptr() as *mut T, N * M);
+        unsafe { &mut *slice }
     }
 }
 
-impl<T: Zero + One + Copy, const N: usize> Matrix<T, N, N>
-where
-    [(); N * N]: Sized,
-{
+impl<T: Zero + One + Copy, const N: usize> Matrix<T, N, N> {
     pub(crate) fn eye() -> Matrix<T, N, N> {
         let mut data = [[T::zero(); N]; N];
 
@@ -50,7 +44,6 @@ pub(crate) trait Matmul<T> {
 
 impl<T: Zero + Copy, const N: usize> Matmul<Matrix<T, N, N>> for Matrix<T, N, N>
 where
-    [(); N * N]: Sized,
     T: Mul<Output = T> + AddAssign,
 {
     fn matmul(self, rhs: Matrix<T, N, N>) -> Matrix<T, N, N> {
@@ -81,16 +74,17 @@ const fn usize_to_i32<const N: usize>() -> i32 {
     }
 }
 
-impl<const N: usize> Matrix<f64, N, N>
-where
-    [(); N * N]: Sized,
-{
+impl<const N: usize> Matrix<f64, N, N> {
     const AS_I32_SIZE: i32 = usize_to_i32::<N>();
-    const AS_I32_SIZE_WORK: i32 = usize_to_i32::<{ N * N }>();
+    const AS_I32_SIZE_WORK: i32 = usize_to_i32::<N>()
+        .checked_mul(usize_to_i32::<N>())
+        .unwrap();
 
     pub(crate) fn inv(mut self) -> Result<Matrix<f64, N, N>, i32> {
         let mut ipiv = [0i32; N];
-        let mut work = [0.0; N * N];
+        let mut work = Matrix {
+            data: [[0.0; N]; N],
+        };
         let mut info: i32 = 0;
 
         unsafe {
@@ -118,7 +112,7 @@ where
                 self.as_slice_mut(),
                 Self::AS_I32_SIZE,
                 &ipiv,
-                &mut work,
+                work.as_slice_mut(),
                 Self::AS_I32_SIZE_WORK,
                 &mut info,
             )
@@ -141,16 +135,12 @@ pub(crate) fn commutator<T: Copy, const N: usize>(
     b: Matrix<T, N, N>,
 ) -> Matrix<T, N, N>
 where
-    [(); N * N]: Sized,
     Matrix<T, N, N>: Matmul<Matrix<T, N, N>> + Sub<Matrix<T, N, N>, Output = Matrix<T, N, N>>,
 {
     a.matmul(b) - b.matmul(a)
 }
 
-impl<T, const ROWS: usize, const COLUMNS: usize> Index<usize> for Matrix<T, ROWS, COLUMNS>
-where
-    [(); ROWS * COLUMNS]: Sized,
-{
+impl<T, const ROWS: usize, const COLUMNS: usize> Index<usize> for Matrix<T, ROWS, COLUMNS> {
     type Output = [T; ROWS];
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -158,10 +148,7 @@ where
     }
 }
 
-impl<T, const ROWS: usize, const COLUMNS: usize> IndexMut<usize> for Matrix<T, ROWS, COLUMNS>
-where
-    [(); ROWS * COLUMNS]: Sized,
-{
+impl<T, const ROWS: usize, const COLUMNS: usize> IndexMut<usize> for Matrix<T, ROWS, COLUMNS> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.data[index]
     }
@@ -169,7 +156,6 @@ where
 
 impl<T: Copy + Zero, const N: usize, const M: usize> Add<Matrix<T, N, M>> for Matrix<T, N, M>
 where
-    [(); N * M]: Sized,
     T: Add<T, Output = T>,
 {
     type Output = Matrix<T, N, M>;
@@ -191,7 +177,6 @@ where
 
 impl<T: Copy + Zero, const N: usize, const M: usize> Sub<Matrix<T, N, M>> for Matrix<T, N, M>
 where
-    [(); N * M]: Sized,
     T: Sub<T, Output = T>,
 {
     type Output = Matrix<T, N, M>;
@@ -214,7 +199,6 @@ where
 impl<T: Copy + Zero + Mul<C, Output = T>, C: Copy, const N: usize, const M: usize> Mul<C>
     for Matrix<T, N, M>
 where
-    [(); N * M]: Sized,
     T: Mul<T, Output = T>,
 {
     type Output = Matrix<T, N, M>;
@@ -234,19 +218,21 @@ where
     }
 }
 
-impl<const N: usize> Matrix<f64, N, N>
-where
-    [(); N * N]: Sized,
-    [(); 4 * N]: Sized,
-{
+impl<const N: usize> Matrix<f64, N, N> {
     pub(crate) fn exp(&mut self, step: f64) {
         let lapack_n: i32 = N.try_into().unwrap();
         let mut wr = [0.0; N];
         let mut wi = [0.0; N];
-        let mut vl = [0.0; N * N];
-        let mut vr = [0.0; N * N];
+        let mut vl = Matrix {
+            data: [[0.0; N]; N],
+        };
+        let mut vr = Matrix {
+            data: [[0.0; N]; N],
+        };
         let mut info = 0;
-        let mut work = [0.0; 4 * N]; // work = 4 * SIZE(A, 1)
+        let mut work = Matrix {
+            data: [[0.0; 4]; N],
+        }; // work = 4 * SIZE(A, 1)
 
         unsafe {
             dgeev(
@@ -257,11 +243,11 @@ where
                 lapack_n,
                 &mut wr,
                 &mut wi,
-                &mut vl,
+                vl.as_slice_mut(),
                 lapack_n,
-                &mut vr,
+                vr.as_slice_mut(),
                 lapack_n,
-                &mut work,
+                work.as_slice_mut(),
                 4 * lapack_n,
                 &mut info,
             )
@@ -277,26 +263,26 @@ where
             if wi[i] != 0.0 {
                 let mut sum = Complex64::new(0.0, 0.0);
                 for j in 0..N {
-                    let a = Complex64::new(vr[i * N + j], vr[(i + 1) * N + j]);
-                    let b = Complex64::new(vl[i * N + j], -vl[(i + 1) * N + j]);
+                    let a = Complex64::new(vr[i][j], vr[i + 1][j]);
+                    let b = Complex64::new(vl[i][j], -vl[i + 1][j]);
                     sum += a * b;
                 }
 
                 for j in 0..N {
-                    let mut b = Complex64::new(vl[i * N + j], -vl[(i + 1) * N + j]);
+                    let mut b = Complex64::new(vl[i][j], -vl[i + 1][j]);
                     b /= sum;
-                    vl[i * N + j] = b.re;
-                    vl[(i + 1) * N + j] = b.im;
+                    vl[i][j] = b.re;
+                    vl[i + 1][j] = b.im;
                 }
                 i_iter.next();
             } else {
                 let mut sum = 0.;
                 for j in 0..N {
-                    sum += vl[i * N + j] * vr[i * N + j];
+                    sum += vl[i][j] * vr[i][j];
                 }
 
                 for j in 0..N {
-                    vl[i * N + j] /= sum;
+                    vl[i][j] /= sum;
                 }
             }
         }
@@ -308,16 +294,16 @@ where
                 let eig = Complex64::new(wr[i] * step, wi[i] * step).exp();
 
                 for j in 0..N {
-                    let v = eig * Complex64::new(vl[i * N + j], vl[(i + 1) * N + j]);
+                    let v = eig * Complex64::new(vl[i][j], vl[i + 1][j]);
 
-                    vl[i * N + j] = 2. * v.re;
-                    vl[(i + 1) * N + j] = -2. * v.im;
+                    vl[i][j] = 2. * v.re;
+                    vl[i + 1][j] = -2. * v.im;
                 }
 
                 i_iter.next();
             } else {
                 for j in 0..N {
-                    vl[i * N + j] *= (step * wr[i]).exp();
+                    vl[i][j] *= (step * wr[i]).exp();
                 }
             }
         }
@@ -330,9 +316,9 @@ where
                 lapack_n,
                 lapack_n,
                 1.,
-                &vr,
+                vr.as_slice(),
                 lapack_n,
-                &vl,
+                vl.as_slice(),
                 lapack_n,
                 0.,
                 self.as_slice_mut(),
@@ -358,8 +344,6 @@ impl<T, const ROWS: usize, const COLUMNS: usize> From<[T; ROWS * COLUMNS]>
 
 impl<T, const ROWS: usize, const COLUMNS: usize> From<[[T; ROWS]; COLUMNS]>
     for Matrix<T, ROWS, COLUMNS>
-where
-    [(); ROWS * COLUMNS]: Sized,
 {
     fn from(data: [[T; ROWS]; COLUMNS]) -> Self {
         Self { data }

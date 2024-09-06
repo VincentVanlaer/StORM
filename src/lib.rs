@@ -4,6 +4,7 @@
 #![feature(float_next_up_down)]
 #![feature(split_array)]
 #![feature(generic_arg_infer)]
+#![feature(const_option)]
 #![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
 
