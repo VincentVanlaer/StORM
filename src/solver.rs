@@ -102,7 +102,7 @@ where
 
     for i in 0..N_INNER {
         for j in 0..N {
-            bands[i][j] = inner_boundary[j][i];
+            bands[i][j] = inner_boundary[i][j];
         }
     }
 
@@ -110,8 +110,8 @@ where
     for (nstep, step) in iterator.map(|x| stepper.step(x)).enumerate() {
         for i in 0..N {
             for j in 0..N {
-                bands[i + 2][j] = step.left[j][i];
-                bands[i + 2][j + N] = step.right[j][i];
+                bands[i + 2][j] = step.left[i][j];
+                bands[i + 2][j + N] = step.right[i][j];
             }
         }
 
@@ -124,10 +124,6 @@ where
                     max_idx = i;
                     max_val = bands[i][k];
                 }
-            }
-
-            if max_val == 0. {
-                panic!("Bail at {nstep}");
             }
 
             if max_idx != k {
@@ -160,7 +156,7 @@ where
     // Outer boundary
     for i in 0..(N - N_INNER) {
         for j in 0..N {
-            bands[N_INNER + i][j] = outer_boundary[j][i];
+            bands[N_INNER + i][j] = outer_boundary[i][j];
         }
     }
 
@@ -173,10 +169,6 @@ where
                 max_idx = i;
                 max_val = bands[i][k];
             }
-        }
-
-        if max_val == 0. {
-            panic!("Bail at end");
         }
 
         if max_idx != k {
@@ -236,18 +228,18 @@ where
 
     for j in 0..N {
         for k in 0..N_INNER {
-            storage[j][kl + ku + k - j] = inner_boundary[j][k];
+            storage[j][kl + ku + k - j] = inner_boundary[k][j];
         }
         for k in 0..(N - N_INNER) {
-            storage[alen - N + j][kl + ku + N - j - (N - N_INNER) + k] = outer_boundary[j][k];
+            storage[alen - N + j][kl + ku + N - j - (N - N_INNER) + k] = outer_boundary[k][j];
         }
     }
 
     for (i, step) in iterator.map(|x| stepper.step(x)).enumerate() {
         for j in 0..N {
             for k in 0..N {
-                storage[i * N + j][kl + ku + k - j + N_INNER] = step.left[j][k];
-                storage[(i + 1) * N + j][kl + ku + k - j - N + N_INNER] = step.right[j][k];
+                storage[i * N + j][kl + ku + k - j + N_INNER] = step.left[k][j];
+                storage[(i + 1) * N + j][kl + ku + k - j - N + N_INNER] = step.right[k][j];
             }
         }
     }

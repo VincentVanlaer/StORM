@@ -48,23 +48,23 @@ impl Rotating1D {
 
         for (i, component) in components.iter_mut().enumerate() {
             component.a[0][0] = v_gamma[i] - 1.0 - ell;
-            component.a[1][0] = -v_gamma[i];
-            component.a[2][0] = 0.0;
-            component.a[3][0] = 0.0;
-
-            component.a[0][1] = -a_star[i];
-            component.a[1][1] = a_star[i] - u[i] + 3. - ell;
-            component.a[2][1] = 0.;
-            component.a[3][1] = -1.;
-
+            component.a[0][1] = -v_gamma[i];
             component.a[0][2] = 0.0;
-            component.a[1][2] = 0.0;
-            component.a[2][2] = 3. - u[i] - ell;
-            component.a[3][2] = 1.;
+            component.a[0][3] = 0.0;
 
-            component.a[0][3] = u[i] * a_star[i];
-            component.a[1][3] = u[i] * v_gamma[i];
-            component.a[2][3] = ell * (ell + 1.);
+            component.a[1][0] = -a_star[i];
+            component.a[1][1] = a_star[i] - u[i] + 3. - ell;
+            component.a[1][2] = 0.;
+            component.a[1][3] = -1.;
+
+            component.a[2][0] = 0.0;
+            component.a[2][1] = 0.0;
+            component.a[2][2] = 3. - u[i] - ell;
+            component.a[2][3] = 1.;
+
+            component.a[3][0] = u[i] * a_star[i];
+            component.a[3][1] = u[i] * v_gamma[i];
+            component.a[3][2] = ell * (ell + 1.);
             component.a[3][3] = -u[i] + 2. - ell;
 
             component.rot = value.rot[i];
@@ -138,15 +138,15 @@ impl Iterator for ModelPointsIterator<'_> {
             }
 
             a[0][0] += -lambda * rel_rot;
-            a[1][0] += lambda.powi(2) / (omega_rsq * point.c1);
-            a[2][0] += lambda.powi(2) / (omega_rsq * point.c1);
+            a[0][1] += lambda.powi(2) / (omega_rsq * point.c1);
+            a[0][2] += lambda.powi(2) / (omega_rsq * point.c1);
 
-            a[0][1] += point.c1
+            a[1][0] += point.c1
                 * (omega - m * point.rot).powi(2)
                 * (1. - (2. * m * point.rot).powi(2) / omega_rsq);
 
             a[1][1] += lambda * rel_rot;
-            a[2][1] += lambda * rel_rot;
+            a[1][2] += lambda * rel_rot;
 
             a
         };
@@ -242,7 +242,7 @@ impl Moments<f64, ModelGrid, 4, 4> for Rotating1D {
 }
 
 impl Boundary<f64, 4, 2> for Rotating1D {
-    fn inner_boundary(&self, omega: f64) -> Matrix<f64, 2, 4> {
+    fn inner_boundary(&self, omega: f64) -> Matrix<f64, 4, 2> {
         let l = self.ell;
         let lambda = l * (l + 1.);
         let m = self.m;
@@ -262,21 +262,19 @@ impl Boundary<f64, 4, 2> for Rotating1D {
                 self.components[0].c1
                     * (omega - m * rot).powi(2)
                     * (1. - (2. * m * rot).powi(2) / omega_rsq),
-                0.,
+                lambda * rel_rot - self.ell,
+                lambda * rel_rot - self.ell,
+                0.
             ],
-            [lambda * rel_rot - self.ell, 0.],
-            [lambda * rel_rot - self.ell, self.ell],
-            [0., -1.],
+            [0., 0., self.ell, 1.]
         ]
         .into()
     }
 
-    fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 2, 4> {
+    fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 4, 2> {
         [
-            [1., self.u_upper],
-            [-1., 0.],
-            [0., self.ell + 1.0],
-            [0., 1.],
+            [1., -1., 0., 0.],
+            [self.u_upper, 0., self.ell + 1., 1.]
         ]
         .into()
     }

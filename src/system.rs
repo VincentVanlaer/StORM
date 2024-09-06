@@ -10,8 +10,8 @@ pub(crate) trait Moments<T: Float, G: ?Sized, const N: usize, const ORDER: usize
 }
 
 pub(crate) trait Boundary<T: Float, const N: usize, const N_INNER: usize> {
-    fn inner_boundary(&self, frequency: f64) -> Matrix<T, N_INNER, N>;
-    fn outer_boundary(&self, _frequency: f64) -> Matrix<T, { N - N_INNER }, N>;
+    fn inner_boundary(&self, frequency: f64) -> Matrix<T, N, N_INNER>;
+    fn outer_boundary(&self, _frequency: f64) -> Matrix<T, N, { N - N_INNER }>;
 }
 
 #[allow(private_bounds)]
