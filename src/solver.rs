@@ -126,23 +126,22 @@ where
                 }
             }
 
+            let pivot;
+
             if max_idx != k {
-                (bands[max_idx], bands[k]) = (bands[k], bands[max_idx]);
+                pivot = bands[max_idx];
+                bands[max_idx] = bands[k];
                 det *= -1.;
+            } else {
+                pivot = bands[k];
             }
 
-            let pivot = bands[k][k];
-
-            for j in 0..(2 * N) {
-                bands[k][j] /= pivot;
-            }
-
-            det *= pivot;
+            det *= pivot[k];
 
             for i in (k + 1)..(N + N_INNER) {
-                let m = bands[i][k];
+                let m = bands[i][k] / pivot[k];
                 for j in 0..(2 * N) {
-                    bands[i][j] -= bands[k][j] * m;
+                    bands[i][j] -= pivot[j] * m;
                 }
             }
         }
