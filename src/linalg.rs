@@ -46,6 +46,7 @@ impl<T: Zero + Copy, const N: usize> Matmul<Matrix<T, N, N>> for Matrix<T, N, N>
 where
     T: Mul<Output = T> + AddAssign,
 {
+    #[inline(always)]
     fn matmul(self, rhs: Matrix<T, N, N>) -> Matrix<T, N, N> {
         let mut result = Matrix {
             data: [[T::zero(); N]; N],
@@ -160,6 +161,7 @@ where
 {
     type Output = Matrix<T, N, M>;
 
+    #[inline(always)]
     fn add(self, rhs: Matrix<T, N, M>) -> Self::Output {
         let mut result = Matrix {
             data: [[T::zero(); N]; M],
@@ -181,6 +183,7 @@ where
 {
     type Output = Matrix<T, N, M>;
 
+    #[inline(always)]
     fn sub(self, rhs: Matrix<T, N, M>) -> Self::Output {
         let mut result = Matrix {
             data: [[T::zero(); N]; M],

@@ -102,6 +102,7 @@ impl<const N: usize> Stepper<f64, N, 4> for Magnus8 {
 pub struct Colloc2 {}
 
 impl<const N: usize> Stepper<f64, N, 1> for Colloc2 {
+    #[inline(always)]
     fn step(&self, step_input: StepMoments<f64, N, 1>) -> Step<f64, N> {
         let [b1] = step_input.moments;
 
