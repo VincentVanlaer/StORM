@@ -42,7 +42,7 @@
 &ad_output
   summary_file = 'summary.h5'                         ! File name for summary file
   summary_item_list = 'l,n_pg,freq,freq_units,E_norm' ! Items to appear in summary file
-  freq_units = 'CYC_PER_DAY'                   	      ! Units of freq output items
+  freq_units = 'NONE'                   	      ! Units of freq output items
 /
 
 &nad_output
