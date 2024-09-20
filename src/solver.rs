@@ -107,7 +107,7 @@ where
     }
 
     let mut det = 1.0;
-    for (nstep, step) in iterator.map(|x| stepper.step(x)).enumerate() {
+    for step in iterator.map(|x| stepper.step(x)) {
         for i in 0..N {
             for j in 0..N {
                 bands[i + 2][j] = step.left[i][j];
