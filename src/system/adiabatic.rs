@@ -114,6 +114,7 @@ impl ModelPointsIterator<'_> {
 impl Iterator for ModelPointsIterator<'_> {
     type Item = (f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>);
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.model.components.is_empty() || (self.pos + 1) == self.model.components.len() {
             return None;
@@ -125,43 +126,50 @@ impl Iterator for ModelPointsIterator<'_> {
 
         let add_frequency = |point: ModelPoint| {
             let mut a = point.a;
-            let omega_rsq;
-            let rel_rot;
-            if l == 0. {
-                omega_rsq = 1.;
-                rel_rot = 1.;
+            let omega_rsq = if l == 0. && point.rot == 0. {
+                1.0  // To prevent issues lower down with 0 / 0
             } else {
-                omega_rsq = (lambda * (omega - m * point.rot) + 2. * m * point.rot)
-                    * (omega - m * point.rot);
-                rel_rot =
-                    2. * m * point.rot / (lambda * (omega - m * point.rot) + 2. * m * point.rot);
-            }
+                (lambda * (omega - m * point.rot) + 2. * m * point.rot) * (omega - m * point.rot)
+            };
 
-            a[0][0] += -lambda * rel_rot;
-            a[0][1] += lambda.powi(2) / (omega_rsq * point.c1);
-            a[0][2] += lambda.powi(2) / (omega_rsq * point.c1);
+            if l != 0. {
+                let rel_rot =
+                    2. * m * point.rot / (lambda * (omega - m * point.rot) + 2. * m * point.rot);
+
+                a[0][0] += -lambda * rel_rot;
+                a[0][1] += lambda.powi(2) / (omega_rsq * point.c1);
+                a[0][2] += lambda.powi(2) / (omega_rsq * point.c1);
+
+                a[1][1] += lambda * rel_rot;
+                a[1][2] += lambda * rel_rot;
+            }
 
             a[1][0] += point.c1
                 * (omega - m * point.rot).powi(2)
                 * (1. - (2. * m * point.rot).powi(2) / omega_rsq);
 
-            a[1][1] += lambda * rel_rot;
-            a[1][2] += lambda * rel_rot;
-
             a
         };
 
         let lower = self.model.components[self.pos];
-        let lower_a = add_frequency(lower);
+        let lower_a = add_frequency(lower) * (1.0 / lower.x);
 
         let upper = self.model.components[self.pos + 1];
-        let upper_a = add_frequency(upper);
+        let upper_a = add_frequency(upper) * (1.0 / upper.x);
 
-        let intercept = lower_a * (1.0 / lower.x)
-            + (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
+        let intercept = lower_a
+            + (upper_a - lower_a)
                 * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
-        let slope = (upper_a * (1.0 / upper.x) - lower_a * (1.0 / lower.x))
+        let slope = (upper_a - lower_a)
             * (1.0 / (self.total_subpos as f64));
+        // This version of the code is not really faster, even though there
+        // is quite the reduction in assembly
+        //
+        // let intercept = lower_a
+        //     + (upper_a - lower_a)
+        //         * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
+        // let slope = (upper_a - lower_a)
+        //     * (1.0 / (self.total_subpos as f64));
 
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
         let sublower = lower.x + delta * (self.subpos as f64);
@@ -184,18 +192,50 @@ impl ExactSizeIterator for ModelPointsIterator<'_> {
     }
 }
 
+struct IterWrapper<'a, G> {
+    iter: ModelPointsIterator<'a>,
+    wrapped: G,
+}
+
+impl<
+        const ORDER: usize,
+        G: Fn((f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>)) -> StepMoments<f64, 4, ORDER>,
+    > Iterator for IterWrapper<'_, G>
+{
+    type Item = crate::stepper::StepMoments<f64, 4, ORDER>;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            None => None,
+            Some(r) => Some((self.wrapped)(r)),
+        }
+    }
+}
+
+impl<
+        const ORDER: usize,
+        G: Fn((f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>)) -> StepMoments<f64, 4, ORDER>,
+    > ExactSizeIterator for IterWrapper<'_, G>
+{
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
 impl Moments<f64, ModelGrid, 4, 1> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 1>> {
-        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, _s, i)| {
-            StepMoments {
-                moments: [i],
+        IterWrapper {
+            iter: ModelPointsIterator::new(grid.scale, self, frequency),
+            wrapped: |(delta, _s, i)| StepMoments {
                 delta,
-            }
-        })
+                moments: [i],
+            },
+        }
     }
 }
 impl Moments<f64, ModelGrid, 4, 2> for Rotating1D {
@@ -204,12 +244,13 @@ impl Moments<f64, ModelGrid, 4, 2> for Rotating1D {
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 2>> {
-        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, s, i)| {
-            StepMoments {
-                moments: [i, s],
+        IterWrapper {
+            iter: ModelPointsIterator::new(grid.scale, self, frequency),
+            wrapped: |(delta, s, i)| StepMoments {
                 delta,
-            }
-        })
+                moments: [i, s],
+            },
+        }
     }
 }
 impl Moments<f64, ModelGrid, 4, 3> for Rotating1D {
@@ -218,12 +259,13 @@ impl Moments<f64, ModelGrid, 4, 3> for Rotating1D {
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 3>> {
-        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, s, i)| {
-            StepMoments {
-                moments: [i, s, [[0.0; 4]; 4].into()],
+        IterWrapper {
+            iter: ModelPointsIterator::new(grid.scale, self, frequency),
+            wrapped: |(delta, s, i)| StepMoments {
                 delta,
-            }
-        })
+                moments: [i, s, [[0.0; 4]; 4].into()],
+            },
+        }
     }
 }
 impl Moments<f64, ModelGrid, 4, 4> for Rotating1D {
@@ -232,12 +274,13 @@ impl Moments<f64, ModelGrid, 4, 4> for Rotating1D {
         grid: &ModelGrid,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 4>> {
-        ModelPointsIterator::new(grid.scale, self, frequency).map(move |(delta, s, i)| {
-            StepMoments {
-                moments: [i, s, [0.0; 16].into(), [0.0; 16].into()],
+        IterWrapper {
+            iter: ModelPointsIterator::new(grid.scale, self, frequency),
+            wrapped: |(delta, s, i)| StepMoments {
                 delta,
-            }
-        })
+                moments: [i, s, [0.0; 16].into(), [0.0; 16].into()],
+            },
+        }
     }
 }
 
@@ -264,19 +307,15 @@ impl Boundary<f64, 4, 2> for Rotating1D {
                     * (1. - (2. * m * rot).powi(2) / omega_rsq),
                 lambda * rel_rot - self.ell,
                 lambda * rel_rot - self.ell,
-                0.
+                0.,
             ],
-            [0., 0., self.ell, 1.]
+            [0., 0., self.ell, 1.],
         ]
         .into()
     }
 
     fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 4, 2> {
-        [
-            [1., -1., 0., 0.],
-            [self.u_upper, 0., self.ell + 1., 1.]
-        ]
-        .into()
+        [[1., -1., 0., 0.], [self.u_upper, 0., self.ell + 1., 1.]].into()
     }
 }
 
