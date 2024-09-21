@@ -1,4 +1,8 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    num::NonZeroU64,
+    ops::ControlFlow,
+};
 
 pub struct BracketResult {
     pub freq: f64,
@@ -248,6 +252,57 @@ fn evaluate_inverse_quadratic(x1: Point, x2: Point, x3: Point, y: f64) -> f64 {
         + (y - x1.f) * (y - x2.f) / (x3.f - x2.f) / (x3.f - x1.f) * x3.x
 }
 
+// The purpose of this function is:
+// 1. Ensure that we always make progress, e.g. in case the secant method returns either the upper
+//    or the lower point due to rounding.
+// 2. Ensure that bracketing can terminate as early as possible for a given requested precision.
+//    This is accomplished by not allowing x to be closer to lower or upper than the rel_epsilon
+//    limit, i.e. (x - closer).abs() <= epsilon. If upper and lower are at most 2 * epsilon close,
+//    then (upper - x) <= epsilon and (lower - x) <= epsilon is guaranteed, but where exactly x
+//    will fall is not.
+// 3. Since all of the funny FP math is in here, it is a good place to check whether the bracket is
+//    small enough
+//
+// This function gets the precision in number of ULPs between upper and lower. This avoids all
+// sorts of edge cases.
+fn ensure_maximal_bracket(
+    upper: f64,
+    lower: f64,
+    x: f64,
+    requested_ulp_precision: NonZeroU64,
+) -> ControlFlow<f64, f64> {
+    assert!(upper > lower);
+    assert!(upper.is_finite());
+    assert!(lower.is_finite());
+    assert!(upper > 0.);
+    assert!(lower > 0.);
+
+    let requested_ulp_precision: u64 = requested_ulp_precision.into();
+
+    // We need to be able to multiply by two, and it doesn't really make sense to have more ULPs
+    // than space in the mantissa in the final bracket
+    assert!(requested_ulp_precision < 2_u64.pow(54));
+
+    let upper = upper.to_bits();
+    let lower = lower.to_bits();
+
+    if upper - lower <= requested_ulp_precision {
+        return ControlFlow::Break(x);
+    }
+
+    let mut x = x.to_bits();
+
+    if (upper - lower) <= 2 * requested_ulp_precision {
+        x = lower + (upper - lower) / 2;
+    } else if (upper < x) || (upper - x) < requested_ulp_precision {
+        x = upper - requested_ulp_precision;
+    } else if (lower > x) || (x - lower) < requested_ulp_precision {
+        x = lower + requested_ulp_precision;
+    }
+
+    ControlFlow::Continue(f64::from_bits(x))
+}
+
 pub struct BalancedState {
     pub upper: Point,
     pub lower: Point,
@@ -272,7 +327,11 @@ impl BracketSearcher for Balanced {
 
         let mut evals = 0;
         let mut previous: Option<Point> = None;
-        let rel_epsilon = f64::max(self.rel_epsilon, f64::EPSILON);
+        let requested_ulp_precision = NonZeroU64::new(u64::max(
+            1,
+            (self.rel_epsilon / f64::EPSILON).floor() as u64,
+        ))
+        .expect("max forces >= 1");
 
         loop {
             let closer;
@@ -289,7 +348,7 @@ impl BracketSearcher for Balanced {
             let lfrac = (further.f.abs() / closer.f.abs()).log10();
             let c3 = 0.0 / (1. + ((4. - lfrac) * 3.).exp());
 
-            let mut x = match previous {
+            let x = match previous {
                 None => evaluate_secant(lower, upper, -c3 * closer.f),
                 Some(p) => {
                     let mut x = evaluate_inverse_quadratic(lower, upper, p, -c3 * closer.f);
@@ -302,18 +361,10 @@ impl BracketSearcher for Balanced {
                 }
             };
 
-            // Force progress
-            if upper.x <= x {
-                x = upper.x.next_down();
-            } else if lower.x >= x {
-                x = lower.x.next_up();
-            }
-
-            if (upper.x - lower.x).abs()
-                <= f64::max(upper.x.abs(), lower.x.abs()) * rel_epsilon
-            {
-                return Ok(BracketResult { freq: x, evals });
-            }
+            let x = match ensure_maximal_bracket(upper.x, lower.x, x, requested_ulp_precision) {
+                ControlFlow::Break(x) => return Ok(BracketResult { freq: x, evals }),
+                ControlFlow::Continue(x) => x,
+            };
 
             if let Some(ref mut cb) = f_callback {
                 cb(BalancedState {
