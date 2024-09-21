@@ -75,7 +75,12 @@ fn main() -> Result<()> {
         .iter()
         .brackets()
         .map(|(point1, point2)| {
-            searcher.search(*point1, *point2, |point| Ok::<_, !>(determinant(point)), None)
+            searcher.search(
+                *point1,
+                *point2,
+                |point| Ok::<_, !>(determinant(point)),
+                None,
+            )
         })
         .collect();
 

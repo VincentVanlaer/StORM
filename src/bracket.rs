@@ -358,14 +358,13 @@ impl<'a, T: Iterator<Item = &'a Point>> SearchBrackets for T {
     type Out = (&'a Point, &'a Point);
 
     fn brackets(self) -> impl Iterator<Item = (&'a Point, &'a Point)> {
-        self
-            .map_windows(|[pair1, pair2]| {
-                if pair1.f.signum() != pair2.f.signum() {
-                    Some((*pair1, *pair2))
-                } else {
-                    None
-                }
-            })
-            .filter_map(|x| x)
+        self.map_windows(|[pair1, pair2]| {
+            if pair1.f.signum() != pair2.f.signum() {
+                Some((*pair1, *pair2))
+            } else {
+                None
+            }
+        })
+        .filter_map(|x| x)
     }
 }

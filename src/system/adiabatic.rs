@@ -127,7 +127,7 @@ impl Iterator for ModelPointsIterator<'_> {
         let add_frequency = |point: ModelPoint| {
             let mut a = point.a;
             let omega_rsq = if l == 0. && point.rot == 0. {
-                1.0  // To prevent issues lower down with 0 / 0
+                1.0 // To prevent issues lower down with 0 / 0
             } else {
                 (lambda * (omega - m * point.rot) + 2. * m * point.rot) * (omega - m * point.rot)
             };
@@ -158,10 +158,8 @@ impl Iterator for ModelPointsIterator<'_> {
         let upper_a = add_frequency(upper) * (1.0 / upper.x);
 
         let intercept = lower_a
-            + (upper_a - lower_a)
-                * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
-        let slope = (upper_a - lower_a)
-            * (1.0 / (self.total_subpos as f64));
+            + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
+        let slope = (upper_a - lower_a) * (1.0 / (self.total_subpos as f64));
         // This version of the code is not really faster, even though there
         // is quite the reduction in assembly
         //
