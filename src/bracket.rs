@@ -272,6 +272,7 @@ impl BracketSearcher for Balanced {
 
         let mut evals = 0;
         let mut previous: Option<Point> = None;
+        let rel_epsilon = f64::max(self.rel_epsilon, f64::EPSILON);
 
         loop {
             let closer;
@@ -293,7 +294,7 @@ impl BracketSearcher for Balanced {
                 Some(p) => {
                     let mut x = evaluate_inverse_quadratic(lower, upper, p, -c3 * closer.f);
 
-                    if x < lower.x || x > upper.x {
+                    if x <= lower.x || x >= upper.x {
                         x = evaluate_secant(lower, upper, -c3 * closer.f);
                     }
 
@@ -301,18 +302,15 @@ impl BracketSearcher for Balanced {
                 }
             };
 
-            if x < lower.x || x > upper.x {
-                x = closer.x;
-            }
-
-            if closer.x > further.x {
-                x = x.next_down();
-            } else {
-                x = x.next_up();
+            // Force progress
+            if upper.x <= x {
+                x = upper.x.next_down();
+            } else if lower.x >= x {
+                x = lower.x.next_up();
             }
 
             if (upper.x - lower.x).abs()
-                <= f64::max(upper.x.abs(), lower.x.abs()) * (self.rel_epsilon + f64::EPSILON)
+                <= f64::max(upper.x.abs(), lower.x.abs()) * rel_epsilon
             {
                 return Ok(BracketResult { freq: x, evals });
             }
