@@ -48,7 +48,7 @@ for d in STORM_SCHEMES:
 
         storm_summary.close()
 
-        freqs_storm[f'{d}_storm'] = storm_freqs_tmp
+        freqs_storm[f'{d}_storm'] = np.array(storm_freqs_tmp)
     except FileNotFoundError:
         storm = np.nan
 
@@ -74,13 +74,13 @@ plt.close()
 
 ref = freqs.pop("COLLOC_GL6_BAND")
 
-for k, v in freqs.items():
-    plt.plot(v / ref - 1.0, ".", label=k)
+for i, (k, v) in enumerate(freqs.items()):
+    plt.plot(v + i / 10, v / ref - 1.0, ".", label=k)
 
 plt.gca().set_prop_cycle(None)
 
-for k, v in freqs_storm.items():
-    plt.plot(v / ref - 1.0, "x", label=k, markersize=4)
+for i, (k, v) in enumerate(freqs_storm.items()):
+    plt.plot(v + i / 10, v / ref - 1.0, "x", label=k, markersize=4)
 
 plt.xlabel("Frequency (dimensionless)")
 plt.ylabel("Relative difference with GYRE COLLOC_GL6")
