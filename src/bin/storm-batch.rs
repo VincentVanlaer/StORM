@@ -6,7 +6,7 @@ use color_eyre::Result;
 use ndarray::aview0;
 use std::io::{self, BufRead};
 
-use storm::bracket::{BracketResult, BracketSearcher as _, Brent, Point};
+use storm::bracket::{Balanced, BracketResult, BracketSearcher as _, Point};
 use storm::model::StellarModel;
 use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
 use storm::stepper::Magnus6;
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
                                 }
                             })
                             .map(|(lower, upper)| {
-                                let bracket = (Brent { rel_epsilon: 1e-15 })
+                                let bracket = (Balanced { rel_epsilon: 0. })
                                     .search(
                                         lower,
                                         upper,

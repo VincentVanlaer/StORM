@@ -6,29 +6,16 @@ use std::cell::Cell;
 use color_eyre::Result;
 use ndarray::aview0;
 use storm::{
-    bracket::{
-        Balanced, BalancedState, BracketResult, BracketSearcher, BrentState, Point,
-        SearchBrackets as _,
-    },
+    bracket::{Balanced, BalancedState, BracketSearcher, Point, SearchBrackets as _},
     dynamic_interface::{get_solvers, DifferenceSchemes},
     helpers::linspace,
     model::StellarModel,
     system::adiabatic::{ModelGrid, Rotating1D},
 };
 
-struct IntermediateState {
-    brent: BrentState,
-    determinants: Vec<Point>,
-}
-
 struct IntermediateStateBalanced {
     state: BalancedState,
     determinants: Vec<Point>,
-}
-
-struct Solution {
-    bracket: BracketResult,
-    bracketing: Vec<IntermediateState>,
 }
 
 fn main() -> Result<()> {
@@ -95,149 +82,6 @@ fn main() -> Result<()> {
             (bracket, bracket_state)
         })
         .collect();
-
-    // let solutions: Vec<_> = dets
-    //     .windows(2)
-    //     .filter_map(|window| {
-    //         let pair1 = window[0];
-    //         let pair2 = window[1];
-
-    //         if pair1.f.signum() != pair2.f.signum() {
-    //             Some((pair1, pair2))
-    //         } else {
-    //             None
-    //         }
-    //     })
-    //     .collect::<Vec<_>>()
-    //     .into_iter()
-    //     .map(|(lower, upper)| {
-    //         let mut bracket_state = Vec::new();
-    //         let mut evals = 0;
-    //         let bracket = (Brent { rel_epsilon: 1e-15 })
-    //             .search(
-    //                 lower,
-    //                 upper,
-    //                 |point| system_matrix(point).map(|x| x.determinant()),
-    //                 Some(&mut |state| {
-    //                     println!("{} {} {} {} {} {}", state.current.x, state.current.f, state.counterpoint.x, state.counterpoint.f, state.previous.x, state.previous.f);
-    //                     let mut determinants = Vec::new();
-    //                     let mut counterpoint = state.counterpoint;
-    //                     let previous = state.previous;
-    //                     let current = state.current;
-
-    //                     if counterpoint.f.signum() == current.f.signum() {
-    //                         counterpoint = previous;
-    //                     }
-
-    //                     for i in 0..1001 {
-    //                         let p = counterpoint.x
-    //                             + f64::from(i) * (current.x - counterpoint.x) / 1000.;
-
-    //                         determinants.push(Point {
-    //                             x: p,
-    //                             f: system_matrix(p).unwrap().determinant(),
-    //                         });
-    //                     }
-
-    //                     bracket_state.push(IntermediateState {
-    //                         brent: state,
-    //                         determinants,
-    //                     });
-
-    //                     evals += 1;
-    //                 }),
-    //             )
-    //             .expect("Bracket failed");
-
-    //         Solution {
-    //             bracket,
-    //             bracketing: bracket_state,
-    //         }
-    //     })
-    //     .collect();
-
-    // let output = hdf5::File::create("test-data/generated/brent-inspect.hdf5")?;
-
-    // let scan_group = output.create_group("scan")?;
-
-    // scan_group
-    //     .new_dataset_builder()
-    //     .with_data(dets.iter().map(|x| x.x).collect::<Vec<_>>().as_slice())
-    //     .create("freq")?;
-
-    // scan_group
-    //     .new_dataset_builder()
-    //     .with_data(dets.iter().map(|x| x.f).collect::<Vec<_>>().as_slice())
-    //     .create("value")?;
-
-    // let sol_parent_group = output.create_group("sol")?;
-
-    // for (i, sol) in solutions.iter().enumerate() {
-    //     let sol_group = sol_parent_group.create_group(&format!("sol_{i}"))?;
-
-    //     println!("{:.20} {}", sol.bracket.freq, sol.bracket.evals);
-    //     sol_group
-    //         .new_attr_builder()
-    //         .with_data(aview0(&sol.bracket.evals))
-    //         .create("evals")?;
-    //     sol_group
-    //         .new_attr_builder()
-    //         .with_data(aview0(&sol.bracket.freq))
-    //         .create("freq")?;
-
-    //     for (j, eval) in sol.bracketing.iter().enumerate() {
-    //         let eval_group = sol_group.create_group(&format!("eval_{j}"))?;
-
-    //         eval_group
-    //             .new_dataset_builder()
-    //             .with_data(
-    //                 eval.determinants
-    //                     .iter()
-    //                     .map(|x| x.x)
-    //                     .collect::<Vec<_>>()
-    //                     .as_slice(),
-    //             )
-    //             .create("freq")?;
-
-    //         eval_group
-    //             .new_dataset_builder()
-    //             .with_data(
-    //                 eval.determinants
-    //                     .iter()
-    //                     .map(|x| x.f)
-    //                     .collect::<Vec<_>>()
-    //                     .as_slice(),
-    //             )
-    //             .create("value")?;
-
-    //         eval_group
-    //             .new_attr_builder()
-    //             .with_data(aview0(&eval.brent.current.x))
-    //             .create("current")?;
-
-    //         eval_group
-    //             .new_attr_builder()
-    //             .with_data(aview0(&eval.brent.previous.x))
-    //             .create("previous")?;
-
-    //         eval_group
-    //             .new_attr_builder()
-    //             .with_data(aview0(&eval.brent.counterpoint.x))
-    //             .create("counterpoint")?;
-
-    //         eval_group
-    //             .new_attr_builder()
-    //             .with_data(aview0(&eval.brent.next_eval))
-    //             .create("next")?;
-
-    //         eval_group
-    //             .new_attr_builder()
-    //             .with_data(aview0(&VarLenUnicode::from_str(
-    //                 &eval.brent.method.to_string(),
-    //             )?))
-    //             .create("method")?;
-    //     }
-    // }
 
     let output = hdf5::File::create("test-data/generated/balanced-inspect.hdf5")?;
 
