@@ -5,26 +5,14 @@
 use std::time::Instant;
 
 use clap::Parser;
-use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
 use ndarray::{aview0, s};
 
-use storm::bracket::{Balanced, BracketSearcher as _, Point};
+use storm::bracket::{Balanced, BracketSearcher as _, Point, SearchBrackets};
+use storm::dynamic_interface::{get_solvers, DifferenceSchemes};
+use storm::helpers::linspace;
 use storm::model::StellarModel;
-use storm::solver::{decompose_system_matrix, direct_determinant, DecomposedSystemMatrix};
-use storm::stepper::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8};
 use storm::system::adiabatic::{ModelGrid, Rotating1D};
-
-#[derive(clap::ValueEnum, Clone, Copy, Default)]
-enum DifferenceSchemes {
-    #[default]
-    Colloc2,
-    Colloc4,
-    Magnus2,
-    Magnus4,
-    Magnus6,
-    Magnus8,
-}
 
 #[derive(Parser)]
 #[command()]
@@ -68,88 +56,29 @@ fn main() -> Result<()> {
         .create("x")?;
 
     let system = Rotating1D::from_model(&model, args.degree, args.order)?;
-    let mut dets = vec![Point { x: 0.0, f: 0.0 }; args.n_steps];
+    let grid = &ModelGrid { scale: 0 };
+    let searcher = &Balanced { rel_epsilon: 0. };
+    let (system_matrix, determinant) = get_solvers(&system, args.difference_scheme, &grid);
 
     let start = Instant::now();
 
-    let grid = &ModelGrid { scale: 0 };
-    let (system_matrix, determinant): (
-        Box<dyn Fn(f64) -> Result<DecomposedSystemMatrix>>,
-        Box<dyn Fn(f64) -> f64>,
-    ) = match args.difference_scheme {
-        DifferenceSchemes::Colloc2 => (
-            Box::new(|freq: f64| {
-                decompose_system_matrix(&system, &Colloc2 {}, grid, freq)
-                    .or(Err(eyre!("Failed determinant")))
-            }),
-            Box::new(|freq: f64| direct_determinant(&system, &Colloc2 {}, grid, freq)),
-        ),
-        DifferenceSchemes::Colloc4 => (
-            Box::new(|freq: f64| {
-                decompose_system_matrix(&system, &Colloc4 {}, grid, freq)
-                    .or(Err(eyre!("Failed determinant")))
-            }),
-            Box::new(|freq: f64| direct_determinant(&system, &Colloc4 {}, grid, freq)),
-        ),
-        DifferenceSchemes::Magnus2 => (
-            Box::new(|freq: f64| {
-                decompose_system_matrix(&system, &Magnus2 {}, grid, freq)
-                    .or(Err(eyre!("Failed determinant")))
-            }),
-            Box::new(|freq: f64| direct_determinant(&system, &Magnus2 {}, grid, freq)),
-        ),
-        DifferenceSchemes::Magnus4 => (
-            Box::new(|freq: f64| {
-                decompose_system_matrix(&system, &Magnus4 {}, grid, freq)
-                    .or(Err(eyre!("Failed determinant")))
-            }),
-            Box::new(|freq: f64| direct_determinant(&system, &Magnus4 {}, grid, freq)),
-        ),
-        DifferenceSchemes::Magnus6 => (
-            Box::new(|freq: f64| {
-                decompose_system_matrix(&system, &Magnus6 {}, grid, freq)
-                    .or(Err(eyre!("Failed determinant")))
-            }),
-            Box::new(|freq: f64| direct_determinant(&system, &Magnus6 {}, grid, freq)),
-        ),
-        DifferenceSchemes::Magnus8 => (
-            Box::new(|freq: f64| {
-                decompose_system_matrix(&system, &Magnus8 {}, grid, freq)
-                    .or(Err(eyre!("Failed determinant")))
-            }),
-            Box::new(|freq: f64| direct_determinant(&system, &Magnus8 {}, grid, freq)),
-        ),
-    };
-
-    for i in 0..args.n_steps {
-        let freq = args.lower + i as f64 / (args.n_steps - 1) as f64 * (args.upper - args.lower);
-        let det = determinant(freq);
-        dets[i] = Point { x: freq, f: det };
-    }
+    let dets: Vec<_> = linspace(args.lower, args.upper, args.n_steps)
+        .map(|x| Point {
+            x,
+            f: determinant(x),
+        })
+        .collect();
 
     println!("Scan done, took {:?}", start.elapsed());
 
     let solutions: Vec<_> = dets
-        .windows(2)
-        .filter_map(|window| {
-            let pair1 = window[0];
-            let pair2 = window[1];
-
-            if pair1.f.signum() != pair2.f.signum() {
-                Some((pair1, pair2))
-            } else {
-                None
-            }
-        })
-        .map(|(lower, upper)| {
-            (Balanced { rel_epsilon: 1e-12 }).search(
-                lower,
-                upper,
-                |point| Ok::<_, !>(determinant(point)),
-                None,
-            )
+        .iter()
+        .brackets()
+        .map(|(point1, point2)| {
+            searcher.search(*point1, *point2, |point| Ok::<_, !>(determinant(point)), None)
         })
         .collect();
+
     for (i, solution) in solutions.iter().enumerate() {
         match solution {
             Ok(result) => {

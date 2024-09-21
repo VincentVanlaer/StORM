@@ -5,10 +5,10 @@ pub struct BracketResult {
     pub evals: u64,
 }
 
-pub trait BracketSearcher<E> {
+pub trait BracketSearcher {
     type InternalState;
 
-    fn search(
+    fn search<E>(
         &self,
         lower: Point,
         upper: Point,
@@ -27,10 +27,10 @@ pub struct BisectionState {
     pub next_eval: f64,
 }
 
-impl<E> BracketSearcher<E> for Bisection {
+impl BracketSearcher for Bisection {
     type InternalState = BisectionState;
 
-    fn search(
+    fn search<E>(
         &self,
         mut lower: Point,
         mut upper: Point,
@@ -113,10 +113,10 @@ pub struct BrentState {
     pub method: BrentStepMethod,
 }
 
-impl<E> BracketSearcher<E> for Brent {
+impl BracketSearcher for Brent {
     type InternalState = BrentState;
 
-    fn search(
+    fn search<E>(
         &self,
         lower: Point,
         upper: Point,
@@ -256,10 +256,10 @@ pub struct BalancedState {
     pub next_eval: f64,
 }
 
-impl<E> BracketSearcher<E> for Balanced {
+impl BracketSearcher for Balanced {
     type InternalState = BalancedState;
 
-    fn search(
+    fn search<E>(
         &self,
         mut lower: Point,
         mut upper: Point,
@@ -345,5 +345,27 @@ impl<E> BracketSearcher<E> for Balanced {
                 lower = next;
             }
         }
+    }
+}
+
+pub trait SearchBrackets {
+    type Out;
+
+    fn brackets(self) -> impl Iterator<Item = Self::Out>;
+}
+
+impl<'a, T: Iterator<Item = &'a Point>> SearchBrackets for T {
+    type Out = (&'a Point, &'a Point);
+
+    fn brackets(self) -> impl Iterator<Item = (&'a Point, &'a Point)> {
+        self
+            .map_windows(|[pair1, pair2]| {
+                if pair1.f.signum() != pair2.f.signum() {
+                    Some((*pair1, *pair2))
+                } else {
+                    None
+                }
+            })
+            .filter_map(|x| x)
     }
 }

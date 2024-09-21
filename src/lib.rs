@@ -5,10 +5,13 @@
 #![feature(split_array)]
 #![feature(generic_arg_infer)]
 #![feature(const_option)]
+#![feature(iter_map_windows)]
 #![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
 
 pub mod bracket;
+pub mod dynamic_interface;
+pub mod helpers;
 mod linalg;
 pub mod model;
 pub mod solver;
