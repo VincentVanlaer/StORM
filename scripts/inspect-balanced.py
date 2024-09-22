@@ -22,7 +22,6 @@ for k in data["sol"].keys():
             ax1.axvline(d.attrs["previous"], c="pink", ls="-.", label="previous")
             lims.append(d.attrs["previous"])
         ax1.axhline(0, ls="--")
-        ax1.axhline(d.attrs["offset"], ls="-.", label=f"offset ({d.attrs['offset']})")
         ax1.text
         ax1.legend()
 

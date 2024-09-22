@@ -92,7 +92,6 @@ pub struct BalancedState {
     pub upper: Point,
     pub lower: Point,
     pub previous: Option<Point>,
-    pub offset: f64,
     pub next_eval: f64,
 }
 
@@ -119,27 +118,13 @@ impl BracketSearcher for Balanced {
         .expect("max forces >= 1");
 
         loop {
-            let closer;
-            let further;
-
-            if upper.f.abs() < lower.f.abs() {
-                closer = upper;
-                further = lower;
-            } else {
-                closer = lower;
-                further = upper;
-            }
-
-            let lfrac = (further.f.abs() / closer.f.abs()).log10();
-            let c3 = 0.0 / (1. + ((4. - lfrac) * 3.).exp());
-
             let x = match previous {
-                None => evaluate_secant(lower, upper, -c3 * closer.f),
+                None => evaluate_secant(lower, upper, 0.),
                 Some(p) => {
-                    let mut x = evaluate_inverse_quadratic(lower, upper, p, -c3 * closer.f);
+                    let mut x = evaluate_inverse_quadratic(lower, upper, p, 0.);
 
                     if x <= lower.x || x >= upper.x {
-                        x = evaluate_secant(lower, upper, -c3 * closer.f);
+                        x = evaluate_secant(lower, upper, 0.);
                     }
 
                     x
@@ -156,7 +141,6 @@ impl BracketSearcher for Balanced {
                     lower,
                     upper,
                     previous,
-                    offset: -c3 * closer.f,
                     next_eval: x,
                 });
             }

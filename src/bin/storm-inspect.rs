@@ -149,11 +149,6 @@ fn main() -> Result<()> {
                 .with_data(aview0(&eval.state.lower.x))
                 .create("lower")?;
 
-            eval_group
-                .new_attr_builder()
-                .with_data(aview0(&eval.state.offset))
-                .create("offset")?;
-
             if let Some(p) = eval.state.previous {
                 eval_group
                     .new_attr_builder()
