@@ -177,6 +177,6 @@ impl<'a, T: Iterator<Item = &'a Point>> SearchBrackets for T {
                 None
             }
         })
-        .filter_map(|x| x)
+        .flatten()
     }
 }

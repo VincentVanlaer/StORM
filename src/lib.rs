@@ -8,6 +8,7 @@
 #![feature(try_blocks)]
 #![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
+#![allow(clippy::needless_range_loop)] // Makes math code less readable
 
 pub mod bracket;
 pub mod dynamic_interface;

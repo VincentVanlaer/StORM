@@ -123,7 +123,6 @@ impl<const N: usize> Stepper<f64, N, 2> for Colloc4 {
         let [b1, b2] = step_input.moments;
         let delta = step_input.delta;
 
-        let b1 = b1;
         let b2 = b2 * (1. / 12.);
 
         let inv_mat = b1.matmul((Matrix::eye() + b2 * delta).inv().unwrap()) * delta;
