@@ -4,7 +4,8 @@ use hdf5::{File, H5Type};
 use ndarray::Array1;
 use thiserror::Error;
 
-pub(crate) const GRAV: f64 = 6.67430e-8;
+// As defined by MESA
+const GRAV: f64 = 6.67430e-8;
 
 pub struct StellarModel {
     pub(crate) radius: f64,
@@ -16,6 +17,8 @@ pub struct StellarModel {
     pub(crate) gamma1: Array1<f64>,
     pub(crate) nsqrd: Array1<f64>,
     pub(crate) rot: Array1<f64>,
+    // Gravitation constant, to ensure consistency with evolution code
+    pub(crate) grav: f64,
 }
 
 #[derive(Error, Debug)]
@@ -76,6 +79,7 @@ impl StellarModel {
             gamma1,
             nsqrd,
             rot,
+            grav: GRAV,
         })
     }
 

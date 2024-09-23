@@ -1,6 +1,6 @@
 use super::{Boundary, Moments};
 use crate::linalg::Matrix;
-use crate::model::{StellarModel, GRAV};
+use crate::model::StellarModel;
 use crate::stepper::StepMoments;
 use color_eyre::Result;
 use std::f64::consts::PI;
@@ -35,8 +35,8 @@ impl Rotating1D {
 
         let r_cubed = value.r_coord.mapv(|a| a.powi(3));
         let mut v_gamma =
-            GRAV * &value.m_coord * &value.rho / (&value.p * &value.r_coord * &value.gamma1);
-        let mut a_star = &r_cubed / (GRAV * &value.m_coord) * &value.nsqrd;
+            value.grav * &value.m_coord * &value.rho / (&value.p * &value.r_coord * &value.gamma1);
+        let mut a_star = &r_cubed / (value.grav * &value.m_coord) * &value.nsqrd;
         let mut u = 4.0 * PI * &value.rho * &r_cubed / &value.m_coord;
         let mut c1 = &r_cubed / value.radius.powi(3) * value.mass / &value.m_coord;
         let x = &value.r_coord / value.radius;
