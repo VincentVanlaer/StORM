@@ -5,6 +5,7 @@
 #![feature(generic_arg_infer)]
 #![feature(const_option)]
 #![feature(iter_map_windows)]
+#![feature(try_blocks)]
 #![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
 

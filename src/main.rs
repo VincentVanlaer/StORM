@@ -1,12 +1,14 @@
 #![feature(slice_as_chunks)]
 #![feature(never_type)]
 #![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 
 use std::time::Instant;
 
 use clap::Parser;
+use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
-use ndarray::{aview0, s};
+use ndarray::aview0;
 
 use storm::bracket::{Balanced, BracketSearcher as _, Point, SearchBrackets};
 use storm::dynamic_interface::{get_solvers, DifferenceSchemes};
@@ -43,22 +45,19 @@ fn main() -> Result<()> {
     color_eyre::install()?;
 
     let args = Main::parse();
-    let mut model = StellarModel::from_gsm(&hdf5::File::open(&args.input)?)?;
-    let output = hdf5::File::create(args.output)?;
+    let mut model = StellarModel::from_gsm(&args.input)
+        .wrap_err(eyre!("Could not read model {}", &args.input))?;
 
     if let Some(overlay) = args.overlay_rot {
-        model.overlay_rot(&hdf5::File::open(&overlay)?)?;
+        model
+            .overlay_rot(&overlay)
+            .wrap_err(eyre!("Could not read overlay {overlay}"))?;
     }
-
-    output
-        .new_dataset_builder()
-        .with_data(&(&model.r_coord / model.radius).slice(s![1..]))
-        .create("x")?;
 
     let system = Rotating1D::from_model(&model, args.degree, args.order)?;
     let grid = &ModelGrid { scale: 0 };
     let searcher = &Balanced { rel_epsilon: 0. };
-    let (system_matrix, determinant) = get_solvers(&system, args.difference_scheme, &grid);
+    let (system_matrix, determinant) = get_solvers(&system, args.difference_scheme, grid);
 
     let start = Instant::now();
 
@@ -83,6 +82,8 @@ fn main() -> Result<()> {
             )
         })
         .collect();
+
+    let output = hdf5::File::create(args.output)?;
 
     for (i, solution) in solutions.iter().enumerate() {
         match solution {

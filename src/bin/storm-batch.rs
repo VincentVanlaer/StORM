@@ -1,15 +1,18 @@
 #![feature(slice_as_chunks)]
 #![feature(generic_const_exprs)]
+#![feature(never_type)]
+#![feature(unwrap_infallible)]
+#![allow(incomplete_features)]
 
-use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
 use ndarray::aview0;
 use std::io::{self, BufRead};
+use storm::dynamic_interface::{get_solvers, DifferenceSchemes};
+use storm::helpers::linspace;
 
-use storm::bracket::{Balanced, BracketResult, BracketSearcher as _, Point};
+use storm::bracket::{Balanced, BracketResult, BracketSearcher as _, Point, SearchBrackets as _};
 use storm::model::StellarModel;
-use storm::solver::{decompose_system_matrix, DecomposedSystemMatrix};
-use storm::stepper::Magnus6;
+use storm::solver::DecomposedSystemMatrix;
 use storm::system::adiabatic::{ModelGrid, Rotating1D};
 
 struct Solution {
@@ -31,9 +34,9 @@ fn main() -> Result<()> {
 
             match args[0] {
                 "input" => {
-                    let mut bare_input = load_model(args[1])?;
+                    let mut bare_input = StellarModel::from_gsm(args[1])?;
                     if args.len() == 3 {
-                        bare_input.overlay_rot(&hdf5::File::open(args[2])?)?;
+                        bare_input.overlay_rot(&args[2])?;
                     }
                     input = Some(bare_input)
                 }
@@ -45,52 +48,34 @@ fn main() -> Result<()> {
                     let steps: usize = args[5].parse()?;
 
                     let system = Rotating1D::from_model(input.as_ref().unwrap(), ell, m)?;
-                    let system_matrix = |freq: f64| -> Result<DecomposedSystemMatrix> {
-                        decompose_system_matrix(&system, &Magnus6 {}, &ModelGrid { scale: 0 }, freq)
-                            .or(Err(eyre!("Failed determinant")))
-                    };
+                    let searcher = &Balanced { rel_epsilon: 0. };
+                    let (system_matrix, determinant) =
+                        get_solvers(&system, DifferenceSchemes::Magnus6, &ModelGrid { scale: 0 });
 
-                    let mut dets = vec![Point { x: 0.0, f: 0.0 }; steps];
-                    for i in 0..steps {
-                        let freq = lower + i as f64 / (steps - 1) as f64 * (upper - lower);
-                        dets[i] = Point {
-                            x: freq,
-                            f: system_matrix(freq)
-                                .wrap_err("Frequency scan failed")?
-                                .determinant(),
-                        };
-                    }
+                    let dets: Vec<_> = linspace(lower, upper, steps)
+                        .map(|x| Point {
+                            x,
+                            f: determinant(x),
+                        })
+                        .collect();
 
-                    solutions.extend(
-                        dets.windows(2)
-                            .filter_map(|window| {
-                                let pair1 = window[0];
-                                let pair2 = window[1];
+                    solutions.extend(dets.iter().brackets().map(|(point1, point2)| {
+                        let res = searcher
+                            .search(
+                                *point1,
+                                *point2,
+                                |point| Ok::<_, !>(determinant(point)),
+                                None,
+                            )
+                            .into_ok();
 
-                                if pair1.f.signum() != pair2.f.signum() {
-                                    Some((pair1, pair2))
-                                } else {
-                                    None
-                                }
-                            })
-                            .map(|(lower, upper)| {
-                                let bracket = (Balanced { rel_epsilon: 0. })
-                                    .search(
-                                        lower,
-                                        upper,
-                                        |point| system_matrix(point).map(|x| x.determinant()),
-                                        None,
-                                    )
-                                    .expect("Bracket failed");
-
-                                Solution {
-                                    decomposed: system_matrix(bracket.freq).unwrap(),
-                                    bracket,
-                                    ell,
-                                    m,
-                                }
-                            }),
-                    );
+                        Solution {
+                            decomposed: system_matrix(res.freq).unwrap(),
+                            bracket: res,
+                            ell,
+                            m,
+                        }
+                    }));
                 }
                 "output" => {
                     let output = hdf5::File::create(args[1])?;
@@ -158,8 +143,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn load_model(input: &str) -> Result<StellarModel> {
-    StellarModel::from_gsm(&hdf5::File::open(input)?)
 }

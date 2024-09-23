@@ -1,5 +1,6 @@
 #![feature(never_type)]
 #![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 
 use std::cell::Cell;
 
@@ -19,16 +20,16 @@ struct IntermediateStateBalanced {
 }
 
 fn main() -> Result<()> {
-    let lower: f64 = 15.0;
-    let upper: f64 = 16.0;
+    let lower: f64 = 14.0;
+    let upper: f64 = 15.0;
     let steps: usize = 2;
-    let difference_scheme = DifferenceSchemes::Magnus4;
+    let difference_scheme = DifferenceSchemes::Colloc2;
 
-    let model = StellarModel::from_gsm(&hdf5::File::open("test-data/test-model.GSM")?)?;
+    let model = StellarModel::from_gsm("test-data/test-model.GSM")?;
     let system = Rotating1D::from_model(&model, 0, 0)?;
     let grid = &ModelGrid { scale: 0 };
     let searcher = &Balanced { rel_epsilon: 0. };
-    let (system_matrix, determinant) = get_solvers(&system, difference_scheme, &grid);
+    let (system_matrix, determinant) = get_solvers(&system, difference_scheme, grid);
 
     let dets: Vec<_> = linspace(lower, upper, steps)
         .map(|x| Point {
@@ -57,6 +58,10 @@ fn main() -> Result<()> {
                     println!(
                         "{} {} {} {} {}",
                         state.lower.x, state.lower.f, state.upper.x, state.upper.f, state.next_eval
+                    );
+                    println!(
+                        "ULPs between lower and upper: {}",
+                        state.upper.x.to_bits() - state.lower.x.to_bits()
                     );
                     let mut determinants = Vec::new();
 
