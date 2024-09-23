@@ -150,16 +150,10 @@ impl BracketSearcher for Balanced {
             evals += 1;
 
             if upper.f.signum() == next.f.signum() {
-                if previous.is_none() || previous.unwrap().f.abs() > upper.f.abs() {
-                    previous = Some(upper);
-                }
-
+                previous = Some(upper);
                 upper = next;
             } else {
-                if previous.is_none() || previous.unwrap().f.abs() > lower.f.abs() {
-                    previous = Some(lower);
-                }
-
+                previous = Some(lower);
                 lower = next;
             }
         }
