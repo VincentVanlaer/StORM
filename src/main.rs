@@ -57,14 +57,14 @@ fn main() -> Result<()> {
     let system = Rotating1D::from_model(&model, args.degree, args.order)?;
     let grid = &ModelGrid { scale: 0 };
     let searcher = &Balanced { rel_epsilon: 0. };
-    let (system_matrix, determinant) = get_solvers(&system, args.difference_scheme, grid);
+    let determinant = get_solvers(&system, args.difference_scheme, grid);
 
     let start = Instant::now();
 
     let dets: Vec<_> = linspace(args.lower, args.upper, args.n_steps)
         .map(|x| Point {
             x,
-            f: determinant(x),
+            f: determinant.det(x),
         })
         .collect();
 
@@ -77,7 +77,7 @@ fn main() -> Result<()> {
             searcher.search(
                 *point1,
                 *point2,
-                |point| Ok::<_, !>(determinant(point)),
+                |point| Ok::<_, !>(determinant.det(point)),
                 None,
             )
         })
@@ -98,7 +98,7 @@ fn main() -> Result<()> {
                     .create("freq")?;
 
                 if args.eigenfunctions {
-                    let eigenvector = system_matrix(result.freq)?.eigenvector();
+                    let eigenvector = determinant.eigenvector(result.freq);
 
                     let (chunks, _) = eigenvector.as_chunks::<4>();
 

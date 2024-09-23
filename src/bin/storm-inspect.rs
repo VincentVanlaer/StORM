@@ -29,12 +29,12 @@ fn main() -> Result<()> {
     let system = Rotating1D::from_model(&model, 0, 0)?;
     let grid = &ModelGrid { scale: 0 };
     let searcher = &Balanced { rel_epsilon: 0. };
-    let (system_matrix, determinant) = get_solvers(&system, difference_scheme, grid);
+    let determinant = get_solvers(&system, difference_scheme, grid);
 
     let dets: Vec<_> = linspace(lower, upper, steps)
         .map(|x| Point {
             x,
-            f: determinant(x),
+            f: determinant.det(x),
         })
         .collect();
 
@@ -51,7 +51,7 @@ fn main() -> Result<()> {
                     if evals.get() > 20 {
                         Err(())
                     } else {
-                        Ok(determinant(point))
+                        Ok(determinant.det(point))
                     }
                 },
                 Some(&mut |state| {
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
 
                         determinants.push(Point {
                             x: p,
-                            f: system_matrix(p).unwrap().determinant(),
+                            f: determinant.det(p),
                         });
                     }
 

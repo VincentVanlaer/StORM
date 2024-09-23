@@ -1,4 +1,4 @@
-use super::{Boundary, Moments};
+use super::{Boundary, GridLength, Moments};
 use crate::linalg::Matrix;
 use crate::model::StellarModel;
 use crate::stepper::StepMoments;
@@ -218,6 +218,12 @@ impl<
 {
     fn len(&self) -> usize {
         self.iter.len()
+    }
+}
+
+impl GridLength<ModelGrid> for Rotating1D {
+    fn len(&self, grid: &ModelGrid) -> usize {
+        (self.components.len() - 2) * 2usize.pow(grid.scale)
     }
 }
 

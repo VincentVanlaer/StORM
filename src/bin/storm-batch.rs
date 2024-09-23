@@ -12,12 +12,11 @@ use storm::helpers::linspace;
 
 use storm::bracket::{Balanced, BracketResult, BracketSearcher as _, Point, SearchBrackets as _};
 use storm::model::StellarModel;
-use storm::solver::DecomposedSystemMatrix;
 use storm::system::adiabatic::{ModelGrid, Rotating1D};
 
 struct Solution {
     bracket: BracketResult,
-    decomposed: DecomposedSystemMatrix,
+    eigenvector: Vec<f64>,
     ell: u64,
     m: i64,
 }
@@ -36,7 +35,7 @@ fn main() -> Result<()> {
                 "input" => {
                     let mut bare_input = StellarModel::from_gsm(args[1])?;
                     if args.len() == 3 {
-                        bare_input.overlay_rot(&args[2])?;
+                        bare_input.overlay_rot(args[2])?;
                     }
                     input = Some(bare_input)
                 }
@@ -49,13 +48,13 @@ fn main() -> Result<()> {
 
                     let system = Rotating1D::from_model(input.as_ref().unwrap(), ell, m)?;
                     let searcher = &Balanced { rel_epsilon: 0. };
-                    let (system_matrix, determinant) =
+                    let determinant =
                         get_solvers(&system, DifferenceSchemes::Magnus6, &ModelGrid { scale: 0 });
 
                     let dets: Vec<_> = linspace(lower, upper, steps)
                         .map(|x| Point {
                             x,
-                            f: determinant(x),
+                            f: determinant.det(x),
                         })
                         .collect();
 
@@ -64,13 +63,13 @@ fn main() -> Result<()> {
                             .search(
                                 *point1,
                                 *point2,
-                                |point| Ok::<_, !>(determinant(point)),
+                                |point| Ok::<_, !>(determinant.det(point)),
                                 None,
                             )
                             .into_ok();
 
                         Solution {
-                            decomposed: system_matrix(res.freq).unwrap(),
+                            eigenvector: determinant.eigenvector(res.freq),
                             bracket: res,
                             ell,
                             m,
@@ -100,9 +99,7 @@ fn main() -> Result<()> {
                             .create("m")?;
 
                         if include_eigenfunctions {
-                            let eigenvector = solution.decomposed.eigenvector();
-
-                            let (chunks, _) = eigenvector.as_chunks::<4>();
+                            let (chunks, _) = solution.eigenvector.as_chunks::<4>();
 
                             let mut vec1 = vec![0.0; chunks.len()];
                             let mut vec2 = vec![0.0; chunks.len()];

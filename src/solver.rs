@@ -1,82 +1,12 @@
-use std::cmp::min;
-
-use lapack::dgbtrf;
-
 use crate::{stepper::Stepper, system::System};
 
-const fn calc_ku<const N: usize, const N_INNER: usize>() -> usize {
-    N - 1 + (N - N_INNER)
+pub(crate) struct UpperResult {
+    data: Box<[f64]>,
+    n: usize,
+    n_systems: usize,
 }
 
-const fn calc_kl<const N: usize, const N_INNER: usize>() -> usize {
-    N_INNER - 1 + N
-}
-
-const fn to_band_coord(ku: usize, kl: usize, i: usize, j: usize) -> usize {
-    let bandwith = 2 * kl + ku + 1;
-
-    bandwith * j + kl + ku + i - j
-}
-
-pub const fn calc_n_bands<const N: usize, const N_INNER: usize>() -> usize {
-    2 * calc_kl::<N, N_INNER>() + calc_ku::<N, N_INNER>() + 1
-}
-
-pub struct DecomposedSystemMatrix {
-    band_storage: Vec<f64>,
-    ku: usize,
-    kl: usize,
-    ipiv: Vec<i32>,
-}
-
-impl DecomposedSystemMatrix {
-    pub fn determinant(&self) -> f64 {
-        let alen = self.ipiv.len();
-
-        let mut det = 1.0;
-
-        for i in 0..alen {
-            det *= self.band_storage[to_band_coord(self.ku, self.kl, i, i)];
-        }
-
-        let mut sgn = 1;
-
-        for i in 0..alen {
-            if self.ipiv[i] != (i + 1) as i32 {
-                sgn *= -1;
-            }
-        }
-
-        sgn as f64 * det
-    }
-
-    fn data(&self, i: usize, j: usize) -> f64 {
-        self.band_storage[to_band_coord(self.ku, self.kl, i, j)]
-    }
-
-    pub fn eigenvector(&self) -> Vec<f64> {
-        let alen = self.ipiv.len();
-        let u_diagonals = self.kl + self.ku + 1;
-
-        let mut eigenvector = vec![0.0; alen];
-
-        eigenvector[alen - 1] = 1.;
-
-        for i in (0..=(alen - 2)).rev() {
-            let mut sum = 0.;
-
-            for j in (i + 1)..min(alen, i + u_diagonals) {
-                sum += eigenvector[j] * self.data(i, j);
-            }
-
-            eigenvector[i] = -1. / self.data(i, i) * sum;
-        }
-
-        eigenvector
-    }
-}
-
-pub(crate) fn direct_determinant<
+pub(crate) fn determinant<
     const N: usize,
     const N_INNER: usize,
     const ORDER: usize,
@@ -94,7 +24,158 @@ where
     [(); 2 * N]: Sized,
     [(); N + N_INNER]: Sized,
 {
+    determinant_inner(system, stepper, grid, frequency, &mut ())
+}
+
+pub(crate) fn determinant_with_upper<
+    const N: usize,
+    const N_INNER: usize,
+    const ORDER: usize,
+    G: ?Sized,
+    I: System<f64, G, N, N_INNER, ORDER>,
+    S: Stepper<f64, N, ORDER>,
+>(
+    system: &I,
+    stepper: &S,
+    grid: &G,
+    frequency: f64,
+    upper: &mut UpperResult,
+) -> f64
+where
+    [(); { N - N_INNER } * N]: Sized,
+    [(); 2 * N]: Sized,
+    [(); N + N_INNER]: Sized,
+{
+    assert_eq!(upper.n, N);
+    assert_eq!(upper.n_systems, system.len(grid));
+
+    determinant_inner(system, stepper, grid, frequency, upper)
+}
+
+fn gauss(lower: usize, upper: usize) -> usize {
+    (upper - lower + 1) * (upper + lower) / 2
+}
+
+// Data storage of UpperResult and backwards substitution example. The different indices i, j, and
+// k refer to the variables in UpperResult::eigenvectors. The goal is to determine the indices in
+// the top row, as those give which element of the eigenvector needs to be multiplied with the
+// upper block triangular matrix. The data is indexed row by row, starting from the top left. Note
+// that this is *back* substitution so the direction of this iterator is reversed.
+//
+// 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓ i   k                j
+// 1 * * * * * * *                 ┃ 3 ┓    * 6 5 4 3 2 1 0
+// 0 1 * * * * * *                 ┃ 2 ┣ 2    * 5 4 3 2 1 0
+// 0 0 1 * * * * *                 ┃ 1 ┃        * 4 3 2 1 0
+// 0 0 0 1 * * * *                 ┃ 0 ┛          * 3 2 1 0
+// 0 0 0 0 1 * * * * * * *         ┃ 3 ┓            * 6 5 4 3 2 1 0
+// 0 0 0 0 0 1 * * * * * *         ┃ 2 ┣ 1            * 5 4 3 2 1 0
+//         0 0 1 * * * * *         ┃ 1 ┃                * 4 3 2 1 0
+//         0 0 0 1 * * * *         ┃ 0 ┛                  * 3 2 1 0
+//         0 0 0 0 1 * * * * * * * ┃ 3 ┓                    * 6 5 4 3 2 1 0
+//         0 0 0 0 0 1 * * * * * * ┃ 2 ┣ 0                    * 5 4 3 2 1 0
+//                 0 0 1 * * * * * ┃ 1 ┃                        * 4 3 2 1 0
+//                 0 0 0 1 * * * * ┃ 0 ┛                          * 3 2 1 0
+//                 0 0 0 0 1 * * * ┃ 3 ┓                            * 2 1 0
+//                 0 0 0 0 0 1 * * ┃ 2 ┣ special case                 * 1 0
+//                         0 0 1 * ┃ 1 ┃ has less data to the           * 0
+//                         0 0 0 ^ ┃ 0 ┛ right due to edge of matrix      *
+
+impl UpperResult {
+    pub(crate) fn new<
+        const N: usize,
+        const N_INNER: usize,
+        const ORDER: usize,
+        G: ?Sized,
+        I: System<f64, G, N, N_INNER, ORDER>,
+    >(
+        system: &I,
+        grid: &G,
+    ) -> UpperResult {
+        let n_systems = system.len(grid);
+        UpperResult {
+            data: vec![f64::NAN; n_systems * gauss(N, 2 * N - 1) + gauss(1, N - 1)].into_boxed_slice(),
+            n: N,
+            n_systems,
+        }
+    }
+
+    pub(crate) fn eigenvectors(&self) -> Vec<f64> {
+        let mut eigenvectors = vec![0.0; self.n_systems * self.n];
+        let len = eigenvectors.len();
+
+        eigenvectors[len - 1] = 1.;
+
+        let mut data_iter = self.data.iter().rev();
+
+        for i in 1..self.n {
+            let mut next_val = 0.;
+            for j in 0..i {
+                next_val -= data_iter.next().unwrap() * eigenvectors[eigenvectors.len() - j - 1]
+            }
+            eigenvectors[len - i - 1] = next_val;
+        }
+
+        for k in 0..(self.n_systems - 1) {
+            for i in 0..self.n {
+                let mut next_val = 0.;
+                for j in 0..(i + self.n) {
+                    next_val -= data_iter.next().unwrap()
+                        * eigenvectors[eigenvectors.len() - j - k * self.n - 1]
+                }
+                eigenvectors[len - i - (k + 1) * self.n - 1] = next_val;
+            }
+        }
+
+        eigenvectors
+    }
+}
+
+trait SetUpperResult {
+    fn set(&mut self, point: usize, k: usize, i: usize, val: f64);
+}
+
+impl SetUpperResult for UpperResult {
+    fn set(&mut self, point: usize, k: usize, i: usize, val: f64) {
+        if point != self.n_systems {
+            self.data[point * gauss(self.n, 2 * self.n - 1)
+                + gauss(2 * self.n - 1 - k, 2 * self.n - 1)
+                - (2 * self.n - 1 - k)
+                + (i - 1)] = val;
+        } else {
+            self.data[point * gauss(self.n, 2 * self.n - 1) + gauss(self.n - 1 - k, self.n - 1)
+                - (self.n - 1 - k)
+                + (i - 1)] = val;
+        }
+    }
+}
+
+impl SetUpperResult for () {
+    fn set(&mut self, _point: usize, _k: usize, _i: usize, _val: f64) {}
+}
+
+fn determinant_inner<
+    const N: usize,
+    const N_INNER: usize,
+    const ORDER: usize,
+    G: ?Sized,
+    I: System<f64, G, N, N_INNER, ORDER>,
+    S: Stepper<f64, N, ORDER>,
+>(
+    system: &I,
+    stepper: &S,
+    grid: &G,
+    frequency: f64,
+    upper: &mut impl SetUpperResult,
+) -> f64
+where
+    [(); { N - N_INNER } * N]: Sized,
+    [(); 2 * N]: Sized,
+    [(); N + N_INNER]: Sized,
+{
     let iterator = system.evaluate_moments(grid, frequency);
+    let total_steps = iterator.len();
+    assert_eq!(total_steps, system.len(grid));
     let outer_boundary = system.outer_boundary(frequency);
     let inner_boundary = system.inner_boundary(frequency);
 
@@ -107,7 +188,8 @@ where
     }
 
     let mut det = 1.0;
-    for step in iterator.map(|x| stepper.step(x)) {
+    for (n_step, step) in iterator.map(|x| stepper.step(x)).enumerate() {
+        assert!(n_step < total_steps);
         for i in 0..N {
             for j in 0..N {
                 bands[i + 2][j] = step.left[i][j];
@@ -137,6 +219,10 @@ where
             }
 
             det *= pivot[k];
+
+            for i in (k + 1)..(2 * N) {
+                upper.set(n_step, k, i - k, pivot[i] / pivot[k]);
+            }
 
             for i in (k + 1)..(N + N_INNER) {
                 let m = bands[i][k] / pivot[k];
@@ -181,6 +267,10 @@ where
             bands[k][j] /= pivot;
         }
 
+        for i in (k + 1)..N {
+            upper.set(total_steps, k, i - k, bands[k][i]);
+        }
+
         det *= pivot;
 
         for i in (k + 1)..N {
@@ -192,78 +282,4 @@ where
     }
 
     det * bands[N - 1][N - 1]
-}
-
-pub(crate) fn decompose_system_matrix<
-    const N: usize,
-    const N_INNER: usize,
-    const ORDER: usize,
-    G: ?Sized,
-    I: System<f64, G, N, N_INNER, ORDER>,
-    S: Stepper<f64, N, ORDER>,
->(
-    system: &I,
-    stepper: &S,
-    grid: &G,
-    frequency: f64,
-) -> Result<DecomposedSystemMatrix, ()>
-where
-    [(); { N - N_INNER } * N]: Sized,
-    [(); calc_n_bands::<N, N_INNER>()]: Sized,
-{
-    let iterator = system.evaluate_moments(grid, frequency);
-    let alen: usize = (iterator.len() + 1) * N;
-    let ku: usize = calc_ku::<N, N_INNER>();
-    let kl: usize = calc_kl::<N, N_INNER>();
-    let mut band_storage = vec![0.0; calc_n_bands::<N, N_INNER>() * alen];
-
-    let (storage, _): (&mut [[f64; calc_n_bands::<N, N_INNER>()]], _) =
-        band_storage.as_chunks_mut();
-
-    let mut ipiv = vec![0; alen];
-    let mut info: i32 = 0;
-    let outer_boundary = system.outer_boundary(frequency);
-    let inner_boundary = system.inner_boundary(frequency);
-
-    for j in 0..N {
-        for k in 0..N_INNER {
-            storage[j][kl + ku + k - j] = inner_boundary[k][j];
-        }
-        for k in 0..(N - N_INNER) {
-            storage[alen - N + j][kl + ku + N - j - (N - N_INNER) + k] = outer_boundary[k][j];
-        }
-    }
-
-    for (i, step) in iterator.map(|x| stepper.step(x)).enumerate() {
-        for j in 0..N {
-            for k in 0..N {
-                storage[i * N + j][kl + ku + k - j + N_INNER] = step.left[k][j];
-                storage[(i + 1) * N + j][kl + ku + k - j - N + N_INNER] = step.right[k][j];
-            }
-        }
-    }
-
-    unsafe {
-        dgbtrf(
-            alen as i32,
-            alen as i32,
-            kl as i32,
-            ku as i32,
-            band_storage.as_mut(),
-            calc_n_bands::<N, N_INNER>() as i32,
-            ipiv.as_mut_slice(),
-            &mut info,
-        )
-    };
-
-    if info < 0 {
-        Err(())
-    } else {
-        Ok(DecomposedSystemMatrix {
-            band_storage,
-            ipiv,
-            ku,
-            kl,
-        })
-    }
 }
