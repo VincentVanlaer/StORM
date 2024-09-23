@@ -28,5 +28,3 @@ where
 }
 
 pub mod adiabatic;
-
-pub(crate) mod stretched_string;
