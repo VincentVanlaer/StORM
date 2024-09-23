@@ -76,7 +76,7 @@ impl DecomposedSystemMatrix {
     }
 }
 
-pub fn direct_determinant<
+pub(crate) fn direct_determinant<
     const N: usize,
     const N_INNER: usize,
     const ORDER: usize,
@@ -194,7 +194,7 @@ where
     det * bands[N - 1][N - 1]
 }
 
-pub fn decompose_system_matrix<
+pub(crate) fn decompose_system_matrix<
     const N: usize,
     const N_INNER: usize,
     const ORDER: usize,
