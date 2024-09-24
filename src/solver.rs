@@ -233,8 +233,8 @@ where
         }
 
         for i in 0..N_INNER {
-            *bands[i].split_array_mut::<N>().0 = *bands[i + N].rsplit_array_ref::<N>().1;
-            *bands[i].rsplit_array_mut::<N>().1 = [0.0; _];
+            *bands[i].first_chunk_mut::<N>().unwrap() = *bands[i + N].last_chunk::<N>().unwrap();
+            *bands[i].last_chunk_mut::<N>().unwrap() = [0.0; N];
         }
     }
 
