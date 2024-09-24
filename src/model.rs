@@ -33,9 +33,9 @@ pub enum ModelError {
 }
 
 fn read_attr<T: H5Type>(file: &File, attr: &'static str) -> Result<T, ModelError> {
-    let res: Result<_, _> = try { file.attr(attr)?.read_scalar()? };
-
-    res.map_err(|err| ModelError::HDF5DataReadError(attr, err))
+    file.attr(attr)
+        .and_then(|res| res.read_scalar())
+        .map_err(|err| ModelError::HDF5DataReadError(attr, err))
 }
 
 fn read_dataset<T: H5Type>(
@@ -43,9 +43,10 @@ fn read_dataset<T: H5Type>(
     attr: &'static str,
     expected_length: usize,
 ) -> Result<Array1<T>, ModelError> {
-    let res: Result<_, _> = try { file.dataset(attr)?.read_1d()? };
-
-    let res = res.map_err(|err| ModelError::HDF5DataReadError(attr, err))?;
+    let res = file
+        .dataset(attr)
+        .and_then(|res| res.read_1d())
+        .map_err(|err| ModelError::HDF5DataReadError(attr, err))?;
 
     if res.len() != expected_length {
         return Err(ModelError::LengthMismatch(expected_length, res.len(), attr));

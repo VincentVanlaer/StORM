@@ -5,7 +5,6 @@
 #![feature(generic_arg_infer)]
 #![feature(const_option)]
 #![feature(iter_map_windows)]
-#![feature(try_blocks)]
 #![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
