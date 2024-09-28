@@ -1,5 +1,5 @@
 use blas::dgemm;
-use lapack::{dgeev, dgetrf, dgetri};
+use lapack::dgeev;
 use std::{
     mem::{self, transmute_copy},
     ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
@@ -66,68 +66,52 @@ where
     }
 }
 
-const fn usize_to_i32<const N: usize>() -> i32 {
-    match N {
-        _ if N > (i32::MAX as usize) => {
-            panic!("N is larger than i32::MAX")
-        }
-        _ => N as i32,
-    }
-}
-
 impl<const N: usize> Matrix<f64, N, N> {
-    const AS_I32_SIZE: i32 = usize_to_i32::<N>();
-    const AS_I32_SIZE_WORK: i32 = usize_to_i32::<N>()
-        .checked_mul(usize_to_i32::<N>())
-        .unwrap();
-
+    #[inline(always)]
     pub(crate) fn inv(mut self) -> Result<Matrix<f64, N, N>, i32> {
-        let mut ipiv = [0i32; N];
-        let mut work = Matrix {
-            data: [[0.0; N]; N],
-        };
-        let mut info: i32 = 0;
+        let mut inv = Self::eye();
 
-        unsafe {
-            dgetrf(
-                Self::AS_I32_SIZE,
-                Self::AS_I32_SIZE,
-                self.as_slice_mut(),
-                Self::AS_I32_SIZE,
-                &mut ipiv,
-                &mut info,
-            )
-        };
+        for i in 0..N {
+            let mut max_idx = 0;
+            let mut max_val: f64 = 0.;
 
-        match info {
-            i if i < 0 => {
-                panic!("Invalid argument {i} to dgetrf")
+            for j in i..N {
+                if self.data[j][i].abs() > max_val.abs() {
+                    max_idx = j;
+                    max_val = self.data[j][i];
+                }
             }
-            i if i > 0 => return Err(i),
-            _ => {}
-        };
 
-        unsafe {
-            dgetri(
-                Self::AS_I32_SIZE,
-                self.as_slice_mut(),
-                Self::AS_I32_SIZE,
-                &ipiv,
-                work.as_slice_mut(),
-                Self::AS_I32_SIZE_WORK,
-                &mut info,
-            )
-        };
-
-        match info {
-            i if i < 0 => {
-                panic!("Invalid argument {i} to dgetri")
+            if max_idx != i {
+                (self.data[i], self.data[max_idx]) = (self.data[max_idx], self.data[i]);
+                (inv[i], inv[max_idx]) = (inv[max_idx], inv[i]);
             }
-            i if i > 0 => return Err(i),
-            _ => {}
-        };
 
-        Ok(self)
+            for j in 0..N {
+                self.data[i][j] /= max_val;
+                inv[i][j] /= max_val;
+            }
+
+            for j in (i + 1)..N {
+                let m = self.data[j][i];
+                for k in 0..N {
+                    self.data[j][k] -= self.data[i][k] * m;
+                    inv[j][k] -= inv[i][k] * m;
+                }
+            }
+        }
+
+        for i in 0..N {
+            for j in (i + 1)..N {
+                let m = self.data[N - j - 1][N - i - 1];
+                for k in 0..N {
+                    self.data[N - j - 1][k] -= self.data[N - i - 1][k] * m;
+                    inv[N - j - 1][k] -= inv[N - i - 1][k] * m;
+                }
+            }
+        }
+
+        Ok(inv)
     }
 }
 
@@ -362,5 +346,65 @@ impl<T, const ROWS: usize, const COLUMNS: usize> From<Matrix<T, ROWS, COLUMNS>>
         mem::forget(m);
 
         res
+    }
+}
+
+#[cfg(test)]
+mod test_inv {
+    use crate::linalg::Matrix;
+
+    fn compare_floats(f1: f64, f2: f64) -> bool {
+        u64::abs_diff(f1.to_bits(), f2.to_bits()) <= 2
+    }
+
+    fn compare_matrices<const N: usize, const M: usize>(
+        m1: Matrix<f64, N, M>,
+        m2: Matrix<f64, N, M>,
+    ) {
+        for i in 0..N {
+            for j in 0..M {
+                if !compare_floats(m1[i][j], m2[i][j]) {
+                    panic!("Matrices do not match\n{m1:?}\n{m2:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inverse_eye() {
+        compare_matrices(
+            Matrix::<f64, 4, 4>::eye(),
+            Matrix::<f64, 4, 4>::eye().inv().unwrap(),
+        )
+    }
+
+    #[test]
+    fn inverse_2x2() {
+        compare_matrices(
+            Matrix::<_, 2, 2>::from([[2., 2.], [3., 2.]]),
+            Matrix::<_, 2, 2>::from([[-1., 1.], [3. / 2., -1.]])
+                .inv()
+                .unwrap(),
+        )
+    }
+
+    #[test]
+    fn inverse_4x4() {
+        compare_matrices(
+            Matrix::<_, 4, 4>::from([
+                [1., 2., 0., 0.],
+                [0., 1., 2., 0.],
+                [0., 0., 1., 2.],
+                [0., 0., 0., 1.],
+            ])
+            .inv()
+            .unwrap(),
+            Matrix::<_, 4, 4>::from([
+                [1., -2., 4., -8.],
+                [0., 1., -2., 4.],
+                [0., 0., 1., -2.],
+                [0., 0., 0., 1.],
+            ]),
+        )
     }
 }

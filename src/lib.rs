@@ -2,8 +2,6 @@
 #![feature(generic_const_exprs)]
 #![feature(const_option)]
 #![feature(iter_map_windows)]
-#![feature(custom_test_frameworks)]
-#![test_runner(criterion::runner)]
 #![allow(incomplete_features)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
 #![warn(missing_docs)]
