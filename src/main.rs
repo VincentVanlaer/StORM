@@ -10,11 +10,10 @@ use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
 use ndarray::aview0;
 
-use storm::bracket::{Balanced, BracketSearcher as _, Point, SearchBrackets};
-use storm::dynamic_interface::{get_solvers, DifferenceSchemes};
-use storm::helpers::linspace;
+use storm::bracket::{BracketOptimizer as _, FilterSignSwap, InverseQuadratic, Point, Precision};
+use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 use storm::model::StellarModel;
-use storm::system::adiabatic::{ModelGrid, Rotating1D};
+use storm::system::adiabatic::{GridScale, Rotating1D};
 
 #[derive(Parser)]
 #[command()]
@@ -41,6 +40,10 @@ struct Main {
     eigenfunctions: bool,
 }
 
+fn linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
+    (0..n).map(move |x| lower + (upper - lower) * (x as f64) / ((n - 1) as f64))
+}
+
 fn main() -> Result<()> {
     color_eyre::install()?;
 
@@ -54,10 +57,10 @@ fn main() -> Result<()> {
             .wrap_err(eyre!("Could not read overlay {overlay}"))?;
     }
 
-    let system = Rotating1D::from_model(&model, args.degree, args.order)?;
-    let grid = &ModelGrid { scale: 0 };
-    let searcher = &Balanced { rel_epsilon: 0. };
-    let determinant = get_solvers(&system, args.difference_scheme, grid);
+    let system = Rotating1D::from_model(&model, args.degree, args.order);
+    let grid = &GridScale { scale: 0 };
+    let searcher = &InverseQuadratic {};
+    let determinant = MultipleShooting::new(&system, args.difference_scheme, grid);
 
     let start = Instant::now();
 
@@ -72,12 +75,13 @@ fn main() -> Result<()> {
 
     let solutions: Vec<_> = dets
         .iter()
-        .brackets()
+        .filter_sign_swap()
         .map(|(point1, point2)| {
-            searcher.search(
+            searcher.optimize(
                 *point1,
                 *point2,
                 |point| Ok::<_, !>(determinant.det(point)),
+                Precision::Relative(0.),
                 None,
             )
         })
@@ -88,17 +92,17 @@ fn main() -> Result<()> {
     for (i, solution) in solutions.iter().enumerate() {
         match solution {
             Ok(result) => {
-                println!("{:.20} {}", result.freq, result.evals);
+                println!("{:.20} {}", result.root, result.evals);
 
                 let group = output.create_group(format!("{i:05}").as_str())?;
 
                 group
                     .new_attr_builder()
-                    .with_data(aview0(&result.freq))
+                    .with_data(aview0(&result.root))
                     .create("freq")?;
 
                 if args.eigenfunctions {
-                    let eigenvector = determinant.eigenvector(result.freq);
+                    let eigenvector = determinant.eigenvector(result.root);
 
                     let (chunks, _) = eigenvector.as_chunks::<4>();
 

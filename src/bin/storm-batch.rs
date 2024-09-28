@@ -7,18 +7,23 @@
 use color_eyre::Result;
 use ndarray::aview0;
 use std::io::{self, BufRead};
-use storm::dynamic_interface::{get_solvers, DifferenceSchemes};
-use storm::helpers::linspace;
+use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 
-use storm::bracket::{Balanced, BracketResult, BracketSearcher as _, Point, SearchBrackets as _};
+use storm::bracket::{
+    BracketOptimizer as _, BracketResult, FilterSignSwap as _, InverseQuadratic, Point, Precision,
+};
 use storm::model::StellarModel;
-use storm::system::adiabatic::{ModelGrid, Rotating1D};
+use storm::system::adiabatic::{GridScale, Rotating1D};
 
 struct Solution {
     bracket: BracketResult,
     eigenvector: Vec<f64>,
     ell: u64,
     m: i64,
+}
+
+fn linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
+    (0..n).map(move |x| lower + (upper - lower) * (x as f64) / ((n - 1) as f64))
 }
 
 fn main() -> Result<()> {
@@ -46,10 +51,13 @@ fn main() -> Result<()> {
                     let upper: f64 = args[4].parse()?;
                     let steps: usize = args[5].parse()?;
 
-                    let system = Rotating1D::from_model(input.as_ref().unwrap(), ell, m)?;
-                    let searcher = &Balanced { rel_epsilon: 0. };
-                    let determinant =
-                        get_solvers(&system, DifferenceSchemes::Magnus6, &ModelGrid { scale: 0 });
+                    let system = Rotating1D::from_model(input.as_ref().unwrap(), ell, m);
+                    let searcher = &InverseQuadratic {};
+                    let determinant = MultipleShooting::new(
+                        &system,
+                        DifferenceSchemes::Magnus6,
+                        &GridScale { scale: 0 },
+                    );
 
                     let dets: Vec<_> = linspace(lower, upper, steps)
                         .map(|x| Point {
@@ -58,18 +66,19 @@ fn main() -> Result<()> {
                         })
                         .collect();
 
-                    solutions.extend(dets.iter().brackets().map(|(point1, point2)| {
+                    solutions.extend(dets.iter().filter_sign_swap().map(|(point1, point2)| {
                         let res = searcher
-                            .search(
+                            .optimize(
                                 *point1,
                                 *point2,
                                 |point| Ok::<_, !>(determinant.det(point)),
+                                Precision::Relative(0.),
                                 None,
                             )
                             .into_ok();
 
                         Solution {
-                            eigenvector: determinant.eigenvector(res.freq),
+                            eigenvector: determinant.eigenvector(res.root),
                             bracket: res,
                             ell,
                             m,
@@ -85,7 +94,7 @@ fn main() -> Result<()> {
 
                         group
                             .new_attr_builder()
-                            .with_data(aview0(&solution.bracket.freq))
+                            .with_data(aview0(&solution.bracket.root))
                             .create("freq")?;
 
                         group

@@ -2,9 +2,12 @@ use super::{Boundary, GridLength, Moments};
 use crate::linalg::Matrix;
 use crate::model::StellarModel;
 use crate::stepper::StepMoments;
-use color_eyre::Result;
 use std::f64::consts::PI;
 
+/// Spherically symmetric stellar oscillation equations with a full rotation term
+///
+/// Note that this system of equations only contains a single spherical harmonic, and will
+/// therefore not be completely valid in a rotating star.
 pub struct Rotating1D {
     components: Vec<ModelPoint>,
     ell: f64,
@@ -21,7 +24,9 @@ struct ModelPoint {
 }
 
 impl Rotating1D {
-    pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Result<Self> {
+    /// Construct this system of equations from a stellar model and selection of the relevant
+    /// spherical harmonic.
+    pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Rotating1D {
         let ell = ell as f64;
         let mut components: Vec<_> = vec![
             ModelPoint {
@@ -72,12 +77,12 @@ impl Rotating1D {
             component.x = x[i];
         }
 
-        Ok(Rotating1D {
+        Rotating1D {
             components,
             ell,
             m: m as f64,
             u_upper: *u.last().unwrap(),
-        })
+        }
     }
 }
 
@@ -221,16 +226,16 @@ impl<
     }
 }
 
-impl GridLength<ModelGrid> for Rotating1D {
-    fn len(&self, grid: &ModelGrid) -> usize {
+impl GridLength<GridScale> for Rotating1D {
+    fn len(&self, grid: &GridScale) -> usize {
         (self.components.len() - 2) * 2usize.pow(grid.scale)
     }
 }
 
-impl Moments<f64, ModelGrid, 4, 1> for Rotating1D {
+impl Moments<f64, GridScale, 4, 1> for Rotating1D {
     fn evaluate_moments(
         &self,
-        grid: &ModelGrid,
+        grid: &GridScale,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 1>> {
         IterWrapper {
@@ -242,10 +247,10 @@ impl Moments<f64, ModelGrid, 4, 1> for Rotating1D {
         }
     }
 }
-impl Moments<f64, ModelGrid, 4, 2> for Rotating1D {
+impl Moments<f64, GridScale, 4, 2> for Rotating1D {
     fn evaluate_moments(
         &self,
-        grid: &ModelGrid,
+        grid: &GridScale,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 2>> {
         IterWrapper {
@@ -257,10 +262,10 @@ impl Moments<f64, ModelGrid, 4, 2> for Rotating1D {
         }
     }
 }
-impl Moments<f64, ModelGrid, 4, 3> for Rotating1D {
+impl Moments<f64, GridScale, 4, 3> for Rotating1D {
     fn evaluate_moments(
         &self,
-        grid: &ModelGrid,
+        grid: &GridScale,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 3>> {
         IterWrapper {
@@ -272,10 +277,10 @@ impl Moments<f64, ModelGrid, 4, 3> for Rotating1D {
         }
     }
 }
-impl Moments<f64, ModelGrid, 4, 4> for Rotating1D {
+impl Moments<f64, GridScale, 4, 4> for Rotating1D {
     fn evaluate_moments(
         &self,
-        grid: &ModelGrid,
+        grid: &GridScale,
         frequency: f64,
     ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 4>> {
         IterWrapper {
@@ -323,6 +328,14 @@ impl Boundary<f64, 4, 2> for Rotating1D {
     }
 }
 
-pub struct ModelGrid {
+/// Grid scaling for [Rotating1D]
+///
+/// This is a rough method of scaling the grid, as every interval will be divided a certain number
+/// od times, without taking into account where refinement is actually necessary.
+pub struct GridScale {
+    /// How much times the grid is divided into two sub intervals
+    ///
+    /// If `scale` equals one, the grid is divide in two, if `scale` equals two, the grid is
+    /// divided into four, ...
     pub scale: u32,
 }

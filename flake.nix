@@ -59,7 +59,9 @@
         maxima
         toolchain
         cargo-show-asm
+        cargo-watch
         llvm
+        nodePackages.browser-sync
       ];
     };
   };

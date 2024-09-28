@@ -7,29 +7,35 @@ use std::cell::Cell;
 use color_eyre::Result;
 use ndarray::aview0;
 use storm::{
-    bracket::{Balanced, BalancedState, BracketSearcher, Point, SearchBrackets as _},
-    dynamic_interface::{get_solvers, DifferenceSchemes},
-    helpers::linspace,
+    bracket::{
+        BracketOptimizer, FilterSignSwap as _, InverseQuadratic, InverseQuadraticState, Point,
+        Precision,
+    },
+    dynamic_interface::{DifferenceSchemes, MultipleShooting},
     model::StellarModel,
-    system::adiabatic::{ModelGrid, Rotating1D},
+    system::adiabatic::{GridScale, Rotating1D},
 };
 
 struct IntermediateStateBalanced {
-    state: BalancedState,
+    state: InverseQuadraticState,
     determinants: Vec<Point>,
 }
 
+fn linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
+    (0..n).map(move |x| lower + (upper - lower) * (x as f64) / ((n - 1) as f64))
+}
+
 fn main() -> Result<()> {
-    let lower: f64 = 14.0;
-    let upper: f64 = 15.0;
-    let steps: usize = 2;
+    let lower: f64 = 1.0;
+    let upper: f64 = 25.0;
+    let steps: usize = 25;
     let difference_scheme = DifferenceSchemes::Colloc2;
 
     let model = StellarModel::from_gsm("test-data/test-model.GSM")?;
-    let system = Rotating1D::from_model(&model, 0, 0)?;
-    let grid = &ModelGrid { scale: 0 };
-    let searcher = &Balanced { rel_epsilon: 0. };
-    let determinant = get_solvers(&system, difference_scheme, grid);
+    let system = Rotating1D::from_model(&model, 0, 0);
+    let grid = &GridScale { scale: 0 };
+    let searcher = &InverseQuadratic {};
+    let determinant = MultipleShooting::new(&system, difference_scheme, grid);
 
     let dets: Vec<_> = linspace(lower, upper, steps)
         .map(|x| Point {
@@ -40,11 +46,11 @@ fn main() -> Result<()> {
 
     let solutions: Vec<_> = dets
         .iter()
-        .brackets()
+        .filter_sign_swap()
         .map(|(point1, point2)| {
             let mut bracket_state = Vec::new();
             let evals = Cell::<i64>::new(0);
-            let bracket = searcher.search(
+            let bracket = searcher.optimize(
                 *point1,
                 *point2,
                 |point| {
@@ -54,6 +60,7 @@ fn main() -> Result<()> {
                         Ok(determinant.det(point))
                     }
                 },
+                Precision::Relative(0.),
                 Some(&mut |state| {
                     println!(
                         "{} {} {} {} {}",
@@ -112,10 +119,10 @@ fn main() -> Result<()> {
             .with_data(aview0(&sol.1.len()))
             .create("evals")?;
         if let Ok(sol) = &sol.0 {
-            println!("{:.20} {}", sol.freq, sol.evals);
+            println!("{:.20} {}", sol.root, sol.evals);
             sol_group
                 .new_attr_builder()
-                .with_data(aview0(&sol.freq))
+                .with_data(aview0(&sol.root))
                 .create("freq")?;
         }
 

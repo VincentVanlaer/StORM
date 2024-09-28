@@ -1,3 +1,5 @@
+//! Loading and modifying stellar models
+
 use std::path::{Path, PathBuf};
 
 use hdf5::{File, H5Type};
@@ -7,6 +9,12 @@ use thiserror::Error;
 // As defined by MESA
 const GRAV: f64 = 6.67430e-8;
 
+/// Stellar model used as input for the calculations.
+///
+/// Loading from the following formats is currently supported:
+///
+/// - GYRE's HDF5 stellar model
+#[derive(Debug, Clone)]
 pub struct StellarModel {
     pub(crate) radius: f64,
     pub(crate) mass: f64,
@@ -21,13 +29,26 @@ pub struct StellarModel {
     pub(crate) grav: f64,
 }
 
+/// Errors that can be returned when loading a stellar model
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum ModelError {
+    /// Failed to open the model.
+    ///
+    /// The first parameter is the file that failed to open, the second parameter is the error the
+    /// hdf5 crate returned.
     #[error("Could not open `{0}`")]
     HDF5OpenError(PathBuf, #[source] hdf5::Error),
+    /// Failed to read an attribute or a dataset.
+    ///
+    /// The first parameter is the attribute or dataset that failed to be read. The second
+    /// parameter is the error the hdf5 crate returned.
     #[error("Could not read `{0}` from model file")]
     HDF5DataReadError(&'static str, #[source] hdf5::Error),
+    /// Length of a dataset does not match the expected length.
+    ///
+    /// The first parameter is the expected length, the second parameter the actual length, and the
+    /// third parameter the name of the dataset.
     #[error("Length mismatch, expected {0} points, got {1} for dataset `{2}`")]
     LengthMismatch(usize, usize, &'static str),
 }
@@ -56,6 +77,11 @@ fn read_dataset<T: H5Type>(
 }
 
 impl StellarModel {
+    /// Load a stellar model from a GYRE stellar model HDF5 file.
+    ///
+    /// The format is documented as part of the GYRE
+    /// [documentation](https://gyre.readthedocs.io/en/stable/ref-guide/stellar-models/gsm-file-format.html).
+    /// Requires at least version 1.00 of the GSM format.
     pub fn from_gsm<P: AsRef<Path>>(file: P) -> Result<StellarModel, ModelError> {
         let input = &hdf5::File::open(file.as_ref())
             .map_err(|err| ModelError::HDF5OpenError(file.as_ref().to_owned(), err))?;
@@ -84,6 +110,8 @@ impl StellarModel {
         })
     }
 
+    /// Modify the rotation profile of the model, using an HDF5 file with a single `Omega_rot`
+    /// dataset. This mirrors the GSM format.
     pub fn overlay_rot<P: AsRef<Path>>(&mut self, file: P) -> Result<(), ModelError> {
         let input = &hdf5::File::open(file.as_ref())
             .map_err(|err| ModelError::HDF5OpenError(file.as_ref().to_owned(), err))?;

@@ -1,31 +1,73 @@
+//! Root finding using bracketing methods
 use std::{num::NonZeroU64, ops::ControlFlow};
 
+/// Result of optimizing a root finding bracket
 pub struct BracketResult {
-    pub freq: f64,
+    /// Lower limit of the bracket
+    pub lower: Point,
+    /// Upper limit of the bracket
+    pub upper: Point,
+    /// Best estimation of the root (assuming there is only one)
+    pub root: f64,
+    /// Number of function evaluations used to reach the requested precision
     pub evals: u64,
 }
 
-pub trait BracketSearcher {
+/// Wrapper type for providing precision in different ways
+#[derive(Debug, Clone, Copy)]
+pub enum Precision {
+    /// Units in last place.
+    ///
+    /// How many consecutive floating points the upper and lower bracket can be at most
+    ULP(NonZeroU64),
+    /// Relative precision
+    ///
+    /// Converted to ULPs by `rel / EPSILON`
+    Relative(f64),
+}
+
+impl Precision {
+    fn as_ulp(&self) -> NonZeroU64 {
+        match self {
+            Precision::ULP(u) => *u,
+            Precision::Relative(f) => {
+                NonZeroU64::new(u64::max(1, (f / f64::EPSILON).floor() as u64))
+                    .expect("max forces >= 1")
+            }
+        }
+    }
+}
+
+/// Optimize the bracket to a certain precision
+pub trait BracketOptimizer {
+    /// State of the optimizer, passed to `inspect_callback` at each evaluation
     type InternalState;
 
-    fn search<E>(
+    /// Bracket the root of `f` between `upper` and `lower` up to `precision`
+    ///
+    /// Allows for inspecting the intermediate steps that bracketing algorithm takes via the
+    /// `inspect_callback`.
+    fn optimize<E>(
         &self,
         lower: Point,
         upper: Point,
         f: impl Fn(f64) -> Result<f64, E>,
-        f_callback: Option<&mut dyn FnMut(Self::InternalState)>,
+        precision: Precision,
+        inspect_callback: Option<&mut dyn FnMut(Self::InternalState)>,
     ) -> Result<BracketResult, E>;
 }
 
+/// Combination of `x` and `f(x)`
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
+    #[allow(missing_docs)]
     pub x: f64,
+    #[allow(missing_docs)]
     pub f: f64,
 }
 
-pub struct Balanced {
-    pub rel_epsilon: f64,
-}
+/// Use inverse quadratic interpolation to obtain the next value at which to evaluate the function
+pub struct InverseQuadratic {}
 
 fn evaluate_secant(x1: Point, x2: Point, y: f64) -> f64 {
     (y - x2.f) / (x1.f - x2.f) * x1.x + (y - x1.f) / (x2.f - x1.f) * x2.x
@@ -88,21 +130,29 @@ fn ensure_maximal_bracket(
     ControlFlow::Continue(f64::from_bits(x))
 }
 
-pub struct BalancedState {
+/// Intermediate state of [InverseQuadratic]
+pub struct InverseQuadraticState {
+    /// Current upper limit of the bracket
     pub upper: Point,
+    /// Currennt lower limit of the bracket
     pub lower: Point,
+    /// Last evaluation that is not `upper` or `lower`
+    ///
+    /// This is only set after the first evalution
     pub previous: Option<Point>,
+    /// The next point that will be evaluated
     pub next_eval: f64,
 }
 
-impl BracketSearcher for Balanced {
-    type InternalState = BalancedState;
+impl BracketOptimizer for InverseQuadratic {
+    type InternalState = InverseQuadraticState;
 
-    fn search<E>(
+    fn optimize<E>(
         &self,
         mut lower: Point,
         mut upper: Point,
         f: impl Fn(f64) -> Result<f64, E>,
+        precision: Precision,
         mut f_callback: Option<&mut dyn FnMut(Self::InternalState)>,
     ) -> Result<BracketResult, E> {
         if lower.f.signum() == upper.f.signum() {
@@ -111,11 +161,7 @@ impl BracketSearcher for Balanced {
 
         let mut evals = 0;
         let mut previous: Option<Point> = None;
-        let requested_ulp_precision = NonZeroU64::new(u64::max(
-            1,
-            (self.rel_epsilon / f64::EPSILON).floor() as u64,
-        ))
-        .expect("max forces >= 1");
+        let requested_ulp_precision = precision.as_ulp();
 
         loop {
             let x = match previous {
@@ -132,12 +178,19 @@ impl BracketSearcher for Balanced {
             };
 
             let x = match ensure_maximal_bracket(upper.x, lower.x, x, requested_ulp_precision) {
-                ControlFlow::Break(x) => return Ok(BracketResult { freq: x, evals }),
+                ControlFlow::Break(x) => {
+                    return Ok(BracketResult {
+                        lower,
+                        upper,
+                        root: x,
+                        evals,
+                    })
+                }
                 ControlFlow::Continue(x) => x,
             };
 
             if let Some(ref mut cb) = f_callback {
-                cb(BalancedState {
+                cb(InverseQuadraticState {
                     lower,
                     upper,
                     previous,
@@ -160,16 +213,21 @@ impl BracketSearcher for Balanced {
     }
 }
 
-pub trait SearchBrackets {
+/// Extension trait to find sign swaps used for bracketing
+///
+/// This is intended to be implemented for iterators of numeric types
+pub trait FilterSignSwap {
+    /// The two sides of the bracket around the sign swap
     type Out;
 
-    fn brackets(self) -> impl Iterator<Item = Self::Out>;
+    /// Filter for pairs of points that are adjacent and have different signs
+    fn filter_sign_swap(self) -> impl Iterator<Item = Self::Out>;
 }
 
-impl<'a, T: Iterator<Item = &'a Point>> SearchBrackets for T {
+impl<'a, T: Iterator<Item = &'a Point>> FilterSignSwap for T {
     type Out = (&'a Point, &'a Point);
 
-    fn brackets(self) -> impl Iterator<Item = (&'a Point, &'a Point)> {
+    fn filter_sign_swap(self) -> impl Iterator<Item = (&'a Point, &'a Point)> {
         self.map_windows(|[pair1, pair2]| {
             if pair1.f.signum() != pair2.f.signum() {
                 Some((*pair1, *pair2))
