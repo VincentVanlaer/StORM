@@ -13,6 +13,3 @@ pub mod model;
 mod solver;
 mod stepper;
 pub mod system;
-
-extern crate blas_src;
-extern crate lapack_src;

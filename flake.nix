@@ -51,10 +51,8 @@
         cmake
         gcc
         pkg-config
-        gfortran
         (python3.withPackages (p: [p.numpy p.scipy p.matplotlib p.mypy p.pyqt6 p.h5py]))
         gnuplot
-        openssl.dev
         hdf5.dev
         maxima
         toolchain
