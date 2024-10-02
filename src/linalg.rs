@@ -1,5 +1,3 @@
-use blas::dgemm;
-use lapack::dgeev;
 use std::{
     mem::{self, transmute_copy},
     ops::{Add, AddAssign, DivAssign, Index, IndexMut, Mul, Sub, SubAssign},
@@ -206,112 +204,103 @@ impl<
     }
 }
 
+const T18_COEFFICIENTS: [[f64; 5]; 5] = [
+    [
+        0.,
+        -0.100_365_581_030_144_62,
+        -0.008_029_246_482_411_57,
+        -0.000_892_138_498_045_73,
+        0.,
+    ],
+    [
+        0.,
+        0.397_849_749_499_645_1,
+        1.367_837_784_604_117_2,
+        0.498_289_622_525_382_67,
+        -0.000_637_898_194_594_723_3,
+    ],
+    [
+        -10.967_639_605_296_206,
+        1.680_158_138_789_062,
+        0.057_177_984_647_886_55,
+        -0.006_982_101_224_880_520_6,
+        0.00003349750170860705,
+    ],
+    [
+        -0.090_431_683_239_081_06,
+        -0.067_640_451_907_138_19,
+        0.067_596_130_177_045_97,
+        0.029_555_257_042_931_552,
+        -0.00001391802575160607,
+    ],
+    [
+        0.,
+        0.,
+        -0.092_336_461_936_711_86,
+        -0.016_936_493_900_208_172,
+        -0.00001400867981820361,
+    ],
+];
+
 impl<const N: usize> Matrix<f64, N, N> {
     pub(crate) fn exp(&mut self, step: f64) {
-        let lapack_n: i32 = N.try_into().unwrap();
-        let mut wr = [0.0; N];
-        let mut wi = [0.0; N];
-        let mut vl = Matrix {
-            data: [[0.0; N]; N],
-        };
-        let mut vr = Matrix {
-            data: [[0.0; N]; N],
-        };
-        let mut info = 0;
-        let mut work = Matrix {
-            data: [[0.0; 4]; N],
-        }; // work = 4 * SIZE(A, 1)
+        *self = *self * step;
 
-        unsafe {
-            dgeev(
-                b'V',
-                b'V',
-                lapack_n,
-                self.as_slice_mut(),
-                lapack_n,
-                &mut wr,
-                &mut wi,
-                vl.as_slice_mut(),
-                lapack_n,
-                vr.as_slice_mut(),
-                lapack_n,
-                work.as_slice_mut(),
-                4 * lapack_n,
-                &mut info,
-            )
-        };
+        let norm = self
+            .data
+            .iter()
+            .map(|&x| x.iter().map(|&x| x.abs()).sum())
+            .reduce(f64::max)
+            .expect("at least one item");
 
-        if info != 0 {
-            panic!("dgeev failed")
+        let (mantissa, mut exponent, _) = norm.integer_decode();
+
+        exponent += i16::try_from(mantissa.next_power_of_two().leading_zeros())
+            .expect("max 64 leading zeroes");
+
+        if exponent > 0 {
+            *self = *self * (2.).powi((-exponent).into());
         }
 
-        let mut i_iter = 0..N;
+        let eye = Self::eye();
+        let a2 = self.matmul(*self);
+        let a3 = a2.matmul(*self);
+        let a6 = a3.matmul(a3);
 
-        while let Some(i) = i_iter.next() {
-            if wi[i] != 0.0 {
-                let mut sum = Complex64::new(0.0, 0.0);
-                for j in 0..N {
-                    let a = Complex64::new(vr[i][j], vr[i + 1][j]);
-                    let b = Complex64::new(vl[i][j], -vl[i + 1][j]);
-                    sum += a * b;
-                }
+        let b1 = eye * T18_COEFFICIENTS[0][0]
+            + *self * T18_COEFFICIENTS[0][1]
+            + a2 * T18_COEFFICIENTS[0][2]
+            + a3 * T18_COEFFICIENTS[0][3]
+            + a6 * T18_COEFFICIENTS[0][4];
+        let b2 = eye * T18_COEFFICIENTS[1][0]
+            + *self * T18_COEFFICIENTS[1][1]
+            + a2 * T18_COEFFICIENTS[1][2]
+            + a3 * T18_COEFFICIENTS[1][3]
+            + a6 * T18_COEFFICIENTS[1][4];
+        let b3 = eye * T18_COEFFICIENTS[2][0]
+            + *self * T18_COEFFICIENTS[2][1]
+            + a2 * T18_COEFFICIENTS[2][2]
+            + a3 * T18_COEFFICIENTS[2][3]
+            + a6 * T18_COEFFICIENTS[2][4];
+        let b4 = eye * T18_COEFFICIENTS[3][0]
+            + *self * T18_COEFFICIENTS[3][1]
+            + a2 * T18_COEFFICIENTS[3][2]
+            + a3 * T18_COEFFICIENTS[3][3]
+            + a6 * T18_COEFFICIENTS[3][4];
+        let b5 = eye * T18_COEFFICIENTS[4][0]
+            + *self * T18_COEFFICIENTS[4][1]
+            + a2 * T18_COEFFICIENTS[4][2]
+            + a3 * T18_COEFFICIENTS[4][3]
+            + a6 * T18_COEFFICIENTS[4][4];
 
-                for j in 0..N {
-                    let mut b = Complex64::new(vl[i][j], -vl[i + 1][j]);
-                    b /= sum;
-                    vl[i][j] = b.re;
-                    vl[i + 1][j] = b.im;
-                }
-                i_iter.next();
-            } else {
-                let mut sum = 0.;
-                for j in 0..N {
-                    sum += vl[i][j] * vr[i][j];
-                }
+        let a9 = b1.matmul(b5) + b4;
 
-                for j in 0..N {
-                    vl[i][j] /= sum;
-                }
+        *self = b2 + (b3 + a9).matmul(a9);
+
+        if exponent > 0 {
+            for _ in 0..exponent {
+                *self = self.matmul(*self);
             }
-        }
-
-        let mut i_iter = 0..N;
-
-        while let Some(i) = i_iter.next() {
-            if wi[i] != 0.0 {
-                let eig = Complex64::new(wr[i] * step, wi[i] * step).exp();
-
-                for j in 0..N {
-                    let v = eig * Complex64::new(vl[i][j], vl[i + 1][j]);
-
-                    vl[i][j] = 2. * v.re;
-                    vl[i + 1][j] = -2. * v.im;
-                }
-
-                i_iter.next();
-            } else {
-                for j in 0..N {
-                    vl[i][j] *= (step * wr[i]).exp();
-                }
-            }
-        }
-
-        unsafe {
-            dgemm(
-                b'N',
-                b'T',
-                lapack_n,
-                lapack_n,
-                lapack_n,
-                1.,
-                vr.as_slice(),
-                lapack_n,
-                vl.as_slice(),
-                lapack_n,
-                0.,
-                self.as_slice_mut(),
-                lapack_n,
-            )
         }
     }
 }
