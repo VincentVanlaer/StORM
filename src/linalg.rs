@@ -2,11 +2,11 @@ use blas::dgemm;
 use lapack::dgeev;
 use std::{
     mem::{self, transmute_copy},
-    ops::{Add, AddAssign, Index, IndexMut, Mul, Sub},
+    ops::{Add, AddAssign, DivAssign, Index, IndexMut, Mul, Sub, SubAssign},
     ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
 };
 
-use num::{complex::Complex64, One, Zero};
+use num::{Float, One, Zero};
 
 #[derive(Copy, Clone, Debug)]
 #[repr(align(64))]
@@ -42,9 +42,8 @@ pub(crate) trait Matmul<T> {
     fn matmul(self, rhs: T) -> T;
 }
 
-impl<T: Zero + Copy, const N: usize> Matmul<Matrix<T, N, N>> for Matrix<T, N, N>
-where
-    T: Mul<Output = T> + AddAssign,
+impl<T: Zero + Copy + Mul<Output = T> + AddAssign, const N: usize> Matmul<Matrix<T, N, N>>
+    for Matrix<T, N, N>
 {
     #[inline(always)]
     fn matmul(self, rhs: Matrix<T, N, N>) -> Matrix<T, N, N> {
@@ -66,14 +65,14 @@ where
     }
 }
 
-impl<const N: usize> Matrix<f64, N, N> {
+impl<T: Float + SubAssign + DivAssign + Copy, const N: usize> Matrix<T, N, N> {
     #[inline(always)]
-    pub(crate) fn inv(mut self) -> Result<Matrix<f64, N, N>, i32> {
+    pub(crate) fn inv(mut self) -> Result<Matrix<T, N, N>, i32> {
         let mut inv = Self::eye();
 
         for i in 0..N {
             let mut max_idx = 0;
-            let mut max_val: f64 = 0.;
+            let mut max_val = T::zero();
 
             for j in i..N {
                 if self.data[j][i].abs() > max_val.abs() {
@@ -96,7 +95,7 @@ impl<const N: usize> Matrix<f64, N, N> {
                 let m = self.data[j][i];
                 for k in 0..N {
                     self.data[j][k] -= self.data[i][k] * m;
-                    inv[j][k] -= inv[i][k] * m;
+                    inv.data[j][k] -= inv.data[i][k] * m;
                 }
             }
         }
@@ -106,7 +105,7 @@ impl<const N: usize> Matrix<f64, N, N> {
                 let m = self.data[N - j - 1][N - i - 1];
                 for k in 0..N {
                     self.data[N - j - 1][k] -= self.data[N - i - 1][k] * m;
-                    inv[N - j - 1][k] -= inv[N - i - 1][k] * m;
+                    inv.data[N - j - 1][k] -= inv.data[N - i - 1][k] * m;
                 }
             }
         }
@@ -183,10 +182,12 @@ where
     }
 }
 
-impl<T: Copy + Zero + Mul<C, Output = T>, C: Copy, const N: usize, const M: usize> Mul<C>
-    for Matrix<T, N, M>
-where
-    T: Mul<T, Output = T>,
+impl<
+        T: Copy + Zero + Mul<C, Output = T> + Mul<T, Output = T>,
+        C: Copy,
+        const N: usize,
+        const M: usize,
+    > Mul<C> for Matrix<T, N, M>
 {
     type Output = Matrix<T, N, M>;
 
