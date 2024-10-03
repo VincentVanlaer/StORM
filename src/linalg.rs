@@ -1,7 +1,6 @@
 use std::{
     mem::{self, transmute_copy},
     ops::{Add, AddAssign, DivAssign, Index, IndexMut, Mul, Sub, SubAssign},
-    ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
 };
 
 use num::{Float, One, Zero};
@@ -10,18 +9,6 @@ use num::{Float, One, Zero};
 #[repr(align(64))]
 pub(crate) struct Matrix<T, const ROWS: usize, const COLUMNS: usize> {
     pub data: [[T; ROWS]; COLUMNS],
-}
-
-impl<T, const N: usize, const M: usize> Matrix<T, N, M> {
-    pub(crate) fn as_slice(&mut self) -> &[T] {
-        let slice = slice_from_raw_parts(self.data.as_ptr() as *const T, N * M);
-        unsafe { &*slice }
-    }
-
-    pub(crate) fn as_slice_mut(&mut self) -> &mut [T] {
-        let slice = slice_from_raw_parts_mut(self.data.as_mut_ptr() as *mut T, N * M);
-        unsafe { &mut *slice }
-    }
 }
 
 impl<T: Zero + One + Copy, const N: usize> Matrix<T, N, N> {
