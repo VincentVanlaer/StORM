@@ -2,7 +2,7 @@
 #![feature(generic_const_exprs)]
 #![feature(never_type)]
 #![feature(unwrap_infallible)]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 use color_eyre::Result;
 use ndarray::aview0;

@@ -60,9 +60,9 @@ pub trait BracketOptimizer {
 /// Combination of `x` and `f(x)`
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub x: f64,
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     pub f: f64,
 }
 

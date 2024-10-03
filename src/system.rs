@@ -19,7 +19,7 @@ pub(crate) trait Boundary<T: Float, const N: usize, const N_INNER: usize> {
     fn outer_boundary(&self, _frequency: f64) -> Matrix<T, N, { N - N_INNER }>;
 }
 
-#[allow(private_bounds)]
+#[expect(private_bounds)]
 /// Represents a system of equations with boundary conditions.
 ///
 /// This trait is still a bit in flux, and hence the parent traits are private, making it not

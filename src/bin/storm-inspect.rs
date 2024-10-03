@@ -1,6 +1,6 @@
 #![feature(never_type)]
 #![feature(generic_const_exprs)]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 
 use std::cell::Cell;
 

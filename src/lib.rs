@@ -2,7 +2,7 @@
 #![feature(generic_const_exprs)]
 #![feature(const_option)]
 #![feature(iter_map_windows)]
-#![allow(incomplete_features)]
+#![expect(incomplete_features)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
 #![warn(missing_docs)]
 
