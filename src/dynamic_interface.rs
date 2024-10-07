@@ -1,5 +1,8 @@
 //! Main interface for computing the determinant for a trial frequency
 
+use crate::bracket::{
+    BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
+};
 use crate::solver::{determinant, determinant_with_upper, UpperResult};
 use crate::stepper::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8, Stepper};
 use crate::system::System;
@@ -64,6 +67,29 @@ impl<'system_and_grid> MultipleShooting<'system_and_grid> {
     /// [MultipleShooting::det], so only use this after bracketing has completed.
     pub fn eigenvector(&self, freq: f64) -> Vec<f64> {
         (self.eigenvector)(freq).1
+    }
+
+    /// Scan all points given by `freq_grid` and optimize the resulting brackets to `precision`
+    pub fn scan_and_optimize<'a>(
+        &'a self,
+        freq_grid: impl IntoIterator<Item = f64> + 'a,
+        precision: Precision,
+    ) -> impl Iterator<Item = BracketResult> + 'a {
+        freq_grid
+            .into_iter()
+            .map(|x| Point { x, f: self.det(x) })
+            .filter_sign_swap()
+            .map(move |(point1, point2)| {
+                (InverseQuadratic {})
+                    .optimize(
+                        point1,
+                        point2,
+                        |point| Ok::<_, !>(self.det(point)),
+                        precision,
+                        None,
+                    )
+                    .into_ok()
+            })
     }
 }
 

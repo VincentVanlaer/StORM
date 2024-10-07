@@ -224,13 +224,13 @@ pub trait FilterSignSwap {
     fn filter_sign_swap(self) -> impl Iterator<Item = Self::Out>;
 }
 
-impl<'a, T: Iterator<Item = &'a Point>> FilterSignSwap for T {
-    type Out = (&'a Point, &'a Point);
+impl<T: Iterator<Item = Point>> FilterSignSwap for T {
+    type Out = (Point, Point);
 
-    fn filter_sign_swap(self) -> impl Iterator<Item = (&'a Point, &'a Point)> {
-        self.map_windows(|[pair1, pair2]| {
+    fn filter_sign_swap(self) -> impl Iterator<Item = (Point, Point)> {
+        self.map_windows(|&[pair1, pair2]| {
             if pair1.f.signum() != pair2.f.signum() {
-                Some((*pair1, *pair2))
+                Some((pair1, pair2))
             } else {
                 None
             }

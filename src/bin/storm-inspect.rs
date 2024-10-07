@@ -46,13 +46,14 @@ fn main() -> Result<()> {
 
     let solutions: Vec<_> = dets
         .iter()
+        .cloned()
         .filter_sign_swap()
         .map(|(point1, point2)| {
             let mut bracket_state = Vec::new();
             let evals = Cell::<i64>::new(0);
             let bracket = searcher.optimize(
-                *point1,
-                *point2,
+                point1,
+                point2,
                 |point| {
                     if evals.get() > 20 {
                         Err(())

@@ -9,9 +9,7 @@ use ndarray::aview0;
 use std::io::{self, BufRead};
 use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 
-use storm::bracket::{
-    BracketOptimizer as _, BracketResult, FilterSignSwap as _, InverseQuadratic, Point, Precision,
-};
+use storm::bracket::{BracketResult, Precision};
 use storm::model::StellarModel;
 use storm::system::adiabatic::{GridScale, Rotating1D};
 
@@ -52,38 +50,24 @@ fn main() -> Result<()> {
                     let steps: usize = args[5].parse()?;
 
                     let system = Rotating1D::from_model(input.as_ref().unwrap(), ell, m);
-                    let searcher = &InverseQuadratic {};
                     let determinant = MultipleShooting::new(
                         &system,
                         DifferenceSchemes::Magnus6,
                         &GridScale { scale: 0 },
                     );
-
-                    let dets: Vec<_> = linspace(lower, upper, steps)
-                        .map(|x| Point {
-                            x,
-                            f: determinant.det(x),
-                        })
-                        .collect();
-
-                    solutions.extend(dets.iter().filter_sign_swap().map(|(point1, point2)| {
-                        let res = searcher
-                            .optimize(
-                                *point1,
-                                *point2,
-                                |point| Ok::<_, !>(determinant.det(point)),
+                    solutions.extend(
+                        determinant
+                            .scan_and_optimize(
+                                linspace(lower, upper, steps),
                                 Precision::Relative(0.),
-                                None,
                             )
-                            .into_ok();
-
-                        Solution {
-                            eigenvector: determinant.eigenvector(res.root),
-                            bracket: res,
-                            ell,
-                            m,
-                        }
-                    }));
+                            .map(|res| Solution {
+                                eigenvector: determinant.eigenvector(res.root),
+                                bracket: res,
+                                ell,
+                                m,
+                            }),
+                    );
                 }
                 "output" => {
                     let output = hdf5::File::create(args[1])?;
