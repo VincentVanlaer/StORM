@@ -21,7 +21,3 @@ ndarray = { version = "0.15.6", default-features = false }
 num = "0.4.1"
 clap = { version = "4.4.14", features = ["derive"] }
 thiserror = "1.0.64"
-
-[dev-dependencies]
-criterion = { version = "0.3", default-features = false, features = ["csv_output", "html_reports"] }
-criterion-macro = "0.3"
