@@ -327,7 +327,7 @@ impl<T, const ROWS: usize, const COLUMNS: usize> From<Matrix<T, ROWS, COLUMNS>>
 }
 
 #[cfg(test)]
-mod test_inv {
+mod test {
     use crate::linalg::Matrix;
 
     fn compare_floats(f1: f64, f2: f64) -> bool {
@@ -347,41 +347,32 @@ mod test_inv {
         }
     }
 
-    #[test]
-    fn inverse_eye() {
-        compare_matrices(
-            Matrix::<f64, 4, 4>::eye(),
-            Matrix::<f64, 4, 4>::eye().inv().unwrap(),
-        )
+    fn check_inv<const N: usize>(m: Matrix<f64, N, N>, m_inv: Matrix<f64, N, N>) {
+        compare_matrices(m.inv().unwrap(), m_inv)
     }
 
     #[test]
-    fn inverse_2x2() {
-        compare_matrices(
-            Matrix::<_, 2, 2>::from([[2., 2.], [3., 2.]]),
-            Matrix::<_, 2, 2>::from([[-1., 1.], [3. / 2., -1.]])
-                .inv()
-                .unwrap(),
-        )
-    }
-
-    #[test]
-    fn inverse_4x4() {
-        compare_matrices(
-            Matrix::<_, 4, 4>::from([
+    fn inverse() {
+        check_inv(Matrix::<f64, 4, 4>::eye(), Matrix::<f64, 4, 4>::eye());
+        check_inv(
+            [[2., 2.], [3., 2.]].into(),
+            [[-1., 1.], [3. / 2., -1.]].into(),
+        );
+        check_inv(
+            [
                 [1., 2., 0., 0.],
                 [0., 1., 2., 0.],
                 [0., 0., 1., 2.],
                 [0., 0., 0., 1.],
-            ])
-            .inv()
-            .unwrap(),
-            Matrix::<_, 4, 4>::from([
+            ]
+            .into(),
+            [
                 [1., -2., 4., -8.],
                 [0., 1., -2., 4.],
                 [0., 0., 1., -2.],
                 [0., 0., 0., 1.],
-            ]),
-        )
+            ]
+            .into(),
+        );
     }
 }
