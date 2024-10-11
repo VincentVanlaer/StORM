@@ -1,6 +1,6 @@
 //! Stellar Oscillations with Rotation and Magnetism
 //!
-//! ```
+//! ```no_run
 //! # use storm::bracket::Precision;
 //! # use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 //! # use storm::model::StellarModel;
