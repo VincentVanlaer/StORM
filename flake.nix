@@ -14,7 +14,8 @@
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
-    toolchain = fenix.packages.${system}.latest.withComponents ["cargo" "clippy" "rustc" "rustfmt" "rust-analyzer" "rust-src" "rust-std"];
+    f = fenix.packages.${system};
+    toolchain = f.combine [ f.latest.cargo f.latest.clippy f.latest.rustc f.latest.rustfmt f.latest.rust-analyzer f.latest.rust-src f.latest.rust-std f.targets.x86_64-unknown-linux-musl.latest.rust-std ];
     buildRustPackage =
       (pkgs.makeRustPlatform {
         cargo = toolchain;
@@ -49,7 +50,6 @@
     devShells.${system}.default = pkgs.mkShell {
       nativeBuildInputs = with pkgs; [
         cmake
-        gcc
         pkg-config
         (python3.withPackages (p: [p.numpy p.scipy p.matplotlib p.mypy p.pyqt6 p.h5py]))
         gnuplot
@@ -61,6 +61,10 @@
         llvm
         nodePackages.browser-sync
       ];
+
+      shellHook = ''
+        export CC="${pkgs.musl.dev}/bin/musl-gcc -static -Os"
+      '';
     };
   };
 }
