@@ -16,8 +16,9 @@ panic = "abort"
 
 [dependencies]
 color-eyre = "0.6.2"
-hdf5 = { path = "hdf5-rust/hdf5" }
 ndarray = { version = "0.15.6", default-features = false }
 num = "0.4.1"
 clap = { version = "4.4.14", features = ["derive"] }
 thiserror = "1.0.64"
+hdf5 = { package = "hdf5-metno", version = "0.9.1" }
+# hdf5-metno-sys = { version = "*", features = ["static"] }
