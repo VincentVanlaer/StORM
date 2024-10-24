@@ -94,7 +94,8 @@ impl UpperResult {
     ) -> UpperResult {
         let n_systems = system.len(grid);
         UpperResult {
-            data: vec![f64::NAN; n_systems * gauss(N, 2 * N - 1) + gauss(1, N - 1)].into_boxed_slice(),
+            data: vec![f64::NAN; n_systems * gauss(N, 2 * N - 1) + gauss(1, N - 1)]
+                .into_boxed_slice(),
             n: N,
             n_systems,
         }
