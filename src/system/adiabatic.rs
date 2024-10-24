@@ -318,7 +318,7 @@ impl Boundary<f64, 4, 2> for Rotating1D {
                 lambda * rel_rot - self.ell,
                 0.,
             ],
-            [0., 0., self.ell, 1.],
+            [0., 0., self.ell, -1.],
         ]
         .into()
     }
