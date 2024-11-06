@@ -24,5 +24,5 @@ for DIFF_SCHEME in $DIFF_SCHEMES_STORM; do
     RUN_NAME="${DIFF_SCHEME}_storm"
     mkdir -p test-data/generated/$RUN_NAME
     hyperfine --export-json=test-data/generated/$RUN_NAME.json -- \
-      "./target/release/storm  --input test-data/test-model.GSM --output test-data/generated/$RUN_NAME/summary.hdf5 --lower 1 --upper 25  --n-steps 25 --degree 0 --eigenfunctions --order 0 --difference-scheme $DIFF_SCHEME"
+      "./target/release/storm  --input test-data/test-model-tams.GSM --output test-data/generated/$RUN_NAME/summary.hdf5 --lower 1 --upper 25  --n-steps 25 --degree 0 --eigenfunctions --order 0 --difference-scheme $DIFF_SCHEME"
 done

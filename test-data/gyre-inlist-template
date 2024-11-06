@@ -3,7 +3,7 @@
 
 &model
   model_type = 'EVOL'  ! Obtain stellar structure from an evolutionary model
-  file = '../../test-model.GSM'    ! File name of the evolutionary model
+  file = '../../test-model-tams.GSM'    ! File name of the evolutionary model
   file_format = 'GSM' ! File format of the evolutionary model
 /
 

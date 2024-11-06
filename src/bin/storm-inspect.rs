@@ -31,7 +31,7 @@ fn main() -> Result<()> {
     let steps: usize = 25;
     let difference_scheme = DifferenceSchemes::Colloc2;
 
-    let model = StellarModel::from_gsm("test-data/test-model.GSM")?;
+    let model = StellarModel::from_gsm("test-data/test-model-tams.GSM")?;
     let system = Rotating1D::from_model(&model, 0, 0);
     let grid = &GridScale { scale: 0 };
     let searcher = &InverseQuadratic {};
