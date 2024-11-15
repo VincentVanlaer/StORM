@@ -15,7 +15,7 @@
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
     f = fenix.packages.${system};
-    toolchain = f.combine [ f.latest.cargo f.latest.clippy f.latest.rustc f.latest.rustfmt f.latest.rust-analyzer f.latest.rust-src f.latest.rust-std f.targets.x86_64-unknown-linux-musl.latest.rust-std ];
+    toolchain = f.combine [f.latest.cargo f.latest.clippy f.latest.rustc f.latest.rustfmt f.latest.rust-analyzer f.latest.rust-src f.latest.rust-std f.targets.x86_64-unknown-linux-musl.latest.rust-std];
     buildRustPackage =
       (pkgs.makeRustPlatform {
         cargo = toolchain;
