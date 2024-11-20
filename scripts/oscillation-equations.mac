@@ -44,8 +44,8 @@ c1: (r^3 / R^3) * (M / Mr)$
 
 xi_r: y1 * r * x^(l - 2)$
 p_prime: y2 * rho * dphi * r * x^(l - 2)$
-phi_prime: dphi * r * x^(l - 2) * y3$
-dphi_prime: dphi * x^(l - 2) * y4$
+phi_prime: y3 * dphi * r * x^(l - 2)$
+dphi_prime: y4 * dphi * x^(l - 2)$
 
 /* [wxMaxima: input   end   ] */
 
@@ -115,7 +115,7 @@ eq: (
 )$
 eq: rhs(solve(eq, diff(y4, x))[1]) * x$
 is(equal(
-    subst(R^2 * ddp, diff(P, x, 2),  eq),     
+    subst(R^2 * ddp, diff(P, x, 2),  eq),
     A * U * y1 + V / gamma1 * U * y2 + l * (l + 1) * y3 + (-U - l + 2) * y4
 ));
 /* [wxMaxima: input   end   ] */
