@@ -11,6 +11,7 @@ use ndarray::aview0;
 use storm::bracket::Precision;
 use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 use storm::model::StellarModel;
+use storm::postprocessing::Rotating1DPostprocessing;
 use storm::system::adiabatic::{GridScale, Rotating1D};
 
 #[derive(Parser)]
@@ -69,9 +70,7 @@ fn main() -> Result<()> {
     let output = hdf5::File::create(args.output)?;
 
     for (i, solution) in solutions.iter().enumerate() {
-        println!("{:.20} {}", solution.root, solution.evals);
-
-        let group = output.create_group(format!("{i:05}").as_str())?;
+        let group = output.create_group(format!("{i}").as_str())?;
 
         group
             .new_attr_builder()
@@ -81,35 +80,75 @@ fn main() -> Result<()> {
         if args.eigenfunctions {
             let eigenvector = determinant.eigenvector(solution.root);
 
-            let (chunks, _) = eigenvector.as_chunks::<4>();
+            let postprocessing = Rotating1DPostprocessing::new(
+                solution.root,
+                &eigenvector,
+                args.degree,
+                args.order,
+                &model,
+            );
 
-            let mut vec1 = vec![0.0; chunks.len()];
-            let mut vec2 = vec![0.0; chunks.len()];
-            let mut vec3 = vec![0.0; chunks.len()];
-            let mut vec4 = vec![0.0; chunks.len()];
+            println!(
+                "{:>3}: {:>23.20} {:>2} {:>6.3} {:>6.3} {:>+7.3} {}",
+                i + 1,
+                solution.root,
+                solution.evals,
+                postprocessing.clockwise_winding,
+                postprocessing.counter_clockwise_winding,
+                postprocessing.clockwise_winding - postprocessing.counter_clockwise_winding,
+                (postprocessing.clockwise_winding - postprocessing.counter_clockwise_winding)
+                    .round(),
+            );
 
-            for (i, chunk) in chunks.iter().enumerate() {
-                vec1[i] = chunk[0];
-                vec2[i] = chunk[1];
-                vec3[i] = chunk[2];
-                vec4[i] = chunk[3];
-            }
             group
                 .new_dataset_builder()
-                .with_data(vec1.as_slice())
+                .with_data(&postprocessing.x)
+                .create("x")?;
+
+            group
+                .new_dataset_builder()
+                .with_data(&postprocessing.y1)
                 .create("y1")?;
             group
                 .new_dataset_builder()
-                .with_data(vec2.as_slice())
+                .with_data(&postprocessing.y2)
                 .create("y2")?;
             group
                 .new_dataset_builder()
-                .with_data(vec3.as_slice())
+                .with_data(&postprocessing.y3)
                 .create("y3")?;
             group
                 .new_dataset_builder()
-                .with_data(vec4.as_slice())
+                .with_data(&postprocessing.y4)
                 .create("y4")?;
+            group
+                .new_dataset_builder()
+                .with_data(&postprocessing.xi_h)
+                .create("xi_h")?;
+            group
+                .new_dataset_builder()
+                .with_data(&postprocessing.xi_r)
+                .create("xi_r")?;
+
+            group
+                .new_attr_builder()
+                .with_data(aview0(
+                    &((postprocessing.clockwise_winding - postprocessing.counter_clockwise_winding)
+                        .round() as i64),
+                ))
+                .create("n_pg")?;
+
+            group
+                .new_attr_builder()
+                .with_data(aview0(&args.degree))
+                .create("degree")?;
+
+            group
+                .new_attr_builder()
+                .with_data(aview0(&args.order))
+                .create("order")?;
+        } else {
+            println!("{:.20} {}", solution.root, solution.evals);
         }
     }
 

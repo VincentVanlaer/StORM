@@ -37,6 +37,7 @@
 #![feature(iter_map_windows)]
 #![feature(never_type)]
 #![feature(unwrap_infallible)]
+#![feature(unsigned_is_multiple_of)]
 #![expect(incomplete_features)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
 #![warn(missing_docs)]
@@ -45,6 +46,7 @@ pub mod bracket;
 pub mod dynamic_interface;
 mod linalg;
 pub mod model;
+pub mod postprocessing;
 mod solver;
 mod stepper;
 pub mod system;
