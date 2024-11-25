@@ -89,19 +89,21 @@ impl Rotating1D {
 struct ModelPointsIterator<'model> {
     model: &'model Rotating1D,
     pos: usize,
+    skip: usize,
     subpos: usize,
     total_subpos: usize,
     frequency: f64,
 }
 
 impl ModelPointsIterator<'_> {
-    fn new(scale: u32, model: &Rotating1D, frequency: f64) -> ModelPointsIterator {
-        if scale == 0 {
+    fn new(scale: i32, model: &Rotating1D, frequency: f64) -> ModelPointsIterator {
+        if scale >= 0 {
             ModelPointsIterator {
                 model,
                 pos: 1,
                 subpos: 0,
-                total_subpos: 1,
+                skip: 1,
+                total_subpos: 2_usize.pow(scale.unsigned_abs()),
                 frequency,
             }
         } else {
@@ -109,7 +111,8 @@ impl ModelPointsIterator<'_> {
                 model,
                 pos: 1,
                 subpos: 0,
-                total_subpos: 2usize.pow(scale),
+                skip: 2_usize.pow(scale.unsigned_abs()),
+                total_subpos: 1,
                 frequency,
             }
         }
@@ -121,7 +124,8 @@ impl Iterator for ModelPointsIterator<'_> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.model.components.is_empty() || (self.pos + 1) == self.model.components.len() {
+        if self.model.components.is_empty() || (self.pos + self.skip) >= self.model.components.len()
+        {
             return None;
         }
         let l = self.model.ell;
@@ -131,7 +135,7 @@ impl Iterator for ModelPointsIterator<'_> {
 
         let add_frequency = |point: ModelPoint| {
             let mut a = point.a;
-            let omega_rsq = if l == 0. && point.rot == 0. {
+            let omega_rsq = if l == 0. {
                 1.0 // To prevent issues lower down with 0 / 0
             } else {
                 (lambda * (omega - m * point.rot) + 2. * m * point.rot) * (omega - m * point.rot)
@@ -157,31 +161,28 @@ impl Iterator for ModelPointsIterator<'_> {
         };
 
         let lower = self.model.components[self.pos];
-        let lower_a = add_frequency(lower) * (1.0 / lower.x);
+        // let lower_a = add_frequency(lower) * (1.0 / lower.x);
+        let lower_a = add_frequency(lower);
 
-        let upper = self.model.components[self.pos + 1];
-        let upper_a = add_frequency(upper) * (1.0 / upper.x);
+        let upper = self.model.components[self.pos + self.skip];
+        // let upper_a = add_frequency(upper) * (1.0 / upper.x);
+        let upper_a = add_frequency(upper);
 
         let intercept = lower_a
             + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
         let slope = (upper_a - lower_a) * (1.0 / (self.total_subpos as f64));
-        // This version of the code is not really faster, even though there
-        // is quite the reduction in assembly
-        //
-        // let intercept = lower_a
-        //     + (upper_a - lower_a)
-        //         * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
-        // let slope = (upper_a - lower_a)
-        //     * (1.0 / (self.total_subpos as f64));
 
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
         let sublower = lower.x + delta * (self.subpos as f64);
         let subupper = lower.x + delta * (self.subpos as f64 + 1.);
 
+        let sublower = sublower.ln();
+        let subupper = subupper.ln();
+
         self.subpos += 1;
 
         if self.subpos == self.total_subpos {
-            self.pos += 1;
+            self.pos += self.skip;
             self.subpos = 0;
         }
 
@@ -191,7 +192,11 @@ impl Iterator for ModelPointsIterator<'_> {
 
 impl ExactSizeIterator for ModelPointsIterator<'_> {
     fn len(&self) -> usize {
-        (self.model.components.len() - 2) * self.total_subpos
+        if self.skip == 1 {
+            (self.model.components.len() - 2) * self.total_subpos
+        } else {
+            (self.model.components.len() - 2) / self.skip
+        }
     }
 }
 
@@ -228,7 +233,11 @@ impl<
 
 impl GridLength<GridScale> for Rotating1D {
     fn len(&self, grid: &GridScale) -> usize {
-        (self.components.len() - 2) * 2usize.pow(grid.scale)
+        if grid.scale >= 0 {
+            (self.components.len() - 2) * 2usize.pow(grid.scale.unsigned_abs())
+        } else {
+            (self.components.len() - 2) / 2usize.pow(grid.scale.unsigned_abs())
+        }
     }
 }
 
@@ -337,5 +346,5 @@ pub struct GridScale {
     ///
     /// If `scale` equals one, the grid is divide in two, if `scale` equals two, the grid is
     /// divided into four, ...
-    pub scale: u32,
+    pub scale: i32,
 }
