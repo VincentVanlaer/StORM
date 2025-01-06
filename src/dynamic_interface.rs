@@ -1,9 +1,12 @@
 //! Main interface for computing the determinant for a trial frequency
 
+use nalgebra::allocator::Allocator;
+use nalgebra::{Const, DefaultAllocator, Dim};
+
 use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
 };
-use crate::solver::{determinant, determinant_with_upper, UpperResult};
+use crate::solver::{determinant, determinant_with_upper, DeterminantAllocs, UpperResult};
 use crate::stepper::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8, Stepper};
 use crate::system::System;
 
@@ -32,19 +35,21 @@ pub struct MultipleShooting<'system_and_grid> {
 
 impl<'system_and_grid> MultipleShooting<'system_and_grid> {
     /// Construct from a system, difference scheme and grid definition
-    pub fn new<const N: usize, const N_INNER: usize, G: ?Sized, S>(
+    pub fn new<N: Dim + nalgebra::DimSub<NInner>, NInner: Dim, G: ?Sized, S>(
         system: &'system_and_grid S,
         scheme: DifferenceSchemes,
         grid: &'system_and_grid G,
     ) -> MultipleShooting<'system_and_grid>
     where
-        S: System<f64, G, N, N_INNER, 1>,
-        S: System<f64, G, N, N_INNER, 2>,
-        S: System<f64, G, N, N_INNER, 3>,
-        S: System<f64, G, N, N_INNER, 4>,
-        [(); { N - N_INNER } * N]:,
-        [(); N + N_INNER]:,
-        [(); 2 * N]:,
+        S: System<f64, G, N, NInner, Const<1>>,
+        S: System<f64, G, N, NInner, Const<2>>,
+        S: System<f64, G, N, NInner, Const<3>>,
+        S: System<f64, G, N, NInner, Const<4>>,
+        DefaultAllocator: DeterminantAllocs<N, NInner, Const<1>>,
+        DefaultAllocator: DeterminantAllocs<N, NInner, Const<2>>,
+        DefaultAllocator: DeterminantAllocs<N, NInner, Const<3>>,
+        DefaultAllocator: DeterminantAllocs<N, NInner, Const<4>>,
+        DefaultAllocator: Allocator<N, N>,
     {
         match scheme {
             DifferenceSchemes::Colloc2 => get_solvers_inner(system, grid, || Colloc2 {}),
@@ -95,29 +100,29 @@ impl<'system_and_grid> MultipleShooting<'system_and_grid> {
 
 fn get_solvers_inner<
     'a,
-    const N: usize,
-    const N_INNER: usize,
+    N: Dim
+        + nalgebra::DimSub<NInner>
+        + nalgebra::DimMul<nalgebra::Const<2>>
+        + nalgebra::DimAdd<NInner>,
+    NInner: Dim,
     const ORDER: usize,
     G: ?Sized,
-    S,
-    T: Stepper<f64, N, ORDER> + 'static,
+    S: System<f64, G, N, NInner, Const<ORDER>>,
+    T: Stepper<f64, N, Const<ORDER>> + 'static,
 >(
     system: &'a S,
     grid: &'a G,
     stepper: impl Fn() -> T,
 ) -> MultipleShooting<'a>
 where
-    S: System<f64, G, N, N_INNER, ORDER>,
-    [(); { N - N_INNER } * N]:,
-    [(); N + N_INNER]:,
-    [(); 2 * N]:,
+    DefaultAllocator: DeterminantAllocs<N, NInner, Const<ORDER>>,
 {
     let stepper1 = stepper();
     let stepper2 = stepper();
     MultipleShooting {
         det: Box::new(move |freq: f64| determinant(system, &stepper1, grid, freq)),
         eigenvector: Box::new(move |freq: f64| {
-            let mut upper = UpperResult::new(system, grid);
+            let mut upper = UpperResult::new(system.shape().value(), system.len(grid));
 
             let det = determinant_with_upper(system, &stepper2, grid, freq, &mut upper);
 

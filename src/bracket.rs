@@ -155,6 +155,11 @@ impl BracketOptimizer for InverseQuadratic {
         precision: Precision,
         mut f_callback: Option<&mut dyn FnMut(Self::InternalState)>,
     ) -> Result<BracketResult, E> {
+        assert!(lower.x.is_finite());
+        assert!(lower.f.is_finite());
+        assert!(upper.x.is_finite());
+        assert!(upper.f.is_finite());
+
         if lower.f.signum() == upper.f.signum() {
             panic!("Upper and lower values in bracket have the same sign????");
         }

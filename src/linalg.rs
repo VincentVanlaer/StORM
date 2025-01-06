@@ -1,193 +1,327 @@
-use std::{
-    mem::{self, transmute_copy},
-    ops::{Add, AddAssign, DivAssign, Index, IndexMut, Mul, Sub, SubAssign},
+use std::{borrow::Borrow, marker::PhantomData, mem::MaybeUninit, ops::Add};
+
+use nalgebra::{
+    allocator::Allocator,
+    base::Matrix,
+    uninit::{InitStatus, Uninit},
+    ComplexField, Const, DefaultAllocator, Dim, Dyn, Field, RealField, Scalar, Storage, StorageMut,
+    ViewStorage, ViewStorageMut,
 };
+use num::Float;
+use simba::scalar::SupersetOf;
 
-use num::{Float, One, Zero};
-
-#[derive(Copy, Clone, Debug)]
-#[repr(align(64))]
-pub(crate) struct Matrix<T, const ROWS: usize, const COLUMNS: usize> {
-    pub data: [[T; ROWS]; COLUMNS],
+pub(crate) struct MatrixArray<T, R, C, L, S> {
+    data: S,
+    _phantom: PhantomData<(T, R, C, L)>,
 }
 
-impl<T: Zero + One + Copy, const N: usize> Matrix<T, N, N> {
-    pub(crate) fn eye() -> Matrix<T, N, N> {
-        let mut data = [[T::zero(); N]; N];
+pub type OwnedArray<T, R, C, L> = <DefaultAllocator as ArrayAllocator<R, C, L>>::Buffer<T>;
+pub type OMatrixArray<T, R, C, L> = MatrixArray<T, R, C, L, OwnedArray<T, R, C, L>>;
 
-        for i in 0..N {
-            data[i][i] = T::one();
-        }
+pub(crate) trait ArrayAllocator<R: Dim, C: Dim, L: Dim> {
+    type Buffer<T: Scalar>: ArrayStorage<T, R, C, L>;
+    type BufferUninit<T: Scalar>: ArrayStorage<MaybeUninit<T>, R, C, L>;
 
-        data.into()
-    }
+    fn allocate_uninit<T: Scalar>(nrows: R, ncols: C, length: L) -> Self::BufferUninit<T>;
+
+    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T>;
 }
 
-pub(crate) trait Matmul<T> {
-    fn matmul(self, rhs: T) -> T;
+pub(crate) unsafe trait ArrayStorage<T, R, C, L> {
+    fn ptr(&self) -> *const T;
+    fn ptr_mut(&mut self) -> *mut T;
+    fn shape(&self) -> (R, C, L);
+    unsafe fn get_unchecked_mut(&mut self, r: usize, c: usize, i: usize) -> &mut T;
 }
 
-impl<T: Zero + Copy + Mul<Output = T> + AddAssign, const N: usize> Matmul<Matrix<T, N, N>>
-    for Matrix<T, N, N>
+#[repr(transparent)]
+pub(crate) struct ArrayArrayStorage<T, const R: usize, const C: usize, const L: usize>(
+    pub [[[T; R]; C]; L],
+);
+
+unsafe impl<T, const R: usize, const C: usize, const L: usize>
+    ArrayStorage<T, Const<R>, Const<C>, Const<L>> for ArrayArrayStorage<T, R, C, L>
 {
-    #[inline(always)]
-    fn matmul(self, rhs: Matrix<T, N, N>) -> Matrix<T, N, N> {
-        let mut result = Matrix {
-            data: [[T::zero(); N]; N],
-        };
+    fn ptr(&self) -> *const T {
+        self.0.as_ptr() as *const T
+    }
 
-        for i in 0..N {
-            for j in 0..N {
-                let scalar = rhs[i][j];
+    fn ptr_mut(&mut self) -> *mut T {
+        self.0.as_ptr() as *mut T
+    }
 
-                for k in 0..N {
-                    result[i][k] += scalar * self[j][k];
-                }
-            }
-        }
+    fn shape(&self) -> (Const<R>, Const<C>, Const<L>) {
+        (Const, Const, Const)
+    }
 
-        result
+    unsafe fn get_unchecked_mut(&mut self, r: usize, c: usize, i: usize) -> &mut T {
+        self.0
+            .get_unchecked_mut(i)
+            .get_unchecked_mut(c)
+            .get_unchecked_mut(r)
     }
 }
 
-impl<T: Float + SubAssign + DivAssign + Copy, const N: usize> Matrix<T, N, N> {
-    #[inline(always)]
-    pub(crate) fn inv(mut self) -> Result<Matrix<T, N, N>, i32> {
-        let mut inv = Self::eye();
+impl<const R: usize, const C: usize, const L: usize> ArrayAllocator<Const<R>, Const<C>, Const<L>>
+    for DefaultAllocator
+{
+    type Buffer<T: Scalar> = ArrayArrayStorage<T, R, C, L>;
+    type BufferUninit<T: Scalar> = ArrayArrayStorage<MaybeUninit<T>, R, C, L>;
 
-        for i in 0..N {
-            let mut max_idx = 0;
-            let mut max_val = T::zero();
+    fn allocate_uninit<T: Scalar>(_: Const<R>, _: Const<C>, _: Const<L>) -> Self::BufferUninit<T> {
+        let array: [[[MaybeUninit<T>; R]; C]; L] = unsafe { MaybeUninit::uninit().assume_init() };
+        ArrayArrayStorage(array)
+    }
 
-            for j in i..N {
-                if self.data[j][i].abs() > max_val.abs() {
-                    max_idx = j;
-                    max_val = self.data[j][i];
-                }
-            }
-
-            if max_idx != i {
-                (self.data[i], self.data[max_idx]) = (self.data[max_idx], self.data[i]);
-                (inv[i], inv[max_idx]) = (inv[max_idx], inv[i]);
-            }
-
-            for j in 0..N {
-                self.data[i][j] /= max_val;
-                inv[i][j] /= max_val;
-            }
-
-            for j in (i + 1)..N {
-                let m = self.data[j][i];
-                for k in 0..N {
-                    self.data[j][k] -= self.data[i][k] * m;
-                    inv.data[j][k] -= inv.data[i][k] * m;
-                }
-            }
-        }
-
-        for i in 0..N {
-            for j in (i + 1)..N {
-                let m = self.data[N - j - 1][N - i - 1];
-                for k in 0..N {
-                    self.data[N - j - 1][k] -= self.data[N - i - 1][k] * m;
-                    inv.data[N - j - 1][k] -= inv.data[N - i - 1][k] * m;
-                }
-            }
-        }
-
-        Ok(inv)
+    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
+        ArrayArrayStorage((&uninit as *const _ as *const [_; L]).read())
     }
 }
 
-pub(crate) fn commutator<T: Copy, const N: usize>(
-    a: Matrix<T, N, N>,
-    b: Matrix<T, N, N>,
-) -> Matrix<T, N, N>
+impl<C: Dim, L: Dim> ArrayAllocator<Dyn, C, L> for DefaultAllocator {
+    type Buffer<T: Scalar> = UnsizedMatrixArray<T, Dyn, C, L>;
+    type BufferUninit<T: Scalar> = UnsizedMatrixArray<MaybeUninit<T>, Dyn, C, L>;
+
+    fn allocate_uninit<T: Scalar>(nrows: Dyn, ncols: C, length: L) -> Self::BufferUninit<T> {
+        UnsizedMatrixArray::new_with(nrows, ncols, length, MaybeUninit::uninit)
+    }
+
+    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
+        let UnsizedMatrixArray {
+            data,
+            rows,
+            columns,
+            length,
+        } = uninit;
+
+        UnsizedMatrixArray {
+            data: data as *mut T,
+            rows,
+            columns,
+            length,
+        }
+    }
+}
+
+impl<const R: usize, L: Dim> ArrayAllocator<Const<R>, Dyn, L> for DefaultAllocator {
+    type Buffer<T: Scalar> = UnsizedMatrixArray<T, Const<R>, Dyn, L>;
+    type BufferUninit<T: Scalar> = UnsizedMatrixArray<MaybeUninit<T>, Const<R>, Dyn, L>;
+
+    fn allocate_uninit<T: Scalar>(nrows: Const<R>, ncols: Dyn, length: L) -> Self::BufferUninit<T> {
+        UnsizedMatrixArray::new_with(nrows, ncols, length, MaybeUninit::uninit)
+    }
+
+    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
+        let UnsizedMatrixArray {
+            data,
+            rows,
+            columns,
+            length,
+        } = uninit;
+
+        UnsizedMatrixArray {
+            data: data as *mut T,
+            rows,
+            columns,
+            length,
+        }
+    }
+}
+
+impl<const R: usize, const C: usize> ArrayAllocator<Const<R>, Const<C>, Dyn> for DefaultAllocator {
+    type Buffer<T: Scalar> = UnsizedMatrixArray<T, Const<R>, Const<C>, Dyn>;
+    type BufferUninit<T: Scalar> = UnsizedMatrixArray<MaybeUninit<T>, Const<R>, Const<C>, Dyn>;
+
+    fn allocate_uninit<T: Scalar>(
+        nrows: Const<R>,
+        ncols: Const<C>,
+        length: Dyn,
+    ) -> Self::BufferUninit<T> {
+        UnsizedMatrixArray::new_with(nrows, ncols, length, MaybeUninit::uninit)
+    }
+
+    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
+        let UnsizedMatrixArray {
+            data,
+            rows,
+            columns,
+            length,
+        } = uninit;
+
+        UnsizedMatrixArray {
+            data: data as *mut T,
+            rows,
+            columns,
+            length,
+        }
+    }
+}
+
+impl<T: Scalar, R: Dim, C: Dim, L: Dim>
+    MatrixArray<T, R, C, L, <DefaultAllocator as ArrayAllocator<R, C, L>>::Buffer<T>>
 where
-    Matrix<T, N, N>: Matmul<Matrix<T, N, N>> + Sub<Matrix<T, N, N>, Output = Matrix<T, N, N>>,
+    DefaultAllocator: ArrayAllocator<R, C, L>,
 {
-    a.matmul(b) - b.matmul(a)
-}
+    pub(crate) fn new_with(rows: R, columns: C, length: L, mut f: impl FnMut() -> T) -> Self {
+        let mut data =
+            <DefaultAllocator as ArrayAllocator<R, C, L>>::allocate_uninit(rows, columns, length);
 
-impl<T, const ROWS: usize, const COLUMNS: usize> Index<usize> for Matrix<T, ROWS, COLUMNS> {
-    type Output = [T; ROWS];
+        for i in 0..length.value() {
+            for c in 0..columns.value() {
+                for r in 0..rows.value() {
+                    Uninit::init(unsafe { data.get_unchecked_mut(r, c, i) }, f())
+                }
+            }
+        }
 
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.data[index]
+        MatrixArray {
+            data: unsafe { <DefaultAllocator as ArrayAllocator<_, _, _>>::assume_init(data) },
+            _phantom: PhantomData {},
+        }
     }
 }
 
-impl<T, const ROWS: usize, const COLUMNS: usize> IndexMut<usize> for Matrix<T, ROWS, COLUMNS> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.data[index]
+pub(crate) struct UnsizedMatrixArray<T, R: Dim, C: Dim, L: Dim> {
+    data: *mut T,
+    rows: R,
+    columns: C,
+    length: L,
+}
+
+impl<T, R: Dim, C: Dim, L: Dim> UnsizedMatrixArray<T, R, C, L> {
+    fn new_with(rows: R, columns: C, length: L, f: impl FnMut() -> T) -> Self {
+        let mut data = Vec::new();
+        let l = rows.value() * columns.value() * length.value();
+        data.reserve_exact(l);
+        data.resize_with(l, f);
+
+        let data: &mut [T] = Box::<[T]>::leak(data.into_boxed_slice());
+
+        assert_eq!(data.len(), rows.value() * columns.value() * length.value());
+
+        UnsizedMatrixArray {
+            data: data.as_mut_ptr(),
+            rows,
+            columns,
+            length,
+        }
     }
 }
 
-impl<T: Copy + Zero, const N: usize, const M: usize> Add<Matrix<T, N, M>> for Matrix<T, N, M>
+impl<T, R: Dim, C: Dim, L: Dim> Drop for UnsizedMatrixArray<T, R, C, L> {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::<[T]>::from_raw(core::slice::from_raw_parts_mut(
+                self.data,
+                self.rows.value() * self.columns.value() * self.length.value(),
+            )))
+        };
+    }
+}
+
+unsafe impl<T, R: Dim, C: Dim, L: Dim> ArrayStorage<T, R, C, L> for UnsizedMatrixArray<T, R, C, L> {
+    fn ptr(&self) -> *const T {
+        self.data
+    }
+
+    fn ptr_mut(&mut self) -> *mut T {
+        self.data
+    }
+
+    fn shape(&self) -> (R, C, L) {
+        (self.rows, self.columns, self.length)
+    }
+
+    unsafe fn get_unchecked_mut(&mut self, r: usize, c: usize, i: usize) -> &mut T {
+        &mut *self
+            .data
+            .add(r + c * self.rows.value() + i * self.columns.value() * self.rows.value())
+    }
+}
+
+impl<T, R, C, L, S: ArrayStorage<T, R, C, L>> MatrixArray<T, R, C, L, S> {
+    pub(crate) fn shape(&self) -> (R, C, L) {
+        self.data.shape()
+    }
+}
+
+impl<T: Scalar, R: Dim, C: Dim, L: Dim, S: ArrayStorage<T, R, C, L>> MatrixArray<T, R, C, L, S> {
+    pub(crate) fn index(
+        &self,
+        index: usize,
+    ) -> nalgebra::Matrix<T, R, C, ViewStorage<T, R, C, Const<1>, R>> {
+        let (rows, columns, length) = self.data.shape();
+        let matrix_size = columns.value() * rows.value();
+        let data = unsafe {
+            core::slice::from_raw_parts(
+                self.data.ptr(),
+                columns.value() * rows.value() * length.value(),
+            )
+        };
+
+        nalgebra::Matrix::from_data(unsafe {
+            ViewStorage::from_raw_parts(
+                data[index * matrix_size..(index + 1) * matrix_size].as_ptr(),
+                (rows, columns),
+                (Const::<1> {}, rows),
+            )
+        })
+    }
+
+    pub(crate) fn index_mut(
+        &mut self,
+        index: usize,
+    ) -> nalgebra::Matrix<T, R, C, ViewStorageMut<T, R, C, Const<1>, R>> {
+        let (rows, columns, length) = self.data.shape();
+        let matrix_size = columns.value() * rows.value();
+        let data = unsafe {
+            core::slice::from_raw_parts_mut(
+                self.data.ptr_mut(),
+                columns.value() * rows.value() * length.value(),
+            )
+        };
+
+        nalgebra::Matrix::from_data(unsafe {
+            ViewStorageMut::from_raw_parts(
+                data[index * matrix_size..(index + 1) * matrix_size].as_mut_ptr(),
+                (rows, columns),
+                (Const::<1> {}, rows),
+            )
+        })
+    }
+}
+
+impl<const L: usize, T: Scalar + Clone, N: Dim, M: Dim, S: Storage<T, N, M>>
+    From<[Matrix<T, N, M, S>; L]> for OMatrixArray<T, N, M, Const<L>>
 where
-    T: Add<T, Output = T>,
+    DefaultAllocator: ArrayAllocator<N, M, Const<L>>,
 {
-    type Output = Matrix<T, N, M>;
-
-    #[inline(always)]
-    fn add(self, rhs: Matrix<T, N, M>) -> Self::Output {
-        let mut result = Matrix {
-            data: [[T::zero(); N]; M],
+    fn from(value: [Matrix<T, N, M, S>; L]) -> Self {
+        let shape = if L == 0 {
+            (N::from_usize(0), M::from_usize(0))
+        } else {
+            value[0].shape_generic()
         };
 
-        for i in 0..M {
-            for j in 0..N {
-                result[i][j] = self[i][j] + rhs[i][j];
+        let mut data = <DefaultAllocator as ArrayAllocator<_, _, _>>::allocate_uninit(
+            shape.0, shape.1, Const::<L>,
+        );
+
+        for i in 0..L {
+            for c in 0..shape.1.value() {
+                for r in 0..shape.1.value() {
+                    Uninit::init(
+                        unsafe { data.get_unchecked_mut(r, c, i) },
+                        value[i].index((r, c)).clone(),
+                    )
+                }
             }
         }
 
-        result
-    }
-}
-
-impl<T: Copy + Zero, const N: usize, const M: usize> Sub<Matrix<T, N, M>> for Matrix<T, N, M>
-where
-    T: Sub<T, Output = T>,
-{
-    type Output = Matrix<T, N, M>;
-
-    #[inline(always)]
-    fn sub(self, rhs: Matrix<T, N, M>) -> Self::Output {
-        let mut result = Matrix {
-            data: [[T::zero(); N]; M],
-        };
-
-        for i in 0..M {
-            for j in 0..N {
-                result[i][j] = self[i][j] - rhs[i][j];
-            }
+        MatrixArray {
+            data: unsafe { <DefaultAllocator as ArrayAllocator<_, _, _>>::assume_init(data) },
+            _phantom: PhantomData {},
         }
-
-        result
-    }
-}
-
-impl<
-        T: Copy + Zero + Mul<C, Output = T> + Mul<T, Output = T>,
-        C: Copy,
-        const N: usize,
-        const M: usize,
-    > Mul<C> for Matrix<T, N, M>
-{
-    type Output = Matrix<T, N, M>;
-
-    fn mul(self, rhs: C) -> Self::Output {
-        let mut result = Matrix {
-            data: [[T::zero(); N]; M],
-        };
-
-        for i in 0..M {
-            for j in 0..N {
-                result[i][j] = self[i][j] * rhs;
-            }
-        }
-
-        result
     }
 }
 
@@ -229,16 +363,40 @@ const T18_COEFFICIENTS: [[f64; 5]; 5] = [
     ],
 ];
 
-impl<const N: usize> Matrix<f64, N, N> {
-    pub(crate) fn exp(&mut self, step: f64) {
-        *self = *self * step;
+pub(crate) trait Exp {
+    fn exp(&mut self);
+}
 
-        let norm = self
-            .data
-            .iter()
-            .map(|&x| x.iter().map(|&x| x.abs()).sum())
-            .reduce(f64::max)
-            .expect("at least one item");
+pub(crate) fn assign_matrix<T: Scalar, N: Dim, M: Dim>(
+    m1: &mut nalgebra::Matrix<T, N, M, impl StorageMut<T, N, M>>,
+    m2: nalgebra::Matrix<T, N, M, impl Storage<T, N, M>>,
+) {
+    assert_eq!(m1.shape_generic(), m2.shape_generic());
+
+    for (e1, e2) in m1.iter_mut().zip(m2.into_iter()) {
+        *e1 = e2.clone()
+    }
+}
+
+impl<T: ComplexField, N: Dim, S: StorageMut<T, N, N>> Exp for nalgebra::Matrix<T, N, N, S>
+where
+    DefaultAllocator: Allocator<N, N>,
+{
+    fn exp(&mut self) {
+        assert_eq!(self.nrows(), self.ncols());
+
+        let norm: f64 = self
+            .column_iter()
+            .map(|x| {
+                x.iter().map(|x| x.clone().abs()).fold(
+                    <T::RealField as SupersetOf<f64>>::from_subset(&0.),
+                    <T::RealField as Add<T::RealField>>::add,
+                )
+            })
+            .reduce(<T::RealField as RealField>::max)
+            .expect("at least one item")
+            .to_subset()
+            .expect("should be real");
 
         let (mantissa, mut exponent, _) = norm.integer_decode();
 
@@ -246,133 +404,63 @@ impl<const N: usize> Matrix<f64, N, N> {
             .expect("max 64 leading zeroes");
 
         if exponent > 0 {
-            *self = *self * (2.).powi((-exponent).into());
+            *self *= T::from_subset(&f64::powi(2., (-exponent).into()));
         }
 
-        let eye = Self::eye();
-        let a2 = self.matmul(*self);
-        let a3 = a2.matmul(*self);
-        let a6 = a3.matmul(a3);
+        let eye = &nalgebra::Matrix::<T, N, N, _>::identity_generic(
+            self.shape_generic().0,
+            self.shape_generic().1,
+        );
+        let a2 = &(&*self * &*self);
+        let a3 = &(a2 * &*self);
+        let a6 = &(a3 * a3);
 
-        let b1 = eye * T18_COEFFICIENTS[0][0]
-            + *self * T18_COEFFICIENTS[0][1]
-            + a2 * T18_COEFFICIENTS[0][2]
-            + a3 * T18_COEFFICIENTS[0][3]
-            + a6 * T18_COEFFICIENTS[0][4];
-        let b2 = eye * T18_COEFFICIENTS[1][0]
-            + *self * T18_COEFFICIENTS[1][1]
-            + a2 * T18_COEFFICIENTS[1][2]
-            + a3 * T18_COEFFICIENTS[1][3]
-            + a6 * T18_COEFFICIENTS[1][4];
-        let b3 = eye * T18_COEFFICIENTS[2][0]
-            + *self * T18_COEFFICIENTS[2][1]
-            + a2 * T18_COEFFICIENTS[2][2]
-            + a3 * T18_COEFFICIENTS[2][3]
-            + a6 * T18_COEFFICIENTS[2][4];
-        let b4 = eye * T18_COEFFICIENTS[3][0]
-            + *self * T18_COEFFICIENTS[3][1]
-            + a2 * T18_COEFFICIENTS[3][2]
-            + a3 * T18_COEFFICIENTS[3][3]
-            + a6 * T18_COEFFICIENTS[3][4];
-        let b5 = eye * T18_COEFFICIENTS[4][0]
-            + *self * T18_COEFFICIENTS[4][1]
-            + a2 * T18_COEFFICIENTS[4][2]
-            + a3 * T18_COEFFICIENTS[4][3]
-            + a6 * T18_COEFFICIENTS[4][4];
+        let b1 = eye * T::from_subset(&(T18_COEFFICIENTS[0][0]))
+            + &*self * T::from_subset(&(T18_COEFFICIENTS[0][1]))
+            + a2 * T::from_subset(&(T18_COEFFICIENTS[0][2]))
+            + a3 * T::from_subset(&(T18_COEFFICIENTS[0][3]))
+            + a6 * T::from_subset(&(T18_COEFFICIENTS[0][4]));
+        let b2 = eye * T::from_subset(&(T18_COEFFICIENTS[1][0]))
+            + &*self * T::from_subset(&(T18_COEFFICIENTS[1][1]))
+            + a2 * T::from_subset(&(T18_COEFFICIENTS[1][2]))
+            + a3 * T::from_subset(&(T18_COEFFICIENTS[1][3]))
+            + a6 * T::from_subset(&(T18_COEFFICIENTS[1][4]));
+        let b3 = eye * T::from_subset(&(T18_COEFFICIENTS[2][0]))
+            + &*self * T::from_subset(&(T18_COEFFICIENTS[2][1]))
+            + a2 * T::from_subset(&(T18_COEFFICIENTS[2][2]))
+            + a3 * T::from_subset(&(T18_COEFFICIENTS[2][3]))
+            + a6 * T::from_subset(&(T18_COEFFICIENTS[2][4]));
+        let b4 = eye * T::from_subset(&(T18_COEFFICIENTS[3][0]))
+            + &*self * T::from_subset(&(T18_COEFFICIENTS[3][1]))
+            + a2 * T::from_subset(&(T18_COEFFICIENTS[3][2]))
+            + a3 * T::from_subset(&(T18_COEFFICIENTS[3][3]))
+            + a6 * T::from_subset(&(T18_COEFFICIENTS[3][4]));
+        let b5 = eye * T::from_subset(&(T18_COEFFICIENTS[4][0]))
+            + &*self * T::from_subset(&(T18_COEFFICIENTS[4][1]))
+            + a2 * T::from_subset(&(T18_COEFFICIENTS[4][2]))
+            + a3 * T::from_subset(&(T18_COEFFICIENTS[4][3]))
+            + a6 * T::from_subset(&(T18_COEFFICIENTS[4][4]));
 
-        let a9 = b1.matmul(b5) + b4;
+        let a9 = &(b1 * b5 + b4);
 
-        *self = b2 + (b3 + a9).matmul(a9);
+        assign_matrix(self, b2 + (b3 + a9) * a9);
 
         if exponent > 0 {
             for _ in 0..exponent {
-                *self = self.matmul(*self);
+                assign_matrix(self, &*self * &*self);
             }
         }
     }
 }
 
-impl<T, const ROWS: usize, const COLUMNS: usize> From<[T; ROWS * COLUMNS]>
-    for Matrix<T, ROWS, COLUMNS>
+pub(crate) fn commutator<T: Scalar + Field, N: Dim, S1: Storage<T, N, N>, S2: Storage<T, N, N>>(
+    m1: impl Borrow<Matrix<T, N, N, S1>>,
+    m2: impl Borrow<Matrix<T, N, N, S2>>,
+) -> Matrix<T, N, N, <DefaultAllocator as Allocator<N, N>>::Buffer<T>>
+where
+    DefaultAllocator: nalgebra::allocator::Allocator<N, N>,
 {
-    fn from(data: [T; ROWS * COLUMNS]) -> Self {
-        let res = Self {
-            data: unsafe { transmute_copy(&data) },
-        };
-
-        mem::forget(data);
-
-        res
-    }
-}
-
-impl<T, const ROWS: usize, const COLUMNS: usize> From<[[T; ROWS]; COLUMNS]>
-    for Matrix<T, ROWS, COLUMNS>
-{
-    fn from(data: [[T; ROWS]; COLUMNS]) -> Self {
-        Self { data }
-    }
-}
-
-impl<T, const ROWS: usize, const COLUMNS: usize> From<Matrix<T, ROWS, COLUMNS>>
-    for [T; ROWS * COLUMNS]
-{
-    fn from(m: Matrix<T, ROWS, COLUMNS>) -> Self {
-        let res = unsafe { transmute_copy(&m.data) };
-
-        mem::forget(m);
-
-        res
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::linalg::Matrix;
-
-    fn compare_floats(f1: f64, f2: f64) -> bool {
-        u64::abs_diff(f1.to_bits(), f2.to_bits()) <= 2
-    }
-
-    fn compare_matrices<const N: usize, const M: usize>(
-        m1: Matrix<f64, N, M>,
-        m2: Matrix<f64, N, M>,
-    ) {
-        for i in 0..N {
-            for j in 0..M {
-                if !compare_floats(m1[i][j], m2[i][j]) {
-                    panic!("Matrices do not match\n{m1:?}\n{m2:?}");
-                }
-            }
-        }
-    }
-
-    fn check_inv<const N: usize>(m: Matrix<f64, N, N>, m_inv: Matrix<f64, N, N>) {
-        compare_matrices(m.inv().unwrap(), m_inv)
-    }
-
-    #[test]
-    fn inverse() {
-        check_inv(Matrix::<f64, 4, 4>::eye(), Matrix::<f64, 4, 4>::eye());
-        check_inv(
-            [[2., 2.], [3., 2.]].into(),
-            [[-1., 1.], [3. / 2., -1.]].into(),
-        );
-        check_inv(
-            [
-                [1., 2., 0., 0.],
-                [0., 1., 2., 0.],
-                [0., 0., 1., 2.],
-                [0., 0., 0., 1.],
-            ]
-            .into(),
-            [
-                [1., -2., 4., -8.],
-                [0., 1., -2., 4.],
-                [0., 0., 1., -2.],
-                [0., 0., 0., 1.],
-            ]
-            .into(),
-        );
-    }
+    let m1 = m1.borrow();
+    let m2 = m2.borrow();
+    m1 * m2 - m2 * m1
 }

@@ -1,22 +1,34 @@
 //! Systems of equations, interface and implementations
-use crate::{linalg::Matrix, stepper::StepMoments};
-use num::Float;
+use crate::{
+    linalg::{ArrayAllocator, OwnedArray},
+    stepper::StepMoments,
+};
+use nalgebra::{DefaultAllocator, Dim, DimName, DimSub, Field, OMatrix, Scalar};
 
-pub(crate) trait Moments<T: Float, G: ?Sized, const N: usize, const ORDER: usize> {
+pub(crate) trait Moments<T: Field + Scalar, G: ?Sized, N: Dim, Order: DimName>
+where
+    DefaultAllocator: ArrayAllocator<N, N, Order>,
+{
     fn evaluate_moments(
         &self,
         grid: &G,
         frequency: T,
-    ) -> impl ExactSizeIterator<Item = StepMoments<T, N, ORDER>>;
+    ) -> impl ExactSizeIterator<Item = StepMoments<T, N, Order, OwnedArray<T, N, N, Order>>>;
+
+    fn shape(&self) -> N;
 }
 
 pub(crate) trait GridLength<G: ?Sized> {
     fn len(&self, grid: &G) -> usize;
 }
 
-pub(crate) trait Boundary<T: Float, const N: usize, const N_INNER: usize> {
-    fn inner_boundary(&self, frequency: f64) -> Matrix<T, N, N_INNER>;
-    fn outer_boundary(&self, _frequency: f64) -> Matrix<T, N, { N - N_INNER }>;
+pub(crate) trait Boundary<T: Field + Scalar, N: Dim + nalgebra::DimSub<NInner>, NInner: Dim>
+where
+    DefaultAllocator: nalgebra::allocator::Allocator<N, NInner>,
+    DefaultAllocator: nalgebra::allocator::Allocator<N, <N as DimSub<NInner>>::Output>,
+{
+    fn inner_boundary(&self, frequency: T) -> OMatrix<T, N, NInner>;
+    fn outer_boundary(&self, _frequency: T) -> OMatrix<T, N, <N as DimSub<NInner>>::Output>;
 }
 
 #[expect(private_bounds)]
@@ -36,15 +48,32 @@ pub(crate) trait Boundary<T: Float, const N: usize, const N_INNER: usize> {
 /// - `N_INNER`: number of inner boundary conditioms
 /// - `ORDER`: order of stepping method. The lower the order, the less information needs to be
 ///   computed.
-pub trait System<T: Float, G: ?Sized, const N: usize, const N_INNER: usize, const ORDER: usize>:
-    Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER> + GridLength<G>
+pub trait System<
+    T: Field + Scalar,
+    G: ?Sized,
+    N: Dim + nalgebra::DimSub<NInner>,
+    NInner: Dim,
+    Order: DimName,
+>: Moments<T, G, N, Order> + Boundary<T, N, NInner> + GridLength<G> where
+    DefaultAllocator: ArrayAllocator<N, N, Order>,
+    DefaultAllocator: nalgebra::allocator::Allocator<N, NInner>,
+    DefaultAllocator: nalgebra::allocator::Allocator<N, <N as DimSub<NInner>>::Output>,
 {
 }
 
-impl<T: Float, G: ?Sized, const N: usize, const N_INNER: usize, const ORDER: usize, U>
-    System<T, G, N, N_INNER, ORDER> for U
+impl<
+        T: Field + Scalar,
+        G: ?Sized,
+        N: Dim + nalgebra::DimSub<NInner>,
+        NInner: Dim,
+        Order: DimName,
+        U,
+    > System<T, G, N, NInner, Order> for U
 where
-    U: Moments<T, G, N, ORDER> + Boundary<T, N, N_INNER> + GridLength<G>,
+    U: Moments<T, G, N, Order> + Boundary<T, N, NInner> + GridLength<G>,
+    DefaultAllocator: ArrayAllocator<N, N, Order>,
+    DefaultAllocator: nalgebra::allocator::Allocator<N, NInner>,
+    DefaultAllocator: nalgebra::allocator::Allocator<N, <N as DimSub<NInner>>::Output>,
 {
 }
 

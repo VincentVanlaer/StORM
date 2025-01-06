@@ -21,4 +21,6 @@ num = "0.4.1"
 clap = { version = "4.4.14", features = ["derive"] }
 thiserror = "1.0.64"
 hdf5 = { package = "hdf5-metno", version = "0.9.1" }
+nalgebra = { version = "=0.33.2", default-features = false, features = ["alloc"] }
+simba = { version = "0.9.0", default-features = false, features = ["std"] }
 # hdf5-metno-sys = { version = "*", features = ["static"] }

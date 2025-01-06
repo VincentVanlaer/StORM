@@ -1,5 +1,8 @@
+use nalgebra::Const;
+use nalgebra::OMatrix;
+
 use super::{Boundary, GridLength, Moments};
-use crate::linalg::Matrix;
+use crate::linalg::OwnedArray;
 use crate::model::StellarModel;
 use crate::stepper::StepMoments;
 use std::f64::consts::PI;
@@ -15,9 +18,11 @@ pub struct Rotating1D {
     u_upper: f64,
 }
 
+type FourMatrix = OMatrix<f64, Const<4>, Const<4>>;
+
 #[derive(Clone, Copy, Debug)]
 struct ModelPoint {
-    a: Matrix<f64, 4, 4>,
+    a: FourMatrix,
     c1: f64,
     rot: f64,
     x: f64,
@@ -30,7 +35,7 @@ impl Rotating1D {
         let ell = ell as f64;
         let mut components: Vec<_> = vec![
             ModelPoint {
-                a: [0.0f64; 16].into(),
+                a: [[0.0f64; 4]; 4].into(),
                 c1: 0.0,
                 x: 0.0,
                 rot: 0.0,
@@ -52,25 +57,25 @@ impl Rotating1D {
         c1[0] = value.mass / value.radius.powi(3) * 3.0 / (4.0 * PI * value.rho[0]);
 
         for (i, component) in components.iter_mut().enumerate() {
-            component.a[0][0] = v_gamma[i] - 1.0 - ell;
-            component.a[0][1] = -v_gamma[i];
-            component.a[0][2] = 0.0;
-            component.a[0][3] = 0.0;
+            *component.a.index_mut((0, 0)) = v_gamma[i] - 1.0 - ell;
+            *component.a.index_mut((0, 1)) = -v_gamma[i];
+            *component.a.index_mut((0, 2)) = 0.0;
+            *component.a.index_mut((0, 3)) = 0.0;
 
-            component.a[1][0] = -a_star[i];
-            component.a[1][1] = a_star[i] - u[i] + 3. - ell;
-            component.a[1][2] = 0.;
-            component.a[1][3] = -1.;
+            *component.a.index_mut((1, 0)) = -a_star[i];
+            *component.a.index_mut((1, 1)) = a_star[i] - u[i] + 3. - ell;
+            *component.a.index_mut((1, 2)) = 0.;
+            *component.a.index_mut((1, 3)) = -1.;
 
-            component.a[2][0] = 0.0;
-            component.a[2][1] = 0.0;
-            component.a[2][2] = 3. - u[i] - ell;
-            component.a[2][3] = 1.;
+            *component.a.index_mut((2, 0)) = 0.0;
+            *component.a.index_mut((2, 1)) = 0.0;
+            *component.a.index_mut((2, 2)) = 3. - u[i] - ell;
+            *component.a.index_mut((2, 3)) = 1.;
 
-            component.a[3][0] = u[i] * a_star[i];
-            component.a[3][1] = u[i] * v_gamma[i];
-            component.a[3][2] = ell * (ell + 1.);
-            component.a[3][3] = -u[i] + 2. - ell;
+            *component.a.index_mut((3, 0)) = u[i] * a_star[i];
+            *component.a.index_mut((3, 1)) = u[i] * v_gamma[i];
+            *component.a.index_mut((3, 2)) = ell * (ell + 1.);
+            *component.a.index_mut((3, 3)) = -u[i] + 2. - ell;
 
             component.rot = value.rot[i];
             component.c1 = c1[i];
@@ -120,7 +125,7 @@ impl ModelPointsIterator<'_> {
 }
 
 impl Iterator for ModelPointsIterator<'_> {
-    type Item = (f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>);
+    type Item = (f64, FourMatrix, FourMatrix);
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
@@ -145,15 +150,15 @@ impl Iterator for ModelPointsIterator<'_> {
                 let rel_rot =
                     2. * m * point.rot / (lambda * (omega - m * point.rot) + 2. * m * point.rot);
 
-                a[0][0] += -lambda * rel_rot;
-                a[0][1] += lambda.powi(2) / (omega_rsq * point.c1);
-                a[0][2] += lambda.powi(2) / (omega_rsq * point.c1);
+                *a.index_mut((0, 0)) += -lambda * rel_rot;
+                *a.index_mut((0, 1)) += lambda.powi(2) / (omega_rsq * point.c1);
+                *a.index_mut((0, 2)) += lambda.powi(2) / (omega_rsq * point.c1);
 
-                a[1][1] += lambda * rel_rot;
-                a[1][2] += lambda * rel_rot;
+                *a.index_mut((1, 1)) += lambda * rel_rot;
+                *a.index_mut((1, 2)) += lambda * rel_rot;
             }
 
-            a[1][0] += point.c1
+            *a.index_mut((1, 0)) += point.c1
                 * (omega - m * point.rot).powi(2)
                 * (1. - (2. * m * point.rot).powi(2) / omega_rsq);
 
@@ -205,12 +210,13 @@ struct IterWrapper<'a, G> {
     wrapped: G,
 }
 
-impl<
-        const ORDER: usize,
-        G: Fn((f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>)) -> StepMoments<f64, 4, ORDER>,
-    > Iterator for IterWrapper<'_, G>
+type FourStepMoments<const ORDER: usize> =
+    StepMoments<f64, Const<4>, Const<ORDER>, OwnedArray<f64, Const<4>, Const<4>, Const<ORDER>>>;
+
+impl<const ORDER: usize, G: Fn((f64, FourMatrix, FourMatrix)) -> FourStepMoments<ORDER>> Iterator
+    for IterWrapper<'_, G>
 {
-    type Item = crate::stepper::StepMoments<f64, 4, ORDER>;
+    type Item = FourStepMoments<ORDER>;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
@@ -221,10 +227,8 @@ impl<
     }
 }
 
-impl<
-        const ORDER: usize,
-        G: Fn((f64, Matrix<f64, 4, 4>, Matrix<f64, 4, 4>)) -> StepMoments<f64, 4, ORDER>,
-    > ExactSizeIterator for IterWrapper<'_, G>
+impl<const ORDER: usize, G: Fn((f64, FourMatrix, FourMatrix)) -> FourStepMoments<ORDER>>
+    ExactSizeIterator for IterWrapper<'_, G>
 {
     fn len(&self) -> usize {
         self.iter.len()
@@ -241,69 +245,85 @@ impl GridLength<GridScale> for Rotating1D {
     }
 }
 
-impl Moments<f64, GridScale, 4, 1> for Rotating1D {
+impl Moments<f64, GridScale, Const<4>, Const<1>> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &GridScale,
         frequency: f64,
-    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 1>> {
+    ) -> impl ExactSizeIterator<Item = FourStepMoments<1>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
             wrapped: |(delta, _s, i)| StepMoments {
                 delta,
-                moments: [i],
+                moments: [i].into(),
             },
         }
     }
+
+    fn shape(&self) -> Const<4> {
+        Const
+    }
 }
-impl Moments<f64, GridScale, 4, 2> for Rotating1D {
+impl Moments<f64, GridScale, Const<4>, Const<2>> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &GridScale,
         frequency: f64,
-    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 2>> {
+    ) -> impl ExactSizeIterator<Item = FourStepMoments<2>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
             wrapped: |(delta, s, i)| StepMoments {
                 delta,
-                moments: [i, s],
+                moments: [i, s].into(),
             },
         }
     }
+
+    fn shape(&self) -> Const<4> {
+        Const
+    }
 }
-impl Moments<f64, GridScale, 4, 3> for Rotating1D {
+impl Moments<f64, GridScale, Const<4>, Const<3>> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &GridScale,
         frequency: f64,
-    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 3>> {
+    ) -> impl ExactSizeIterator<Item = FourStepMoments<3>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
             wrapped: |(delta, s, i)| StepMoments {
                 delta,
-                moments: [i, s, [[0.0; 4]; 4].into()],
+                moments: [i, s, [[0.0; 4]; 4].into()].into(),
             },
         }
     }
+
+    fn shape(&self) -> Const<4> {
+        Const
+    }
 }
-impl Moments<f64, GridScale, 4, 4> for Rotating1D {
+impl Moments<f64, GridScale, Const<4>, Const<4>> for Rotating1D {
     fn evaluate_moments(
         &self,
         grid: &GridScale,
         frequency: f64,
-    ) -> impl ExactSizeIterator<Item = crate::stepper::StepMoments<f64, 4, 4>> {
+    ) -> impl ExactSizeIterator<Item = FourStepMoments<4>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
             wrapped: |(delta, s, i)| StepMoments {
                 delta,
-                moments: [i, s, [0.0; 16].into(), [0.0; 16].into()],
+                moments: [i, s, [[0.0; 4]; 4].into(), [[0.0; 4]; 4].into()].into(),
             },
         }
+    }
+
+    fn shape(&self) -> Const<4> {
+        Const
     }
 }
 
-impl Boundary<f64, 4, 2> for Rotating1D {
-    fn inner_boundary(&self, omega: f64) -> Matrix<f64, 4, 2> {
+impl Boundary<f64, Const<4>, Const<2>> for Rotating1D {
+    fn inner_boundary(&self, omega: f64) -> OMatrix<f64, Const<4>, Const<2>> {
         let l = self.ell;
         let lambda = l * (l + 1.);
         let m = self.m;
@@ -332,7 +352,7 @@ impl Boundary<f64, 4, 2> for Rotating1D {
         .into()
     }
 
-    fn outer_boundary(&self, _frequency: f64) -> Matrix<f64, 4, 2> {
+    fn outer_boundary(&self, _frequency: f64) -> OMatrix<f64, Const<4>, Const<2>> {
         [[1., -1., 0., 0.], [self.u_upper, 0., self.ell + 1., 1.]].into()
     }
 }

@@ -1,139 +1,235 @@
-use num::Float;
+use nalgebra::{
+    allocator::Allocator, ComplexField, Const, DefaultAllocator, Dim, Matrix, Scalar, ViewStorage,
+};
 
-use crate::linalg::{commutator, Matmul, Matrix};
+use crate::linalg::{assign_matrix, commutator, ArrayStorage, Exp, MatrixArray};
 
-pub(crate) struct StepMoments<T, const N: usize, const ORDER: usize> {
+pub(crate) struct StepMoments<T, N, Order, S> {
     pub delta: f64,
-    pub moments: [Matrix<T, N, N>; ORDER],
+    pub moments: MatrixArray<T, N, N, Order, S>,
 }
 
-pub(crate) struct Step<T, const N: usize> {
-    pub left: Matrix<T, N, N>,
-    pub right: Matrix<T, N, N>,
+pub(crate) struct Step<T, N, S> {
+    steps: MatrixArray<T, N, N, Const<2>, S>,
 }
 
-pub(crate) trait Stepper<T: Float, const N: usize, const ORDER: usize> {
-    fn step(&self, step_input: StepMoments<T, N, ORDER>) -> Step<T, N>;
+impl<T: Scalar, N: Dim, S: ArrayStorage<T, N, N, Const<2>>> Step<T, N, S> {
+    pub(crate) fn new(steps: MatrixArray<T, N, N, Const<2>, S>) -> Self {
+        Step { steps }
+    }
+
+    pub(crate) fn left(&self) -> Matrix<T, N, N, ViewStorage<T, N, N, Const<1>, N>> {
+        self.steps.index(0)
+    }
+
+    pub(crate) fn right(&self) -> Matrix<T, N, N, ViewStorage<T, N, N, Const<1>, N>> {
+        self.steps.index(1)
+    }
+}
+
+pub(crate) trait Stepper<T, N, Order> {
+    fn step<S1: ArrayStorage<T, N, N, Order>, S2: ArrayStorage<T, N, N, Const<2>>>(
+        &self,
+        step_input: StepMoments<T, N, Order, S1>,
+        step: &mut Step<T, N, S2>,
+    );
 }
 
 pub(crate) struct Magnus2 {}
 
-impl<const N: usize> Stepper<f64, N, 1> for Magnus2 {
-    fn step(&self, step_input: StepMoments<f64, N, 1>) -> Step<f64, N> {
-        let [mut omega] = step_input.moments;
+impl<T: ComplexField, N: Dim> Stepper<T, N, Const<1>> for Magnus2
+where
+    DefaultAllocator: Allocator<N, N>,
+{
+    fn step<S1: ArrayStorage<T, N, N, Const<1>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+        &self,
+        mut step_input: StepMoments<T, N, Const<1>, S1>,
+        step: &mut Step<T, N, S2>,
+    ) {
+        let mut omega = step_input.moments.index_mut(0);
 
-        omega.exp(step_input.delta);
+        omega *= T::from_subset(&(step_input.delta));
+        omega.exp();
 
-        Step {
-            left: omega,
-            right: Matrix::eye() * (-1.),
-        }
+        assign_matrix(&mut step.steps.index_mut(0), omega);
+        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
     }
 }
 
 pub(crate) struct Magnus4 {}
 
-impl<const N: usize> Stepper<f64, N, 2> for Magnus4 {
-    fn step(&self, step_input: StepMoments<f64, N, 2>) -> Step<f64, N> {
-        let [b1, b2] = step_input.moments;
-        let delta = step_input.delta;
+impl<T: ComplexField, N: Dim> Stepper<T, N, Const<2>> for Magnus4
+where
+    DefaultAllocator: Allocator<N, N>,
+{
+    fn step<S1: ArrayStorage<T, N, N, Const<2>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+        &self,
+        step_input: StepMoments<T, N, Const<2>, S1>,
+        step: &mut Step<T, N, S2>,
+    ) {
+        let b1 = step_input.moments.index(0);
+        let b2 = step_input.moments.index(1);
+        let delta = T::from_subset(&(step_input.delta));
 
-        let mut omega = b1 - commutator(b1, b2) * (1.0 / 12.0) * delta;
+        let b1 = &(b1 * delta.clone());
+        let b2 = &(b2 * delta.clone());
 
-        omega.exp(delta);
+        let mut omega = b1 - commutator(b1, b2) * T::from_subset(&(1.0 / 12.0));
 
-        Step {
-            left: omega,
-            right: Matrix::eye() * (-1.),
-        }
+        omega.exp();
+
+        assign_matrix(&mut step.steps.index_mut(0), omega);
+        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
     }
 }
 
 pub(crate) struct Magnus6 {}
 
-impl<const N: usize> Stepper<f64, N, 3> for Magnus6 {
-    fn step(&self, step_input: StepMoments<f64, N, 3>) -> Step<f64, N> {
-        let [b1, b2, b3] = step_input.moments;
-        let delta = step_input.delta;
+impl<T: ComplexField, N: Dim> Stepper<T, N, Const<3>> for Magnus6
+where
+    DefaultAllocator: Allocator<N, N>,
+{
+    fn step<S1: ArrayStorage<T, N, N, Const<3>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+        &self,
+        step_input: StepMoments<T, N, Const<3>, S1>,
+        step: &mut Step<T, N, S2>,
+    ) {
+        let b1 = step_input.moments.index(0);
+        let b2 = step_input.moments.index(1);
+        let b3 = step_input.moments.index(2);
+        let delta = T::from_subset(&(step_input.delta));
 
-        let c1 = commutator(b1, b2) * delta; // delta
-        let c2 = commutator(b1, b3 * 2. + c1) * (-1.0 / 60.) * delta; // delta
+        let b1 = &(b1 * delta.clone());
+        let b2 = &(b2 * delta.clone());
+        let b3 = &(b3 * delta.clone());
 
-        let mut omega =
-            b1 + b3 * (1. / 12.) + commutator(b1 * (-20.) - b3 + c1, b2 + c2) * (delta / 240.); // delta
+        let c1 = &commutator(b1, b2);
+        let c2 = &(commutator(b1, b3 * T::from_subset(&(2.)) + c1) * T::from_subset(&(-1. / 60.)));
 
-        omega.exp(delta);
+        let mut omega = b1
+            + b3 * T::from_subset(&(1. / 12.))
+            + commutator(b1 * T::from_subset(&(-20.)) - b3 + c1, b2 + c2)
+                * T::from_subset(&(1. / 240.));
 
-        Step {
-            left: omega,
-            right: Matrix::eye() * (-1.),
-        }
+        omega.exp();
+
+        assign_matrix(&mut step.steps.index_mut(0), omega);
+        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
     }
 }
 
 pub(crate) struct Magnus8 {}
 
-impl<const N: usize> Stepper<f64, N, 4> for Magnus8 {
-    fn step(&self, step_input: StepMoments<f64, N, 4>) -> Step<f64, N> {
-        let [b1, b2, b3, b4] = step_input.moments;
-        let delta = step_input.delta;
+impl<T: ComplexField, N: Dim> Stepper<T, N, Const<4>> for Magnus8
+where
+    DefaultAllocator: Allocator<N, N>,
+{
+    fn step<S1: ArrayStorage<T, N, N, Const<4>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+        &self,
+        step_input: StepMoments<T, N, Const<4>, S1>,
+        step: &mut Step<T, N, S2>,
+    ) {
+        let b1 = step_input.moments.index(0);
+        let b2 = step_input.moments.index(1);
+        let b3 = step_input.moments.index(2);
+        let b4 = step_input.moments.index(2);
+        let delta = T::from_subset(&step_input.delta);
 
-        let s1 = commutator(b1 + b3 * (1. / 28.), b2 + b4 * (3. / 28.)) * (-1. / 28.) * delta;
-        let r1 = commutator(b1, b3 * (-1. / 14.) + s1) * (1. / 3.) * delta;
-        let s2 = commutator(b1 + b3 * (1. / 28.) + s1, b2 + b4 * (3. / 28.) + r1) * delta;
-        let s2_prime = commutator(b2, s1) * delta;
-        let r2 = commutator(b1 + s1 * (5. / 4.), b3 * 2.0 + s2 + s2_prime * 0.5) * delta;
-        let s3 = commutator(
-            b1 + b3 * (1. / 12.) + s1 * (-7. / 3.) + s2 * (-1. / 6.),
-            b2 * (-9.) + b4 * (-9. / 4.) + r1 * 63. + r2,
-        ) * delta; // delta
+        let b1 = &(b1 * delta.clone());
+        let b2 = &(b2 * delta.clone());
+        let b3 = &(b3 * delta.clone());
+        let b4 = &(b4 * delta.clone());
 
-        let mut omega = b1 + b3 * (1. / 12.) + s2 * (-7. / 120.) + s3 * (1. / 360.); // delta
+        let s1 = &(commutator(
+            b1 + b3 * T::from_subset(&(1. / 28.)),
+            b2 + b4 * T::from_subset(&(3. / 28.)),
+        ) * T::from_subset(&(-1. / 28.)));
+        let r1 =
+            &(commutator(b1, b3 * T::from_subset(&(-1. / 14.)) + s1) * T::from_subset(&(1. / 3.)));
+        let s2 = &commutator(
+            b1 + b3 * T::from_subset(&(1. / 28.)) + s1,
+            b2 + b4 * T::from_subset(&(3. / 28.)) + r1,
+        );
+        let s2_prime = &commutator(b2, s1);
+        let r2 = &commutator(
+            b1 + s1 * T::from_subset(&(5. / 4.)),
+            b3 * T::from_subset(&(2.0)) + s2 + s2_prime * T::from_subset(&(0.5)),
+        );
+        let s3 = &(commutator(
+            b1 + b3 * T::from_subset(&(1. / 12.))
+                + s1 * T::from_subset(&(-7. / 3.))
+                + s2 * T::from_subset(&(-1. / 6.)),
+            b2 * T::from_subset(&(-9.))
+                + b4 * T::from_subset(&(-9. / 4.))
+                + r1 * T::from_subset(&(63.))
+                + r2,
+        ));
 
-        omega.exp(delta);
+        let mut omega = b1
+            + b3 * T::from_subset(&(1. / 12.))
+            + s2 * T::from_subset(&(-7. / 120.))
+            + s3 * T::from_subset(&(1. / 360.));
 
-        Step {
-            left: omega,
-            right: Matrix::eye() * (-1.),
-        }
+        omega.exp();
+
+        assign_matrix(&mut step.steps.index_mut(0), omega);
+        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
     }
 }
 
 pub(crate) struct Colloc2 {}
 
-impl<const N: usize> Stepper<f64, N, 1> for Colloc2 {
+impl<T: ComplexField, N: Dim> Stepper<T, N, Const<1>> for Colloc2
+where
+    DefaultAllocator: Allocator<N, N>,
+{
     #[inline(always)]
-    fn step(&self, step_input: StepMoments<f64, N, 1>) -> Step<f64, N> {
-        let [b1] = step_input.moments;
+    fn step<S1: ArrayStorage<T, N, N, Const<1>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+        &self,
+        step_input: StepMoments<T, N, Const<1>, S1>,
+        step: &mut Step<T, N, S2>,
+    ) {
+        let b1 = step_input.moments.index(0);
+        let delta = T::from_subset(&(step_input.delta));
 
-        let c1 = b1 * step_input.delta * 0.5;
-        let c2 = Matrix::eye();
+        let b1 = &(b1 * delta.clone());
 
-        Step {
-            left: c1 + c2,
-            right: c1 - c2,
-        }
+        let c1 = &(b1 * T::from_subset(&(0.5)));
+        let c2 = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
+
+        assign_matrix(&mut step.steps.index_mut(0), c1 + c2);
+        assign_matrix(&mut step.steps.index_mut(1), c1 - c2);
     }
 }
 
 pub(crate) struct Colloc4 {}
 
-impl<const N: usize> Stepper<f64, N, 2> for Colloc4 {
+impl<T: ComplexField, N: Dim> Stepper<T, N, Const<2>> for Colloc4
+where
+    DefaultAllocator: Allocator<N, N>,
+{
     #[inline(always)]
-    fn step(&self, step_input: StepMoments<f64, N, 2>) -> Step<f64, N> {
-        let [b1, b2] = step_input.moments;
-        let delta = step_input.delta;
+    fn step<S1: ArrayStorage<T, N, N, Const<2>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+        &self,
+        step_input: StepMoments<T, N, Const<2>, S1>,
+        step: &mut Step<T, N, S2>,
+    ) {
+        let b1 = step_input.moments.index(0);
+        let b2 = step_input.moments.index(1);
+        let delta = T::from_subset(&(step_input.delta));
 
-        let b2 = b2 * (1. / 12.);
+        let b1 = &(b1 * delta.clone());
+        let b2 = &(b2 * delta.clone());
 
-        let inv_mat = b1.matmul((Matrix::eye() + b2 * delta).inv().unwrap()) * delta;
+        let b2 = &(b2 * T::from_subset(&(1. / 12.)));
+        let eye = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
 
-        let c1 = (b1 - inv_mat.matmul(b2)) * (delta * 0.5);
-        let c2 = (b2 - inv_mat.matmul(b1) * (1. / 12.)) * delta - Matrix::eye();
+        let inv_mat = &(b1 * (eye + b2).try_inverse().unwrap());
 
-        Step {
-            left: c1 - c2,
-            right: c1 + c2,
-        }
+        let c1 = &((b1 - inv_mat * b2) * T::from_subset(&(0.5)));
+        let c2 = &((b2 - inv_mat * b1) * T::from_subset(&(1. / 12.)) - eye);
+
+        assign_matrix(&mut step.steps.index_mut(0), c1 + c2);
+        assign_matrix(&mut step.steps.index_mut(1), c1 - c2);
     }
 }
