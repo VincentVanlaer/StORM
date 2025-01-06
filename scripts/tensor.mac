@@ -1,0 +1,49 @@
+/* [wxMaxima: input   start ] */
+load("itensor");
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+display2d: false;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+imetric(g);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+depends(x, t);
+depends(v, x);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+eqn: a([-i]) = (covdiff(v([-i]), j) - idiff(v([-i]), j)) * diff(x([-j]), t)$
+ishow(eqn);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+calc: ic_convert(eqn);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+eqn: a([-i]) = idiff(v([-i]), j) * diff(x([-j]), t)$
+ishow(eqn);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+calc: ic_convert(eqn);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+
+/* [wxMaxima: input   end   ] */
+
+
+

@@ -1,0 +1,148 @@
+kill(all)$
+load("ctensor");
+load("vect");
+
+declare(R, constant)$
+assume(R > 0)$
+declare(M, constant)$
+declare(G, constant)$
+declare(l, constant)$
+declare(m, constant)$
+
+assume(r >= 0)$
+assume(x >= 0)$
+assume(theta >= 0)$
+assume(theta <= %pi)$
+assume(sin(theta) >= 0)$
+assume(ε(x, theta) >= 0)$
+/* r is a strictly increasing function of x */
+assume((x * diff(ε(x, theta), x) + 1 + ε(x, theta)) > 0)$
+
+rho: ρ$
+gamma1: Γ[1]$
+Omega: Ω$
+omega: ω$
+
+rot_vec: [0, 0, Omega];
+
+if true then (
+    a: x * R,
+    if false then
+        e: 1
+    else
+        e: 1 + ε(x, theta),
+    r: a * e,
+    transforms: [
+        r * sin(theta) * cos(phi),
+        r * sin(theta) * sin(phi),
+        r * cos(theta)
+    ],
+    variables: [x, theta, phi]
+) else (
+    transforms: [
+        r * cos(phi),
+        r * sin(phi),
+        z
+    ],
+    variables: [r, z, phi]
+)$
+
+
+depends(deltar_s, [variables[1], variables[2]]);
+depends(Ω, [variables[1], variables[2]]);
+depends(ρ, [variables[1], variables[2]]);
+depends(P, [variables[1], variables[2]]);
+depends(Γ, [variables[1], variables[2]]);
+depends(Phi, [variables[1], variables[2]]);
+
+J0: jacobian(transforms, variables)$
+J1: trigsimp(invert(J0))$
+
+s: block([maperror: false],  map(factor, trigsimp(sqrt(transforms[1]**2 + transforms[2]**2))) );
+es: factor(trigsimp(J1 . ([transforms[1], transforms[2], 0] / s)));
+rot_vec: args(transpose(map(factor, signum(trigsimp(determinant(J1))) * (J1 . rot_vec))))[1];
+
+ct_coordsys(append(transforms, [variables]))$
+
+cmetric()$
+christof(false)$
+
+lg: factor(trigsimp(lg))$
+ug: factor(trigsimp(ug))$
+gdet: factor(trigsimp(gdet))$
+
+factor(trigsimp(ug * gdet));
+
+/* Equilibrium fluid element */
+v(t) := [0, 0, Omega]$
+pos(t) := [x_init, theta_init, phi_init] + [0, 0, t * Omega]$
+
+/* Metric dependent functions */
+
+
+/* nabla upper */
+nabla(p) := block([dp],
+    dp: makelist(0, x, 0, dim - 1),
+    for i thru dim do
+        dp[i]: diff(p,ct_coords[i]),
+    return(ug . dp)
+)$
+
+/* material derivative: p · ∇s */
+mcdiffv(p, s) := block([ds],
+    ds: makelist(0, x, 0, dim - 1),
+    for i thru dim do
+          ds[i]: sum((diff(s[i],ct_coords[j]) + sum(s[%1]*mcs[%1,j,i],%1,1,dim))*p[j],j,1,dim),
+    return(ds)
+)$
+
+mcdiffs(p, s) := block([ds],
+    ds: sum(diff(s,ct_coords[j])*p[j],j,1,dim),
+    return(ds)
+)$
+
+/* cross product: g^{ni} sqrt(|g|) ε_{ijk} s1^j s2^k  */
+cross(s1, s2) := (ug * sqrt(gdet)) . express((s1 ~ s2))$
+
+/* Perturbations */
+prefactor: %e^(-%i * omega * t + %i * m * phi)$
+pos_puls(t) := prefactor * [deltar_s[1], deltar_s[2], deltar_s[3]]$
+
+/* δv = δ(dr/dt) = dδr/dt = ∂δr/∂t + v · ∇δr = ∂δr/∂t + v_0 · ∇δr */
+v_puls_lag(t) := diff(pos_puls(t), t) + mcdiffv(v(t), pos_puls(t))$
+/* δv = v' + δr · ∇v_0 */
+/* v_puls_eul(t) := v_puls_lag(t) - mcdiff(pos_puls(t), v(t)); */
+
+/* δa = δ(dv/dt) = dδv/dt = ∂δv/∂t + v · ∇δv = ∂δv/∂t + v_0 · ∇δv */
+a_puls_lag(t) := diff(v_puls_lag(t), t) + mcdiffv(v(t), v_puls_lag(t))$
+
+/* da_0/dt = ∂a_0/∂t + v_0 · ∇ v_0 = v_0 · ∇ v_0  */
+a(t) := mcdiffv(v(t), v(t))$
+
+/* δa = a' + δr · ∇a_0 */
+a_puls_eul(t) := a_puls_lag(t) - mcdiffv(pos_puls(t), a(t))$
+
+a_prime: trigsimp(ratsimp(a_puls_eul(t)))$
+a_prime: subst(
+    [deltar_s[1] = Xi[1] / prefactor, deltar_s[2] = Xi[2] / prefactor, deltar_s[3] = Xi[3] / prefactor],
+    a_prime
+)$
+
+Xi: [Xi[1], Xi[2], Xi[3]]$
+
+e_f: - Xi * (omega - m * Omega)^2 - 2 * %i * (omega - m * Omega) * cross(rot_vec, Xi) + mcdiffs(Xi, Omega^2) * s * es;
+factor(trigsimp(a_prime - e_f));
+sqrt(gdet);
+factor(trigsimp(lg . cross([Omega[1], Omega[2], 0], Xi)));
+
+a_prime: factor(trigsimp(a_prime))$
+
+depends(rho_prime, variables)$
+depends(P_prime, variables)$
+depends(Phi_prime, variables)$
+
+/* EoM */
+(trigsimp(rho * a_prime - rho_prime * -nabla(P) / rho - nabla(P_prime) - rho * nabla(Phi_prime)))$
+
+/* Continuity */
+diff(rho_prime, t) - nabla(rho_prime * v(t) + rho * a_prime)$
