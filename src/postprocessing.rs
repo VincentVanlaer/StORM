@@ -1,16 +1,28 @@
+//! Provides post-processing routines to obtain displacement functions, mode-ids, ...
+
 use std::f64::consts::PI;
 
 use crate::model::StellarModel;
 
+/// Result from the post processing of a solution to the 1D oscillation equations
 pub struct Rotating1DPostprocessing {
+    /// The locations of the grid points, scaled by the radius of the star
     pub x: Box<[f64]>,
+    /// y1 solution vector
     pub y1: Box<[f64]>,
+    /// y2 solution vector
     pub y2: Box<[f64]>,
+    /// y3 solution vector
     pub y3: Box<[f64]>,
+    /// y4 solution vector
     pub y4: Box<[f64]>,
+    /// Radial displacement vector
     pub xi_r: Box<[f64]>,
+    /// Horizontal displacement vector
     pub xi_h: Box<[f64]>,
+    /// Clockwise winding number
     pub clockwise_winding: f64,
+    /// Counter-clockwise winding number
     pub counter_clockwise_winding: f64,
 }
 
@@ -27,6 +39,7 @@ fn angle_diff(a: f64, b: f64) -> f64 {
 }
 
 impl Rotating1DPostprocessing {
+    /// Post-process the results
     pub fn new(
         freq: f64,
         eigenvector: &[f64],
