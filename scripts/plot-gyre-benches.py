@@ -69,6 +69,7 @@ plt.ylabel("Runtime [s], lower is better")
 plt.xticks(x + width, DIFF_SCHEMES, rotation=45)
 plt.legend()
 plt.title("Comparison of GYRE and StORM performance for various difference schemes. The stellar model is a 6200 point MESA model of a beta-Cepheid star (HD 192575). Input scan parameters are 1 to 25 dimless angular frequency with 25 scan points, radial modes. In total, 19 frequencies are extracted up to machine precision. GYRE is using the Brent bracketing algorithm, while StORM is using the custom Balanced algorithm. All regridding has been disabled, and GYRE has been forced to use the full set of equations, rather than the second-order reduced equations. Ran on a single core of an i7-1185G7.", wrap=True, fontsize=8, pad=10, loc='left')
+plt.yscale("log")
 plt.savefig("test-data/generated/gyre-performance.pdf")
 plt.close()
 
