@@ -200,6 +200,9 @@ impl BracketOptimizer for InverseQuadratic {
 
             let next = Point { x, f: f(x)? };
 
+            assert!(next.x.is_finite());
+            assert!(next.f.is_finite());
+
             evals += 1;
 
             if upper.f.signum() == next.f.signum() {
