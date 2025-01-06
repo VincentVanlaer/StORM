@@ -1,5 +1,6 @@
-use nalgebra::Const;
-use nalgebra::OMatrix;
+use itertools::izip;
+use nalgebra::{ComplexField, Const, Dim, DimMul, MatrixViewMut, OMatrix};
+use std::mem::MaybeUninit;
 
 use super::{Boundary, GridLength, Moments};
 use crate::linalg::OwnedArray;
@@ -15,14 +16,15 @@ pub struct Rotating1D {
     components: Vec<ModelPoint>,
     ell: f64,
     m: f64,
-    u_upper: f64,
 }
 
 type FourMatrix = OMatrix<f64, Const<4>, Const<4>>;
 
 #[derive(Clone, Copy, Debug)]
 struct ModelPoint {
-    a: FourMatrix,
+    u: f64,
+    v_gamma: f64,
+    a_star: f64,
     c1: f64,
     rot: f64,
     x: f64,
@@ -33,15 +35,6 @@ impl Rotating1D {
     /// spherical harmonic.
     pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Rotating1D {
         let ell = ell as f64;
-        let mut components: Vec<_> = vec![
-            ModelPoint {
-                a: [[0.0f64; 4]; 4].into(),
-                c1: 0.0,
-                x: 0.0,
-                rot: 0.0,
-            };
-            value.r_coord.len()
-        ];
 
         let r_cubed = value.r_coord.mapv(|a| a.powi(3));
         let mut v_gamma =
@@ -56,37 +49,21 @@ impl Rotating1D {
         u[0] = 3.0;
         c1[0] = value.mass / value.radius.powi(3) * 3.0 / (4.0 * PI * value.rho[0]);
 
-        for (i, component) in components.iter_mut().enumerate() {
-            *component.a.index_mut((0, 0)) = v_gamma[i] - 1.0 - ell;
-            *component.a.index_mut((0, 1)) = -v_gamma[i];
-            *component.a.index_mut((0, 2)) = 0.0;
-            *component.a.index_mut((0, 3)) = 0.0;
-
-            *component.a.index_mut((1, 0)) = -a_star[i];
-            *component.a.index_mut((1, 1)) = a_star[i] - u[i] + 3. - ell;
-            *component.a.index_mut((1, 2)) = 0.;
-            *component.a.index_mut((1, 3)) = -1.;
-
-            *component.a.index_mut((2, 0)) = 0.0;
-            *component.a.index_mut((2, 1)) = 0.0;
-            *component.a.index_mut((2, 2)) = 3. - u[i] - ell;
-            *component.a.index_mut((2, 3)) = 1.;
-
-            *component.a.index_mut((3, 0)) = u[i] * a_star[i];
-            *component.a.index_mut((3, 1)) = u[i] * v_gamma[i];
-            *component.a.index_mut((3, 2)) = ell * (ell + 1.);
-            *component.a.index_mut((3, 3)) = -u[i] + 2. - ell;
-
-            component.rot = value.rot[i];
-            component.c1 = c1[i];
-            component.x = x[i];
-        }
+        let components: Vec<_> = izip!(u, v_gamma, a_star, &value.rot, c1, x)
+            .map(|(u, v_gamma, a_star, &rot, c1, x)| ModelPoint {
+                u,
+                v_gamma,
+                a_star,
+                c1,
+                rot,
+                x,
+            })
+            .collect();
 
         Rotating1D {
             components,
             ell,
             m: m as f64,
-            u_upper: *u.last().unwrap(),
         }
     }
 }
@@ -138,33 +115,6 @@ impl Iterator for ModelPointsIterator<'_> {
         let m = self.model.m;
         let omega = self.frequency;
 
-        let add_frequency = |point: ModelPoint| {
-            let mut a = point.a;
-            let omega_rsq = if l == 0. {
-                1.0 // To prevent issues lower down with 0 / 0
-            } else {
-                (lambda * (omega - m * point.rot) + 2. * m * point.rot) * (omega - m * point.rot)
-            };
-
-            if l != 0. {
-                let rel_rot =
-                    2. * m * point.rot / (lambda * (omega - m * point.rot) + 2. * m * point.rot);
-
-                *a.index_mut((0, 0)) += -lambda * rel_rot;
-                *a.index_mut((0, 1)) += lambda.powi(2) / (omega_rsq * point.c1);
-                *a.index_mut((0, 2)) += lambda.powi(2) / (omega_rsq * point.c1);
-
-                *a.index_mut((1, 1)) += lambda * rel_rot;
-                *a.index_mut((1, 2)) += lambda * rel_rot;
-            }
-
-            *a.index_mut((1, 0)) += point.c1
-                * (omega - m * point.rot).powi(2)
-                * (1. - (2. * m * point.rot).powi(2) / omega_rsq);
-
-            a
-        };
-
         // Bounds check due to potential overflow
         let lower = self.model.components[self.pos];
         let upper = self.model.components[self.pos + self.skip];
@@ -172,16 +122,42 @@ impl Iterator for ModelPointsIterator<'_> {
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
         let sublower = lower.x + delta * (self.subpos as f64);
         let subupper = lower.x + delta * (self.subpos as f64 + 1.);
-        // let sublower = sublower.ln();
-        // let subupper = subupper.ln();
 
         let delta = subupper - sublower;
 
-        let lower_a = add_frequency(lower) * (delta / lower.x);
-        // let lower_a = add_frequency(lower);
+        let lower_a = {
+            let mut a = FourMatrix::default();
+            process::<true, Const<1>, _>(
+                Gated::<_, true>::new(lower.rot),
+                omega,
+                lower.u,
+                lower.v_gamma,
+                lower.a_star,
+                lower.c1,
+                self.model.ell,
+                m,
+                a.as_view_mut(),
+            );
 
-        let upper_a = add_frequency(upper) * (delta / upper.x);
-        // let upper_a = add_frequency(upper);
+            a
+        } * (delta / lower.x);
+
+        let upper_a = {
+            let mut a = FourMatrix::default();
+            process::<true, Const<1>, _>(
+                Gated::<_, true>::new(upper.rot),
+                omega,
+                upper.u,
+                upper.v_gamma,
+                upper.a_star,
+                upper.c1,
+                self.model.ell,
+                m,
+                a.as_view_mut(),
+            );
+
+            a
+        } * (delta / upper.x);
 
         let intercept = lower_a
             + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
@@ -323,36 +299,41 @@ impl Moments<f64, GridScale, Const<4>, Const<4>> for Rotating1D {
 
 impl Boundary<f64, Const<4>, Const<2>> for Rotating1D {
     fn inner_boundary(&self, omega: f64) -> OMatrix<f64, Const<2>, Const<4>> {
-        let l = self.ell;
-        let lambda = l * (l + 1.);
-        let m = self.m;
-        let rot = self.components[0].rot;
-        let omega_rsq;
-        let rel_rot;
-        if l == 0. {
-            omega_rsq = 1.;
-            rel_rot = 1.;
-        } else {
-            omega_rsq = (lambda * (omega - m * rot) + 2. * m * rot) * (omega - m * rot);
-            rel_rot = 2. * m * rot / (lambda * (omega - m * rot) + 2. * m * rot);
-        }
+        let mut b = OMatrix::<f64, Const<2>, Const<4>>::default();
+        let props = self.components.first().unwrap();
 
-        [
-            [
-                self.components[0].c1
-                    * (omega - m * rot).powi(2)
-                    * (1. - (2. * m * rot).powi(2) / omega_rsq),
-                0.,
-            ],
-            [lambda * rel_rot - self.ell, 0.],
-            [lambda * rel_rot - self.ell, self.ell],
-            [0., -1.],
-        ]
-        .into()
+        inner_bound::<true, Const<1>, _>(
+            Gated::<_, true>::new(props.rot),
+            omega,
+            props.u,
+            props.v_gamma,
+            props.a_star,
+            props.c1,
+            self.ell,
+            self.m,
+            b.as_view_mut(),
+        );
+
+        b
     }
 
-    fn outer_boundary(&self, _frequency: f64) -> OMatrix<f64, Const<2>, Const<4>> {
-        [[1., self.u_upper], [-1., 0.], [0., self.ell + 1.], [0., 1.]].into()
+    fn outer_boundary(&self, omega: f64) -> OMatrix<f64, Const<2>, Const<4>> {
+        let mut b = OMatrix::<f64, Const<2>, Const<4>>::default();
+        let props = self.components.last().unwrap();
+
+        outer_bound::<true, Const<1>, _>(
+            Gated::<_, true>::new(props.rot),
+            omega,
+            props.u,
+            props.v_gamma,
+            props.a_star,
+            props.c1,
+            self.ell,
+            self.m,
+            b.as_view_mut(),
+        );
+
+        b
     }
 }
 
@@ -366,4 +347,190 @@ pub struct GridScale {
     /// If `scale` equals one, the grid is divide in two, if `scale` equals two, the grid is
     /// divided into four, ...
     pub scale: i32,
+}
+
+macro_rules! g {
+    ($ff: ident, $e: expr, $alt: expr) => {
+        $ff.map(|&$ff| $e, || $alt)
+    };
+}
+
+pub(crate) struct Gated<T, const ACTIVE: bool> {
+    val: MaybeUninit<T>,
+}
+
+impl<T> Gated<T, false> {
+    pub(crate) fn new() -> Self {
+        Gated {
+            val: MaybeUninit::uninit(),
+        }
+    }
+}
+
+impl<T> Gated<T, true> {
+    pub(crate) fn new(val: T) -> Self {
+        Gated {
+            val: MaybeUninit::new(val),
+        }
+    }
+}
+
+impl<T, const ACTIVE: bool> Gated<T, ACTIVE> {
+    #[inline(always)]
+    fn map(&self, f: impl FnOnce(&T) -> T, alt: impl FnOnce() -> T) -> T {
+        if ACTIVE {
+            // SAFETY: the only way to obtain a Gated object with ACTIVE set to true is the
+            // Gated::new which constructs val using MaybeUninit::new
+            f(unsafe { self.val.assume_init_ref() })
+        } else {
+            alt()
+        }
+    }
+}
+
+#[inline]
+pub(crate) fn process<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+    rotation: Gated<T, ROTATION>,
+    freq: T,
+    u: T,
+    v_gamma: T,
+    a_star: T,
+    c1: T,
+    ell: T,
+    m: T,
+    mut output: MatrixViewMut<
+        T,
+        <Degrees as DimMul<Const<4>>>::Output,
+        <Degrees as DimMul<Const<4>>>::Output,
+    >,
+) where
+    Degrees: DimMul<Const<4>>,
+{
+    assert_eq!(output.shape(), (4, 4));
+
+    let zero = T::from_subset(&0.);
+    let one = T::from_subset(&1.);
+    let two = T::from_subset(&2.);
+    let three = T::from_subset(&3.);
+    let lambda = ell * (ell + one);
+
+    *output.index_mut((0, 0)) = v_gamma - one - ell;
+    *output.index_mut((0, 1)) = -v_gamma;
+    *output.index_mut((0, 2)) = zero;
+    *output.index_mut((0, 3)) = zero;
+
+    *output.index_mut((1, 0)) = -a_star;
+    *output.index_mut((1, 1)) = a_star - u + three - ell;
+    *output.index_mut((1, 2)) = zero;
+    *output.index_mut((1, 3)) = -one;
+
+    *output.index_mut((2, 0)) = zero;
+    *output.index_mut((2, 1)) = zero;
+    *output.index_mut((2, 2)) = three - u - ell;
+    *output.index_mut((2, 3)) = one;
+
+    *output.index_mut((3, 0)) = u * a_star;
+    *output.index_mut((3, 1)) = u * v_gamma;
+    *output.index_mut((3, 2)) = lambda;
+    *output.index_mut((3, 3)) = -u + two - ell;
+
+    if ell != zero {
+        let rot = g!(rotation, m * rotation, zero);
+        let omega_rsq = (lambda * (freq - rot) + two * rot) * (freq - rot);
+        let rel_rot = two * rot / (lambda * (freq - rot) + two * rot);
+
+        *output.index_mut((0, 0)) += -lambda * rel_rot;
+        *output.index_mut((0, 1)) += lambda.powi(2) / (omega_rsq * c1);
+        *output.index_mut((0, 2)) += lambda.powi(2) / (omega_rsq * c1);
+
+        *output.index_mut((1, 1)) += lambda * rel_rot;
+        *output.index_mut((1, 2)) += lambda * rel_rot;
+        *output.index_mut((1, 0)) +=
+            c1 * (freq - rot).powi(2) * (one - (two * rot).powi(2) / omega_rsq);
+    } else {
+        *output.index_mut((1, 0)) += c1 * freq.powi(2);
+    }
+}
+
+#[inline]
+pub(crate) fn inner_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+    rotation: Gated<T, ROTATION>,
+    freq: T,
+    _u: T,
+    _v_gamma: T,
+    _a_star: T,
+    c1: T,
+    ell: T,
+    m: T,
+    mut output: MatrixViewMut<
+        T,
+        <Degrees as DimMul<Const<2>>>::Output,
+        <Degrees as DimMul<Const<4>>>::Output,
+    >,
+) where
+    Degrees: DimMul<Const<4>> + DimMul<Const<2>>,
+{
+    let zero = T::from_subset(&0.);
+    let one = T::from_subset(&1.);
+    let two = T::from_subset(&2.);
+    let lambda = ell * (ell + one);
+
+    if ell != zero {
+        let rot = g!(rotation, m * rotation, zero);
+        let omega_rsq = (lambda * (freq - rot) + two * rot) * (freq - rot);
+        let rel_rot = two * rot / (lambda * (freq - rot) + two * rot);
+
+        *output.index_mut((0, 0)) =
+            c1 * (freq - rot).powi(2) * (one - (two * rot).powi(2) / omega_rsq);
+        *output.index_mut((0, 1)) = lambda * rel_rot - ell;
+        *output.index_mut((0, 2)) = lambda * rel_rot - ell;
+        *output.index_mut((0, 3)) = zero;
+
+        *output.index_mut((1, 0)) = zero;
+        *output.index_mut((1, 1)) = zero;
+        *output.index_mut((1, 2)) = ell;
+        *output.index_mut((1, 3)) = -one;
+    } else {
+        *output.index_mut((0, 0)) = c1 * freq * freq;
+        *output.index_mut((0, 1)) = zero;
+        *output.index_mut((0, 2)) = zero;
+        *output.index_mut((0, 3)) = zero;
+
+        *output.index_mut((1, 0)) = zero;
+        *output.index_mut((1, 1)) = zero;
+        *output.index_mut((1, 2)) = zero;
+        *output.index_mut((1, 3)) = -one;
+    }
+}
+
+#[inline]
+pub(crate) fn outer_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+    _rotation: Gated<T, ROTATION>,
+    _freq: T,
+    u: T,
+    _v_gamma: T,
+    _a_star: T,
+    _c1: T,
+    ell: T,
+    _m: T,
+    mut output: MatrixViewMut<
+        T,
+        <Degrees as DimMul<Const<2>>>::Output,
+        <Degrees as DimMul<Const<4>>>::Output,
+    >,
+) where
+    Degrees: DimMul<Const<4>> + DimMul<Const<2>>,
+{
+    let zero = T::from_subset(&0.);
+    let one = T::from_subset(&1.);
+
+    *output.index_mut((0, 0)) = one;
+    *output.index_mut((0, 1)) = -one;
+    *output.index_mut((0, 2)) = zero;
+    *output.index_mut((0, 3)) = zero;
+
+    *output.index_mut((1, 0)) = u;
+    *output.index_mut((1, 1)) = zero;
+    *output.index_mut((1, 2)) = ell + one;
+    *output.index_mut((1, 3)) = one;
 }
