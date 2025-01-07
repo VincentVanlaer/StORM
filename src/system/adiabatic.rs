@@ -166,23 +166,26 @@ impl Iterator for ModelPointsIterator<'_> {
         };
 
         let lower = self.model.components[self.pos];
-        // let lower_a = add_frequency(lower) * (1.0 / lower.x);
-        let lower_a = add_frequency(lower);
-
         let upper = self.model.components[self.pos + self.skip];
-        // let upper_a = add_frequency(upper) * (1.0 / upper.x);
-        let upper_a = add_frequency(upper);
-
-        let intercept = lower_a
-            + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
-        let slope = (upper_a - lower_a) * (1.0 / (self.total_subpos as f64));
 
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
         let sublower = lower.x + delta * (self.subpos as f64);
         let subupper = lower.x + delta * (self.subpos as f64 + 1.);
-
         let sublower = sublower.ln();
         let subupper = subupper.ln();
+
+        let delta = subupper - sublower;
+
+        // let lower_a = add_frequency(lower) * (1.0 / lower.x);
+        let lower_a = add_frequency(lower);
+
+        // let upper_a = add_frequency(upper) * (1.0 / upper.x);
+        let upper_a = add_frequency(upper);
+
+        let intercept = delta
+            * (lower_a
+                + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64)));
+        let slope = (upper_a - lower_a) * (delta / (self.total_subpos as f64));
 
         self.subpos += 1;
 
@@ -191,7 +194,7 @@ impl Iterator for ModelPointsIterator<'_> {
             self.subpos = 0;
         }
 
-        Some((subupper - sublower, slope, intercept))
+        Some((delta, slope, intercept))
     }
 }
 
@@ -253,8 +256,7 @@ impl Moments<f64, GridScale, Const<4>, Const<1>> for Rotating1D {
     ) -> impl ExactSizeIterator<Item = FourStepMoments<1>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
-            wrapped: |(delta, _s, i)| StepMoments {
-                delta,
+            wrapped: |(_delta, _s, i)| StepMoments {
                 moments: [i].into(),
             },
         }
@@ -272,8 +274,7 @@ impl Moments<f64, GridScale, Const<4>, Const<2>> for Rotating1D {
     ) -> impl ExactSizeIterator<Item = FourStepMoments<2>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
-            wrapped: |(delta, s, i)| StepMoments {
-                delta,
+            wrapped: |(_delta, s, i)| StepMoments {
                 moments: [i, s].into(),
             },
         }
@@ -291,8 +292,7 @@ impl Moments<f64, GridScale, Const<4>, Const<3>> for Rotating1D {
     ) -> impl ExactSizeIterator<Item = FourStepMoments<3>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
-            wrapped: |(delta, s, i)| StepMoments {
-                delta,
+            wrapped: |(_delta, s, i)| StepMoments {
                 moments: [i, s, [[0.0; 4]; 4].into()].into(),
             },
         }
@@ -310,8 +310,7 @@ impl Moments<f64, GridScale, Const<4>, Const<4>> for Rotating1D {
     ) -> impl ExactSizeIterator<Item = FourStepMoments<4>> {
         IterWrapper {
             iter: ModelPointsIterator::new(grid.scale, self, frequency),
-            wrapped: |(delta, s, i)| StepMoments {
-                delta,
+            wrapped: |(_delta, s, i)| StepMoments {
                 moments: [i, s, [[0.0; 4]; 4].into(), [[0.0; 4]; 4].into()].into(),
             },
         }

@@ -5,7 +5,6 @@ use nalgebra::{
 use crate::linalg::{assign_matrix, commutator, ArrayStorage, Exp, MatrixArray};
 
 pub(crate) struct StepMoments<T, N, Order, S> {
-    pub delta: f64,
     pub moments: MatrixArray<T, N, N, Order, S>,
 }
 
@@ -48,7 +47,6 @@ where
     ) {
         let mut omega = step_input.moments.index_mut(0);
 
-        omega *= T::from_subset(&(step_input.delta));
         omega.exp();
 
         assign_matrix(&mut step.steps.index_mut(0), omega);
@@ -67,12 +65,8 @@ where
         step_input: StepMoments<T, N, Const<2>, S1>,
         step: &mut Step<T, N, S2>,
     ) {
-        let b1 = step_input.moments.index(0);
-        let b2 = step_input.moments.index(1);
-        let delta = T::from_subset(&(step_input.delta));
-
-        let b1 = &(b1 * delta.clone());
-        let b2 = &(b2 * delta.clone());
+        let b1 = &step_input.moments.index(0);
+        let b2 = &step_input.moments.index(1);
 
         let mut omega = b1 - commutator(b1, b2) * T::from_subset(&(1.0 / 12.0));
 
@@ -94,14 +88,9 @@ where
         step_input: StepMoments<T, N, Const<3>, S1>,
         step: &mut Step<T, N, S2>,
     ) {
-        let b1 = step_input.moments.index(0);
-        let b2 = step_input.moments.index(1);
-        let b3 = step_input.moments.index(2);
-        let delta = T::from_subset(&(step_input.delta));
-
-        let b1 = &(b1 * delta.clone());
-        let b2 = &(b2 * delta.clone());
-        let b3 = &(b3 * delta.clone());
+        let b1 = &step_input.moments.index(0);
+        let b2 = &step_input.moments.index(1);
+        let b3 = &step_input.moments.index(2);
 
         let c1 = &commutator(b1, b2);
         let c2 = &(commutator(b1, b3 * T::from_subset(&(2.)) + c1) * T::from_subset(&(-1. / 60.)));
@@ -129,16 +118,10 @@ where
         step_input: StepMoments<T, N, Const<4>, S1>,
         step: &mut Step<T, N, S2>,
     ) {
-        let b1 = step_input.moments.index(0);
-        let b2 = step_input.moments.index(1);
-        let b3 = step_input.moments.index(2);
-        let b4 = step_input.moments.index(2);
-        let delta = T::from_subset(&step_input.delta);
-
-        let b1 = &(b1 * delta.clone());
-        let b2 = &(b2 * delta.clone());
-        let b3 = &(b3 * delta.clone());
-        let b4 = &(b4 * delta.clone());
+        let b1 = &step_input.moments.index(0);
+        let b2 = &step_input.moments.index(1);
+        let b3 = &step_input.moments.index(2);
+        let b4 = &step_input.moments.index(2);
 
         let s1 = &(commutator(
             b1 + b3 * T::from_subset(&(1. / 28.)),
@@ -189,10 +172,7 @@ where
         step_input: StepMoments<T, N, Const<1>, S1>,
         step: &mut Step<T, N, S2>,
     ) {
-        let b1 = step_input.moments.index(0);
-        let delta = T::from_subset(&(step_input.delta));
-
-        let b1 = &(b1 * delta.clone());
+        let b1 = &step_input.moments.index(0);
 
         let c1 = &(b1 * T::from_subset(&(0.5)));
         let c2 = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
@@ -214,12 +194,8 @@ where
         step_input: StepMoments<T, N, Const<2>, S1>,
         step: &mut Step<T, N, S2>,
     ) {
-        let b1 = step_input.moments.index(0);
-        let b2 = step_input.moments.index(1);
-        let delta = T::from_subset(&(step_input.delta));
-
-        let b1 = &(b1 * delta.clone());
-        let b2 = &(b2 * delta.clone());
+        let b1 = &step_input.moments.index(0);
+        let b2 = &step_input.moments.index(1);
 
         let b2 = &(b2 * T::from_subset(&(1. / 12.)));
         let eye = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
