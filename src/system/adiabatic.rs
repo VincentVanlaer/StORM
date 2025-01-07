@@ -171,21 +171,20 @@ impl Iterator for ModelPointsIterator<'_> {
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
         let sublower = lower.x + delta * (self.subpos as f64);
         let subupper = lower.x + delta * (self.subpos as f64 + 1.);
-        let sublower = sublower.ln();
-        let subupper = subupper.ln();
+        // let sublower = sublower.ln();
+        // let subupper = subupper.ln();
 
         let delta = subupper - sublower;
 
-        // let lower_a = add_frequency(lower) * (1.0 / lower.x);
-        let lower_a = add_frequency(lower);
+        let lower_a = add_frequency(lower) * (delta / lower.x);
+        // let lower_a = add_frequency(lower);
 
-        // let upper_a = add_frequency(upper) * (1.0 / upper.x);
-        let upper_a = add_frequency(upper);
+        let upper_a = add_frequency(upper) * (delta / upper.x);
+        // let upper_a = add_frequency(upper);
 
-        let intercept = delta
-            * (lower_a
-                + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64)));
-        let slope = (upper_a - lower_a) * (delta / (self.total_subpos as f64));
+        let intercept = lower_a
+            + (upper_a - lower_a) * ((self.subpos as f64 + 0.5) / (self.total_subpos as f64));
+        let slope = (upper_a - lower_a) * (1. / (self.total_subpos as f64));
 
         self.subpos += 1;
 
