@@ -214,13 +214,14 @@ where
     }
 
     let mut det = T::one();
-    for (n_step, moments) in iterator.enumerate() {
+    let mut n_step = 0;
+    for moments in iterator {
         stepper.step(moments, &mut step);
-        assert!(n_step < total_steps);
+        debug_assert!(n_step < total_steps);
         for r in 0..n {
             for c in 0..n {
-                *bands.index_mut((c, r + 2)) = *step.left().index((r, c));
-                *bands.index_mut((c + n, r + 2)) = *step.right().index((r, c));
+                *bands.index_mut((c, r + n_inner)) = *step.left().index((r, c));
+                *bands.index_mut((c + n, r + n_inner)) = *step.right().index((r, c));
             }
         }
 
@@ -229,7 +230,7 @@ where
             let mut max_val: T::RealField = T::RealField::zero();
 
             for i in k..(n + n_inner) {
-                if bands.index((k, i)).abs() > max_val {
+                if unsafe { bands.get_unchecked((k, i)) }.abs() > max_val {
                     max_idx = i;
                     max_val = bands.index((k, i)).abs();
                 }
@@ -255,8 +256,9 @@ where
 
             for i in (k + 1)..(n + n_inner) {
                 let m = *bands.index((k, i)) / pivot[k];
+                // bands.column_mut(i).axpy(-m, &pivot, T::one());
                 for j in 0..(2 * n) {
-                    *bands.index_mut((j, i)) -= pivot[j] * m;
+                    *unsafe { bands.get_unchecked_mut((j, i)) } -= pivot[j] * m;
                 }
             }
         }
@@ -267,6 +269,8 @@ where
                 *bands.index_mut((j + n, i)) = T::zero();
             }
         }
+
+        n_step += 1;
     }
 
     // Outer boundary

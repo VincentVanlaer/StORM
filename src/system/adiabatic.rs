@@ -165,6 +165,7 @@ impl Iterator for ModelPointsIterator<'_> {
             a
         };
 
+        // Bounds check due to potential overflow
         let lower = self.model.components[self.pos];
         let upper = self.model.components[self.pos + self.skip];
 
