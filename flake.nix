@@ -58,6 +58,7 @@
         toolchain
         cargo-show-asm
         cargo-watch
+        bacon
         llvm
         nodePackages.browser-sync
       ];
