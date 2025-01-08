@@ -382,6 +382,26 @@ impl<T: ComplexField, N: Dim, S: StorageMut<T, N, N>> Exp for nalgebra::Matrix<T
 where
     DefaultAllocator: Allocator<N, N>,
 {
+    /// Matrix exponential using the scaling and squaring algorithm, with an 18th order Taylor
+    /// expansion as approximation. The bounds on the scaling where chosen such that the expansion
+    /// is accurate to machine precision for a 64-bit floating point number (see Blanes, Kopylov,
+    /// and Seydao ̆glu, 'Efficient scaling and squaring method for the matrix exponential', 2024).
+    /// For the constants used in the approximation, see Eqn. (13) of Bader, Blanes and Casas
+    /// (2018), 'An improved algorithm to compute the exponential of a matrix'.
+    ///
+    /// Rational for choosing this algorithm:
+    ///
+    /// - Scaling and squaring is computationally simple, compared to e.g. the eigenvalue method in
+    ///   GYRE
+    /// - Numerical stability is also better compared to other iterative methods for small changes
+    ///   in the frequency
+    /// - The choice for the t18 approximation instead of the more commonly considered Padé
+    ///   approximations comes from the balance between the cost of a matrix inverse vs. a matrix
+    ///   multiplication. Blanes et al. (2024) assumes that a matrix inverse is ~1.33 times the
+    ///   cost of a matrix multiplication. For the small matrices we are dealing with, that is not
+    ///   the case. While the matrix multiplication is done branchless, this cannot be done for the
+    ///   matrix inverse. The number of branches is O(N^2), and hence will become less important
+    ///   for large matrices.
     fn exp(&mut self) {
         assert_eq!(self.nrows(), self.ncols());
 
