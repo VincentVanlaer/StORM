@@ -1,0 +1,91 @@
+/* [wxMaxima: input   start ] */
+load(linearalgebra);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+A0: matrix(
+ [1,1/5,1/5],
+ [0,1,1/5],
+ [0,-1/5,1]
+);
+A1: matrix(
+ [1,1/5,1/5],
+ [0,1,1/6],
+ [0,-1/5,1]
+) - A0;
+A2: matrix(
+ [1,1/5 + 1/20,1/5],
+ [0,1,1/5],
+ [0,-1/5,1]
+) - A0;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+ev(sqrt(lmax(eigenvalues(transpose(A0) . A0)[1])),numer);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+ct(a1, a2) := a1 . a2 - a2 . a1;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+O1(t, A) := integrate(A(t1), t1, 0, t);
+O2(t, A) := 1/2 * integrate(integrate(ct(A(t1), A(t2)), t2, 0, t1), t1, 0, t);
+O3(t, A) := 1/6 * integrate(integrate(integrate(ct(A(t1), ct(A(t2), A(t3))) + ct(ct(A(t1), A(t2)), A(t3)), t3, 0, t2), t2, 0, t1), t1, 0, t);
+O4(t, A) := 1/12 * integrate(integrate(integrate(integrate(
+        ct(A(t1), ct(ct(A(t2), A(t3)), A(t4)))
+    +   ct(ct(ct(A(t1), A(t2)), A(t3)), A(t4))
+    +   ct(A(t1), ct(A(t2), ct(A(t3), A(t4))))
+    +   ct(A(t2), ct(A(t3), ct(A(t4), A(t1)))),
+t4, 0, t3), t3, 0, t2), t2, 0, t1), t1, 0, t);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+A(t):= a*(A0 + 10^-2 * t^3 * A1 + 10^-2 * t^2 * A2);
+OM: ev(O1(1, A))$
+ev(OM, numer)$
+OM1: ev(mat_norm(OM, 1))$
+OM: ev(O2(1, A))$
+ev(OM, numer)$
+OM2: ev(mat_norm(OM, 1))$
+OM: ev(O3(1, A))$
+ev(OM, numer)$
+OM3: ev(mat_norm(OM, 1))$
+OM: ev(O4(1, A))$
+ev(OM, numer)$
+OM4: ev(mat_norm(OM, 1))$
+plot2d(
+    [OM1, OM2, OM3, OM4],
+    [a, 1/10, 1000],
+    logx,
+    logy,
+    [gnuplot_default_term_command, "set term x11 font \"Helvetica,16\""],
+    [style,[lines,4]]
+)$
+/* [wxMaxima: input   end   ] */
+/* [wxMaxima: question  start ] */
+<math><st>Is </st><mi lisp="*var-tag*">t1</mi><st> positive, negative or zero?</st></math>
+/* [wxMaxima: question  end   ] */
+/* [wxMaxima: answer  start ] */
+positive;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: question  start ] */
+<math><st>Is </st><mi lisp="*var-tag*">t2</mi><st> positive, negative or zero?</st></math>
+/* [wxMaxima: question  end   ] */
+/* [wxMaxima: answer  start ] */
+positive;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: question  start ] */
+<math><st>Is </st><mi lisp="*var-tag*">t3</mi><st> positive, negative or zero?</st></math>
+/* [wxMaxima: question  end   ] */
+/* [wxMaxima: answer  start ] */
+positive;
+/* [wxMaxima: answer  end   ] */
+
+
+
