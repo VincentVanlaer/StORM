@@ -29,7 +29,7 @@
   freq_min = 1        ! Minimum frequency to scan from
   freq_max = 25        ! Maximum frequency to scan to
   n_freq = 25          ! Number of frequency points in scan
-  freq_units = 'NONE';
+  freq_units = 'NONE'
 /
 
 &grid
