@@ -178,11 +178,11 @@ where
     ) {
         let b1 = &step_input.moments.index(0);
 
-        let c1 = &(b1 * T::from_subset(&(0.5)));
-        let c2 = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
+        let jump = &(b1 * T::from_subset(&(0.5)));
+        let eye = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
 
-        assign_matrix(&mut step.steps.index_mut(0), c1 + c2);
-        assign_matrix(&mut step.steps.index_mut(1), c1 - c2);
+        assign_matrix(&mut step.steps.index_mut(0), jump + eye);
+        assign_matrix(&mut step.steps.index_mut(1), jump - eye);
     }
 }
 
