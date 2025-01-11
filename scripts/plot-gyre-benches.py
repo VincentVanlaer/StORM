@@ -2,13 +2,15 @@ import matplotlib.pyplot as plt
 import h5py
 import json
 import numpy as np
+import math
 
 plt.rcParams["figure.constrained_layout.use"] = True
 
 DIFF_SCHEMES = ["COLLOC_GL2", "COLLOC_GL4", "COLLOC_GL6",
-                "MAGNUS_GL2", "MAGNUS_GL4", "MAGNUS_GL6"]
+                "MAGNUS_GL2", "MAGNUS_GL4", "MAGNUS_GL6",
+                "MAGNUS_GL8"]
 STORM_SCHEMES = ["colloc2", "colloc4",
-                 "colloc6", "magnus2", "magnus4", "magnus6"]
+                 "colloc6", "magnus2", "magnus4", "magnus6", "magnus8"]
 
 results_block = []
 results_band = []
@@ -30,12 +32,14 @@ for d in DIFF_SCHEMES:
     except (FileNotFoundError, json.decoder.JSONDecodeError):
         band = np.nan
 
-    freq_block = h5py.File(
-        f"test-data/generated/{d}_BLOCK/summary.h5")["freq"]["re"][:]
-    freq_band = h5py.File(
-        f"test-data/generated/{d}_BAND/summary.h5")["freq"]["re"][:]
+    if not math.isnan(block):
+        freq_block = h5py.File(
+            f"test-data/generated/{d}_BLOCK/summary.h5")["freq"]["re"][:]
 
-    freqs[f"{d}_BAND"] = freq_band
+    if not math.isnan(band):
+        freq_band = h5py.File(
+            f"test-data/generated/{d}_BAND/summary.h5")["freq"]["re"][:]
+        freqs[f"{d}_BAND"] = freq_band
 
     results_block.append(block)
     results_band.append(band)
