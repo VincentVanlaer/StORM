@@ -160,6 +160,10 @@ where
     }
 }
 
+// Collocation points
+const C2_1: f64 = -0.288675134594812882254;
+const C2_2: f64 = 0.288675134594812882254;
+
 pub(crate) struct Colloc2 {}
 
 impl<T: ComplexField, N: Dim> Stepper<T, N, Const<1>> for Colloc2
@@ -194,18 +198,31 @@ where
         step_input: StepMoments<T, N, Const<2>, S1>,
         step: &mut Step<T, N, S2>,
     ) {
-        let b1 = &step_input.moments.index(0);
-        let b2 = &step_input.moments.index(1);
+        let c1 = T::from_subset(&C2_1);
+        let c2 = T::from_subset(&C2_2);
+        let one_fourth = T::from_subset(&0.25);
 
-        let b2 = &(b2 * T::from_subset(&(1. / 12.)));
-        let eye = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
+        // Moments
+        let m1 = &step_input.moments.index(0);
+        let m2 = &step_input.moments.index(1);
 
-        let inv_mat = &(b1 * (eye + b2).try_inverse().unwrap());
+        // Collocation points
+        let a1 = &(m1 + m2 * c1.clone());
+        let a2 = &(m1 + m2 * c2.clone());
 
-        let c1 = &((b1 - inv_mat * b2) * T::from_subset(&(0.5)));
-        let c2 = &((b2 - inv_mat * b1) * T::from_subset(&(1. / 12.)) - eye);
+        let eye = &(Matrix::identity_generic(m1.shape_generic().0, m1.shape_generic().1));
 
-        assign_matrix(&mut step.steps.index_mut(0), c1 + c2);
-        assign_matrix(&mut step.steps.index_mut(1), c1 - c2);
+        let a2a1 = &(a2 * a1);
+
+        let k2 = &((eye + a2a1 * T::from_subset(&(1. / 12.)))
+            .try_inverse()
+            .unwrap()
+            * (a2 + a2a1 * c2));
+        let k1 = &(a1 + a1 * k2 * c1);
+
+        let jump = (k1 + k2) * one_fourth;
+
+        assign_matrix(&mut step.steps.index_mut(0), &jump + eye);
+        assign_matrix(&mut step.steps.index_mut(1), &jump - eye);
     }
 }
