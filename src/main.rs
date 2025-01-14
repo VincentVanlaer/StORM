@@ -6,6 +6,7 @@
 use clap::Parser;
 use color_eyre::eyre::{eyre, Context};
 use color_eyre::Result;
+use coredump::register_panic_handler;
 use ndarray::aview0;
 
 use storm::bracket::Precision;
@@ -45,6 +46,8 @@ fn linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+
+    register_panic_handler().unwrap();
 
     let args = Main::parse();
     let mut model = StellarModel::from_gsm(&args.input)

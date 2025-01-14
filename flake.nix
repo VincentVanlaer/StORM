@@ -66,6 +66,8 @@
       shellHook = ''
         export CC="${pkgs.musl.dev}/bin/musl-gcc -static -Os"
       '';
+
+      RUST_BACKTRACE = 1;
     };
   };
 }
