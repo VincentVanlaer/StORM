@@ -322,7 +322,7 @@ impl Moments<f64, GridScale, Const<4>, Const<4>> for Rotating1D {
 }
 
 impl Boundary<f64, Const<4>, Const<2>> for Rotating1D {
-    fn inner_boundary(&self, omega: f64) -> OMatrix<f64, Const<4>, Const<2>> {
+    fn inner_boundary(&self, omega: f64) -> OMatrix<f64, Const<2>, Const<4>> {
         let l = self.ell;
         let lambda = l * (l + 1.);
         let m = self.m;
@@ -342,17 +342,17 @@ impl Boundary<f64, Const<4>, Const<2>> for Rotating1D {
                 self.components[0].c1
                     * (omega - m * rot).powi(2)
                     * (1. - (2. * m * rot).powi(2) / omega_rsq),
-                lambda * rel_rot - self.ell,
-                lambda * rel_rot - self.ell,
                 0.,
             ],
-            [0., 0., self.ell, -1.],
+            [lambda * rel_rot - self.ell, 0.],
+            [lambda * rel_rot - self.ell, self.ell],
+            [0., -1.],
         ]
         .into()
     }
 
-    fn outer_boundary(&self, _frequency: f64) -> OMatrix<f64, Const<4>, Const<2>> {
-        [[1., -1., 0., 0.], [self.u_upper, 0., self.ell + 1., 1.]].into()
+    fn outer_boundary(&self, _frequency: f64) -> OMatrix<f64, Const<2>, Const<4>> {
+        [[1., self.u_upper], [-1., 0.], [0., self.ell + 1.], [0., 1.]].into()
     }
 }
 

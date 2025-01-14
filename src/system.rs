@@ -24,11 +24,11 @@ pub(crate) trait GridLength<G: ?Sized> {
 
 pub(crate) trait Boundary<T: Field + Scalar, N: Dim + nalgebra::DimSub<NInner>, NInner: Dim>
 where
-    DefaultAllocator: nalgebra::allocator::Allocator<N, NInner>,
-    DefaultAllocator: nalgebra::allocator::Allocator<N, <N as DimSub<NInner>>::Output>,
+    DefaultAllocator: nalgebra::allocator::Allocator<NInner, N>,
+    DefaultAllocator: nalgebra::allocator::Allocator<<N as DimSub<NInner>>::Output, N>,
 {
-    fn inner_boundary(&self, frequency: T) -> OMatrix<T, N, NInner>;
-    fn outer_boundary(&self, _frequency: T) -> OMatrix<T, N, <N as DimSub<NInner>>::Output>;
+    fn inner_boundary(&self, frequency: T) -> OMatrix<T, NInner, N>;
+    fn outer_boundary(&self, _frequency: T) -> OMatrix<T, <N as DimSub<NInner>>::Output, N>;
 }
 
 #[expect(private_bounds)]
@@ -56,8 +56,8 @@ pub trait System<
     Order: DimName,
 >: Moments<T, G, N, Order> + Boundary<T, N, NInner> + GridLength<G> where
     DefaultAllocator: ArrayAllocator<N, N, Order>,
-    DefaultAllocator: nalgebra::allocator::Allocator<N, NInner>,
-    DefaultAllocator: nalgebra::allocator::Allocator<N, <N as DimSub<NInner>>::Output>,
+    DefaultAllocator: nalgebra::allocator::Allocator<NInner, N>,
+    DefaultAllocator: nalgebra::allocator::Allocator<<N as DimSub<NInner>>::Output, N>,
 {
 }
 
@@ -72,8 +72,8 @@ impl<
 where
     U: Moments<T, G, N, Order> + Boundary<T, N, NInner> + GridLength<G>,
     DefaultAllocator: ArrayAllocator<N, N, Order>,
-    DefaultAllocator: nalgebra::allocator::Allocator<N, NInner>,
-    DefaultAllocator: nalgebra::allocator::Allocator<N, <N as DimSub<NInner>>::Output>,
+    DefaultAllocator: nalgebra::allocator::Allocator<NInner, N>,
+    DefaultAllocator: nalgebra::allocator::Allocator<<N as DimSub<NInner>>::Output, N>,
 {
 }
 

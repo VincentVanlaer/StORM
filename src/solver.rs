@@ -160,8 +160,8 @@ pub(crate) trait DeterminantAllocs<
     Order: DimName,
 > = ArrayAllocator<N, N, Order>
     + ArrayAllocator<N, N, Const<2>>
-    + nalgebra::allocator::Allocator<N, NInner>
-    + nalgebra::allocator::Allocator<N, <N as nalgebra::DimSub<NInner>>::Output>
+    + nalgebra::allocator::Allocator<NInner, N>
+    + nalgebra::allocator::Allocator<<N as nalgebra::DimSub<NInner>>::Output, N>
     + nalgebra::allocator::Allocator<
         <N as nalgebra::DimMul<Const<2>>>::Output,
         <N as nalgebra::DimAdd<NInner>>::Output,
@@ -191,12 +191,12 @@ where
     let outer_boundary = system.outer_boundary(frequency);
     let inner_boundary = system.inner_boundary(frequency);
 
-    let n_inner = inner_boundary.shape().1;
+    let n_inner = inner_boundary.shape().0;
     let n = system.shape().value();
 
     let mut bands = Matrix::from_element_generic(
         system.shape().mul(Const::<2>),
-        system.shape().add(inner_boundary.shape_generic().1),
+        system.shape().add(inner_boundary.shape_generic().0),
         T::zero(),
     );
 
@@ -209,7 +209,7 @@ where
 
     for i in 0..n_inner {
         for j in 0..n {
-            *bands.index_mut((j, i)) = *inner_boundary.index((j, i));
+            *bands.index_mut((j, i)) = *inner_boundary.index((i, j));
         }
     }
 
@@ -276,7 +276,7 @@ where
     // Outer boundary
     for r in 0..(n - n_inner) {
         for c in 0..n {
-            *bands.index_mut((c, n_inner + r)) = *outer_boundary.index((c, r));
+            *bands.index_mut((c, n_inner + r)) = *outer_boundary.index((r, c));
         }
     }
 
