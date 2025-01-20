@@ -39,6 +39,7 @@
 #![feature(unwrap_infallible)]
 #![feature(unsigned_is_multiple_of)]
 #![feature(trait_alias)]
+#![feature(ptr_internals)]
 #![expect(incomplete_features)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
 #![warn(missing_docs)]

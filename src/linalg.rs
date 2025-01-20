@@ -35,12 +35,12 @@ pub(crate) unsafe trait ArrayStorage<T, R, C, L> {
 }
 
 #[repr(transparent)]
-pub(crate) struct ArrayArrayStorage<T, const R: usize, const C: usize, const L: usize>(
+pub(crate) struct SizedMatrixArray<T, const R: usize, const C: usize, const L: usize>(
     pub [[[T; R]; C]; L],
 );
 
 unsafe impl<T, const R: usize, const C: usize, const L: usize>
-    ArrayStorage<T, Const<R>, Const<C>, Const<L>> for ArrayArrayStorage<T, R, C, L>
+    ArrayStorage<T, Const<R>, Const<C>, Const<L>> for SizedMatrixArray<T, R, C, L>
 {
     fn ptr(&self) -> *const T {
         self.0.as_ptr() as *const T
@@ -65,37 +65,39 @@ unsafe impl<T, const R: usize, const C: usize, const L: usize>
 impl<const R: usize, const C: usize, const L: usize> ArrayAllocator<Const<R>, Const<C>, Const<L>>
     for DefaultAllocator
 {
-    type Buffer<T: Scalar> = ArrayArrayStorage<T, R, C, L>;
-    type BufferUninit<T: Scalar> = ArrayArrayStorage<MaybeUninit<T>, R, C, L>;
+    type Buffer<T: Scalar> = SizedMatrixArray<T, R, C, L>;
+    type BufferUninit<T: Scalar> = SizedMatrixArray<MaybeUninit<T>, R, C, L>;
 
     fn allocate_uninit<T: Scalar>(_: Const<R>, _: Const<C>, _: Const<L>) -> Self::BufferUninit<T> {
         let array: [[[MaybeUninit<T>; R]; C]; L] = unsafe { MaybeUninit::uninit().assume_init() };
-        ArrayArrayStorage(array)
+        SizedMatrixArray(array)
     }
 
     unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
-        ArrayArrayStorage((&uninit as *const _ as *const [_; L]).read())
+        SizedMatrixArray((&uninit as *const _ as *const [_; L]).read())
     }
 }
 
-impl<C: Dim, L: Dim> ArrayAllocator<Dyn, C, L> for DefaultAllocator {
-    type Buffer<T: Scalar> = UnsizedMatrixArray<T, Dyn, C, L>;
-    type BufferUninit<T: Scalar> = UnsizedMatrixArray<MaybeUninit<T>, Dyn, C, L>;
+pub(crate) struct UnsizedMatrixArray<T, R: Dim, C: Dim, L: Dim> {
+    data: core::ptr::Unique<T>,
+    rows: R,
+    columns: C,
+    length: L,
+}
 
-    fn allocate_uninit<T: Scalar>(nrows: Dyn, ncols: C, length: L) -> Self::BufferUninit<T> {
-        UnsizedMatrixArray::new_with(nrows, ncols, length, MaybeUninit::uninit)
-    }
+impl<T, R: Dim, C: Dim, L: Dim> UnsizedMatrixArray<T, R, C, L> {
+    fn new_with(rows: R, columns: C, length: L, f: impl FnMut() -> T) -> Self {
+        let mut data = Vec::new();
+        let l = rows.value() * columns.value() * length.value();
+        data.reserve_exact(l);
+        data.resize_with(l, f);
 
-    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
-        let UnsizedMatrixArray {
-            data,
-            rows,
-            columns,
-            length,
-        } = uninit;
+        let data: &mut [T] = Box::<[T]>::leak(data.into_boxed_slice());
+
+        assert_eq!(data.len(), rows.value() * columns.value() * length.value());
 
         UnsizedMatrixArray {
-            data: data as *mut T,
+            data: core::ptr::Unique::new(data.as_mut_ptr()).unwrap(),
             rows,
             columns,
             length,
@@ -103,59 +105,76 @@ impl<C: Dim, L: Dim> ArrayAllocator<Dyn, C, L> for DefaultAllocator {
     }
 }
 
-impl<const R: usize, L: Dim> ArrayAllocator<Const<R>, Dyn, L> for DefaultAllocator {
-    type Buffer<T: Scalar> = UnsizedMatrixArray<T, Const<R>, Dyn, L>;
-    type BufferUninit<T: Scalar> = UnsizedMatrixArray<MaybeUninit<T>, Const<R>, Dyn, L>;
-
-    fn allocate_uninit<T: Scalar>(nrows: Const<R>, ncols: Dyn, length: L) -> Self::BufferUninit<T> {
-        UnsizedMatrixArray::new_with(nrows, ncols, length, MaybeUninit::uninit)
-    }
-
-    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
-        let UnsizedMatrixArray {
-            data,
-            rows,
-            columns,
-            length,
-        } = uninit;
-
-        UnsizedMatrixArray {
-            data: data as *mut T,
-            rows,
-            columns,
-            length,
-        }
+impl<T, R: Dim, C: Dim, L: Dim> Drop for UnsizedMatrixArray<T, R, C, L> {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::<[T]>::from_raw(core::slice::from_raw_parts_mut(
+                self.data.as_ptr(),
+                self.rows.value() * self.columns.value() * self.length.value(),
+            )))
+        };
     }
 }
 
-impl<const R: usize, const C: usize> ArrayAllocator<Const<R>, Const<C>, Dyn> for DefaultAllocator {
-    type Buffer<T: Scalar> = UnsizedMatrixArray<T, Const<R>, Const<C>, Dyn>;
-    type BufferUninit<T: Scalar> = UnsizedMatrixArray<MaybeUninit<T>, Const<R>, Const<C>, Dyn>;
-
-    fn allocate_uninit<T: Scalar>(
-        nrows: Const<R>,
-        ncols: Const<C>,
-        length: Dyn,
-    ) -> Self::BufferUninit<T> {
-        UnsizedMatrixArray::new_with(nrows, ncols, length, MaybeUninit::uninit)
+unsafe impl<T, R: Dim, C: Dim, L: Dim> ArrayStorage<T, R, C, L> for UnsizedMatrixArray<T, R, C, L> {
+    fn ptr(&self) -> *const T {
+        self.data.as_ptr()
     }
 
-    unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
-        let UnsizedMatrixArray {
-            data,
-            rows,
-            columns,
-            length,
-        } = uninit;
+    fn ptr_mut(&mut self) -> *mut T {
+        self.data.as_ptr()
+    }
 
-        UnsizedMatrixArray {
-            data: data as *mut T,
-            rows,
-            columns,
-            length,
-        }
+    fn shape(&self) -> (R, C, L) {
+        (self.rows, self.columns, self.length)
+    }
+
+    unsafe fn get_unchecked_mut(&mut self, r: usize, c: usize, i: usize) -> &mut T {
+        &mut *self
+            .data
+            .as_ptr()
+            .add(r + c * self.rows.value() + i * self.columns.value() * self.rows.value())
     }
 }
+
+macro_rules! impl_dyn {
+    ($r: ty, $c: ty, $l: ty, $($($gen: ident) *: $bound: ident),*) => {
+        impl<$($($gen) *: $bound),*> ArrayAllocator<$r, $c, $l> for DefaultAllocator {
+            type Buffer<T: Scalar> = UnsizedMatrixArray<T, $r, $c, $l>;
+            type BufferUninit<T: Scalar> = UnsizedMatrixArray<MaybeUninit<T>, $r, $c, $l>;
+
+            fn allocate_uninit<T: Scalar>(
+                nrows: $r,
+                ncols: $c,
+                length: $l,
+            ) -> Self::BufferUninit<T> {
+                UnsizedMatrixArray::new_with(nrows, ncols, length, MaybeUninit::uninit)
+            }
+
+            unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
+                let UnsizedMatrixArray {
+                    data,
+                    rows,
+                    columns,
+                    length,
+                } = uninit;
+
+                core::mem::forget(uninit);
+
+                UnsizedMatrixArray {
+                    data: data.cast(),
+                    rows,
+                    columns,
+                    length,
+                }
+            }
+        }
+    };
+}
+
+impl_dyn!(Dyn, C, L, C: Dim, L: Dim);
+impl_dyn!(Const<R>, Dyn, L, const R: usize, L: Dim);
+impl_dyn!(Const<R>, Const<C>, Dyn, const R: usize, const C: usize);
 
 impl<T: Scalar, R: Dim, C: Dim, L: Dim>
     MatrixArray<T, R, C, L, <DefaultAllocator as ArrayAllocator<R, C, L>>::Buffer<T>>
@@ -178,64 +197,6 @@ where
             data: unsafe { <DefaultAllocator as ArrayAllocator<_, _, _>>::assume_init(data) },
             _phantom: PhantomData {},
         }
-    }
-}
-
-pub(crate) struct UnsizedMatrixArray<T, R: Dim, C: Dim, L: Dim> {
-    data: *mut T,
-    rows: R,
-    columns: C,
-    length: L,
-}
-
-impl<T, R: Dim, C: Dim, L: Dim> UnsizedMatrixArray<T, R, C, L> {
-    fn new_with(rows: R, columns: C, length: L, f: impl FnMut() -> T) -> Self {
-        let mut data = Vec::new();
-        let l = rows.value() * columns.value() * length.value();
-        data.reserve_exact(l);
-        data.resize_with(l, f);
-
-        let data: &mut [T] = Box::<[T]>::leak(data.into_boxed_slice());
-
-        assert_eq!(data.len(), rows.value() * columns.value() * length.value());
-
-        UnsizedMatrixArray {
-            data: data.as_mut_ptr(),
-            rows,
-            columns,
-            length,
-        }
-    }
-}
-
-impl<T, R: Dim, C: Dim, L: Dim> Drop for UnsizedMatrixArray<T, R, C, L> {
-    fn drop(&mut self) {
-        unsafe {
-            drop(Box::<[T]>::from_raw(core::slice::from_raw_parts_mut(
-                self.data,
-                self.rows.value() * self.columns.value() * self.length.value(),
-            )))
-        };
-    }
-}
-
-unsafe impl<T, R: Dim, C: Dim, L: Dim> ArrayStorage<T, R, C, L> for UnsizedMatrixArray<T, R, C, L> {
-    fn ptr(&self) -> *const T {
-        self.data
-    }
-
-    fn ptr_mut(&mut self) -> *mut T {
-        self.data
-    }
-
-    fn shape(&self) -> (R, C, L) {
-        (self.rows, self.columns, self.length)
-    }
-
-    unsafe fn get_unchecked_mut(&mut self, r: usize, c: usize, i: usize) -> &mut T {
-        &mut *self
-            .data
-            .add(r + c * self.rows.value() + i * self.columns.value() * self.rows.value())
     }
 }
 
@@ -487,4 +448,19 @@ where
     let m1 = m1.borrow();
     let m2 = m2.borrow();
     m1 * m2 - m2 * m1
+}
+
+#[cfg(test)]
+mod tests {
+    use nalgebra::{Const, Dyn};
+
+    use super::OMatrixArray;
+
+    #[test]
+    fn test_unsized_matrix_array() {
+        let matrix_array =
+            OMatrixArray::new_with(Const::<4> {}, Const::<4> {}, Dyn { 0: 600 }, || 1.);
+
+        assert_eq!(matrix_array.index(10)[(2, 2)], 1.);
+    }
 }
