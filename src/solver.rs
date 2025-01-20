@@ -226,39 +226,51 @@ where
         }
 
         for k in 0..n {
-            let mut max_idx = 0;
-            let mut max_val: T::RealField = T::RealField::zero();
+            let mut max_idx = k;
+            let mut max_val: T::RealField = unsafe { bands.get_unchecked((k, k)) }.abs();
 
-            for i in k..(n + n_inner) {
+            for i in (k + 1)..(n + n_inner) {
                 if unsafe { bands.get_unchecked((k, i)) }.abs() > max_val {
                     max_idx = i;
                     max_val = bands.index((k, i)).abs();
                 }
             }
 
-            let pivot;
+            let mut pivot =
+                Matrix::from_element_generic(system.shape().mul(Const::<2>), Const::<1>, T::zero());
 
             if max_idx != k {
-                pivot = bands.column(max_idx).into_owned();
-                bands.set_column(max_idx, &bands.column(k).into_owned());
+                for i in 0..(2 * n) {
+                    unsafe {
+                        *pivot.get_unchecked_mut(i) = *bands.get_unchecked((i, max_idx));
+                        *bands.get_unchecked_mut((i, max_idx)) = *bands.get_unchecked((i, k));
+                    }
+                }
                 det *= -T::one();
             } else {
-                pivot = bands.column(k).into_owned();
+                for i in 0..(2 * n) {
+                    unsafe {
+                        *pivot.get_unchecked_mut(i) = *bands.get_unchecked((i, k));
+                    }
+                }
             }
 
-            det *= pivot[k];
+            det *= unsafe { *pivot.get_unchecked(k) };
 
             debug_assert!(det.is_finite());
 
             for i in (k + 1)..(2 * n) {
-                upper.set(n_step, k, i - k, pivot[i] / pivot[k]);
+                upper.set(n_step, k, i - k, unsafe {
+                    *pivot.get_unchecked(i) / *pivot.get_unchecked(k)
+                });
             }
 
             for i in (k + 1)..(n + n_inner) {
-                let m = *bands.index((k, i)) / pivot[k];
+                let m = unsafe { *bands.get_unchecked((k, i)) / *pivot.get_unchecked(k) };
                 // bands.column_mut(i).axpy(-m, &pivot, T::one());
                 for j in 0..(2 * n) {
-                    *unsafe { bands.get_unchecked_mut((j, i)) } -= pivot[j] * m;
+                    *unsafe { bands.get_unchecked_mut((j, i)) } -=
+                        *unsafe { pivot.get_unchecked(j) } * m;
                 }
             }
         }
