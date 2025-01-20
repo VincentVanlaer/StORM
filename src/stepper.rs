@@ -164,6 +164,37 @@ where
 const C2_1: f64 = -0.288675134594812882254;
 const C2_2: f64 = 0.288675134594812882254;
 
+// General method for deriving these calculations
+//
+// 1. Start from an n-order Gauss-Legendre collocation method and obtain the Butcher tableau
+// 2. Fill in f'(x, y) = A(x)y
+// 3. In general, it seems that the equations can always be transformed to
+//
+//    kᵢ = Aᵢ(y₀ + ∑ⱼcᵢⱼkⱼ) => -Aᵢ(y₀ + y₁) / 2 = Aᵢ(kᵢ + ∑ⱼ(cᵢⱼ - bⱼ/ 2) kⱼ)
+//      where cᵢᵢ - bᵢ/ 2 = 0
+//
+//    NOTE that all kᵢ are vectors with the same dimensions as A(x), and Aᵢ≡ hA(xᵢ)
+//
+// 4. This gives a system of equations that looks like this in terms of structure (excluding the
+//    c and b constants)
+//
+//    │𝟙  A₁ A₁││k₁│  │A₁│
+//    │A₂ 𝟙  A₂││k₂│= │A₂│(y₀ + y₁) / 2
+//    │A₃ A₃ 𝟙 ││k₃│  │A₃│
+//
+//    NOTE that this is a matrix of matrices. From the view of solving this system we take the A
+//    matrices as constants
+//
+// 5. Solve the system of equations for kᵢ using gaussian elimination. This will require n - 1 matrix
+//    inversions.
+// 6. Fill the result into the final equation of the collocation step. This gives us an implicit
+//    linear equation for y₀ and y₁, which is what we need. In principle it is possible to solve
+//    for y₁ at this point, but that is not necessary
+//
+// See also:
+//   https://en.wikipedia.org/wiki/Runge-Kutta_methods
+//   https://en.wikipedia.org/wiki/Gauss-Legendre_method
+
 pub(crate) struct Colloc2 {}
 
 impl<T: ComplexField, N: Dim> Stepper<T, N, Const<1>> for Colloc2
@@ -214,6 +245,8 @@ where
 
         let a2a1 = &(a2 * a1);
 
+        // This operation might be more efficient by directly solving Ax = By, rather than
+        // computing the inverse of A and the multiplying that with B
         let k2 = &((eye + a2a1 * T::from_subset(&(1. / 12.)))
             .try_inverse()
             .unwrap()
