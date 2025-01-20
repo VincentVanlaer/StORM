@@ -1,9 +1,9 @@
 use itertools::izip;
-use nalgebra::{ComplexField, Const, Dim, DimMul, MatrixViewMut, OMatrix};
+use nalgebra::{ComplexField, Const, Dim, DimMul, Dyn, MatrixViewMut, OMatrix};
 use std::mem::MaybeUninit;
 
 use super::{Boundary, GridLength, Moments};
-use crate::linalg::OwnedArray;
+use crate::linalg::{OMatrixArray, OwnedArray};
 use crate::model::StellarModel;
 use crate::stepper::StepMoments;
 use std::f64::consts::PI;
@@ -14,6 +14,7 @@ use std::f64::consts::PI;
 /// therefore not be completely valid in a rotating star.
 pub struct Rotating1D {
     components: Vec<ModelPoint>,
+    preprocessed: OMatrixArray<f64, Const<4>, Const<4>, Dyn>,
     ell: f64,
     m: f64,
 }
@@ -60,8 +61,31 @@ impl Rotating1D {
             })
             .collect();
 
+        let mut preprocessed = OMatrixArray::new_with(
+            Const {},
+            Const {},
+            Dyn {
+                0: components.len(),
+            },
+            || 0.,
+        );
+
+        for (i, val) in components.iter().enumerate() {
+            preprocess::<true, Const<1>, _>(
+                Gated::<_, true>::new(val.rot),
+                val.u,
+                val.v_gamma,
+                val.a_star,
+                val.c1,
+                ell,
+                m as f64,
+                preprocessed.index_mut(i),
+            );
+        }
+
         Rotating1D {
             components,
+            preprocessed,
             ell,
             m: m as f64,
         }
@@ -110,13 +134,8 @@ impl Iterator for ModelPointsIterator<'_> {
         {
             return None;
         }
-        let l = self.model.ell;
-        let lambda = l * (l + 1.);
-        let m = self.model.m;
-        let omega = self.frequency;
-
         // Bounds check due to potential overflow
-        let lower = self.model.components[self.pos];
+        let lower = unsafe { self.model.components.get_unchecked(self.pos) };
         let upper = self.model.components[self.pos + self.skip];
 
         let delta = (upper.x - lower.x) / (self.total_subpos as f64);
@@ -126,16 +145,16 @@ impl Iterator for ModelPointsIterator<'_> {
         let delta = subupper - sublower;
 
         let lower_a = {
-            let mut a = FourMatrix::default();
+            let mut a = unsafe { self.model.preprocessed.get_unchecked(self.pos) }.clone_owned();
             process::<true, Const<1>, _>(
                 Gated::<_, true>::new(lower.rot),
-                omega,
+                self.frequency,
                 lower.u,
                 lower.v_gamma,
                 lower.a_star,
                 lower.c1,
                 self.model.ell,
-                m,
+                self.model.m,
                 a.as_view_mut(),
             );
 
@@ -143,16 +162,17 @@ impl Iterator for ModelPointsIterator<'_> {
         } * (delta / lower.x);
 
         let upper_a = {
-            let mut a = FourMatrix::default();
+            let mut a = unsafe { self.model.preprocessed.get_unchecked(self.pos + self.skip) }
+                .clone_owned();
             process::<true, Const<1>, _>(
                 Gated::<_, true>::new(upper.rot),
-                omega,
+                self.frequency,
                 upper.u,
                 upper.v_gamma,
                 upper.a_star,
                 upper.c1,
                 self.model.ell,
-                m,
+                self.model.m,
                 a.as_view_mut(),
             );
 
@@ -388,10 +408,9 @@ impl<T, const ACTIVE: bool> Gated<T, ACTIVE> {
     }
 }
 
-#[inline]
-pub(crate) fn process<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+#[inline(always)]
+pub(crate) fn preprocess<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
     rotation: Gated<T, ROTATION>,
-    freq: T,
     u: T,
     v_gamma: T,
     a_star: T,
@@ -433,6 +452,33 @@ pub(crate) fn process<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy
     *output.index_mut((3, 1)) = u * v_gamma;
     *output.index_mut((3, 2)) = lambda;
     *output.index_mut((3, 3)) = -u + two - ell;
+}
+
+#[inline(always)]
+pub(crate) fn process<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+    rotation: Gated<T, ROTATION>,
+    freq: T,
+    u: T,
+    v_gamma: T,
+    a_star: T,
+    c1: T,
+    ell: T,
+    m: T,
+    mut output: MatrixViewMut<
+        T,
+        <Degrees as DimMul<Const<4>>>::Output,
+        <Degrees as DimMul<Const<4>>>::Output,
+    >,
+) where
+    Degrees: DimMul<Const<4>>,
+{
+    assert_eq!(output.shape(), (4, 4));
+
+    let zero = T::from_subset(&0.);
+    let one = T::from_subset(&1.);
+    let two = T::from_subset(&2.);
+    let three = T::from_subset(&3.);
+    let lambda = ell * (ell + one);
 
     if ell != zero {
         let rot = g!(rotation, m * rotation, zero);

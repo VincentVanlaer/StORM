@@ -207,7 +207,7 @@ impl<T, R, C, L, S: ArrayStorage<T, R, C, L>> MatrixArray<T, R, C, L, S> {
 }
 
 impl<T: Scalar, R: Dim, C: Dim, L: Dim, S: ArrayStorage<T, R, C, L>> MatrixArray<T, R, C, L, S> {
-    pub(crate) fn index(
+    pub(crate) unsafe fn get_unchecked(
         &self,
         index: usize,
     ) -> nalgebra::Matrix<T, R, C, ViewStorage<T, R, C, Const<1>, R>> {
@@ -222,14 +222,15 @@ impl<T: Scalar, R: Dim, C: Dim, L: Dim, S: ArrayStorage<T, R, C, L>> MatrixArray
 
         nalgebra::Matrix::from_data(unsafe {
             ViewStorage::from_raw_parts(
-                data[index * matrix_size..(index + 1) * matrix_size].as_ptr(),
+                data.get_unchecked(index * matrix_size..(index + 1) * matrix_size)
+                    .as_ptr(),
                 (rows, columns),
                 (Const::<1> {}, rows),
             )
         })
     }
 
-    pub(crate) fn index_mut(
+    pub(crate) unsafe fn get_unchecked_mut(
         &mut self,
         index: usize,
     ) -> nalgebra::Matrix<T, R, C, ViewStorageMut<T, R, C, Const<1>, R>> {
@@ -244,11 +245,30 @@ impl<T: Scalar, R: Dim, C: Dim, L: Dim, S: ArrayStorage<T, R, C, L>> MatrixArray
 
         nalgebra::Matrix::from_data(unsafe {
             ViewStorageMut::from_raw_parts(
-                data[index * matrix_size..(index + 1) * matrix_size].as_mut_ptr(),
+                data.get_unchecked_mut(index * matrix_size..(index + 1) * matrix_size)
+                    .as_mut_ptr(),
                 (rows, columns),
                 (Const::<1> {}, rows),
             )
         })
+    }
+
+    pub(crate) fn index(
+        &self,
+        index: usize,
+    ) -> nalgebra::Matrix<T, R, C, ViewStorage<T, R, C, Const<1>, R>> {
+        assert!(index < self.data.shape().2.value());
+
+        unsafe { self.get_unchecked(index) }
+    }
+
+    pub(crate) fn index_mut(
+        &mut self,
+        index: usize,
+    ) -> nalgebra::Matrix<T, R, C, ViewStorageMut<T, R, C, Const<1>, R>> {
+        assert!(index < self.data.shape().2.value());
+
+        unsafe { self.get_unchecked_mut(index) }
     }
 }
 
