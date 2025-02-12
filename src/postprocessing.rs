@@ -323,6 +323,8 @@ pub struct ModeCoupling {
     pub r: DMatrix<f64>,
     /// Structure coupling matrix and original solution
     pub l: DMatrix<f64>,
+    /// Azimuthal order selected for this perturbation
+    pub m: i64,
 }
 
 /// Using the structure deformation, perturb the frequencies and eigenfunctions of the modes.
@@ -633,6 +635,7 @@ pub fn perturb_deformed(
         d: d_squared,
         r: r_linear,
         l: l_zero,
+        m,
     }
 }
 
