@@ -8,7 +8,7 @@ use itertools::Itertools;
 use nalgebra::ComplexField;
 use ndarray::aview0;
 use nshare::AsNdarray2;
-use std::io::{self, BufRead, IsTerminal};
+use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 use storm::postprocessing::{
@@ -43,21 +43,29 @@ struct H5Complex {
 }
 
 fn main() -> ExitCode {
-    let mut stdin = io::stdin().lock();
-    let interactive_input = io::stdin().is_terminal();
     let mut state = StormState::default();
+    let mut rl = rustyline::DefaultEditor::new().unwrap();
+    let interactive_input = io::stdin().is_terminal();
     color_eyre::install().unwrap();
 
     loop {
-        if interactive_input {
-            eprint!("[storm] > ");
-        }
-
-        let mut command = String::new();
-        let readline_result = stdin.read_line(&mut command);
-        if readline_result.map_or(true, |val| val == 0) {
-            break;
-        }
+        let readline = rl.readline("[storm] > ");
+        let command = match readline {
+            Ok(line) => {
+                let _ = rl.add_history_entry(&line);
+                line
+            }
+            Err(rustyline::error::ReadlineError::Interrupted) => {
+                continue;
+            }
+            Err(rustyline::error::ReadlineError::Eof) => {
+                break;
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+                break;
+            }
+        };
 
         let command = command.trim().to_owned();
 
@@ -94,9 +102,6 @@ fn main() -> ExitCode {
             }
         }
     }
-
-    // Ensures the shell doesn't print '%' at the end of the last line
-    eprintln!();
 
     0.into()
 }
