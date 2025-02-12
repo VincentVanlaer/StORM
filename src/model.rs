@@ -19,17 +19,26 @@ const GRAV: f64 = 6.67430e-8;
 /// - GYRE's HDF5 stellar model
 #[derive(Debug, Clone)]
 pub struct StellarModel {
-    pub(crate) radius: f64,
-    pub(crate) mass: f64,
-    pub(crate) r_coord: Array1<f64>,
-    pub(crate) m_coord: Array1<f64>,
-    pub(crate) rho: Array1<f64>,
-    pub(crate) p: Array1<f64>,
-    pub(crate) gamma1: Array1<f64>,
-    pub(crate) nsqrd: Array1<f64>,
-    pub(crate) rot: Array1<f64>,
-    // Gravitation constant, to ensure consistency with evolution code
-    pub(crate) grav: f64,
+    /// Total radius of the model \[cm\]
+    pub radius: f64,
+    /// Total mass of the model \[g\]
+    pub mass: f64,
+    /// Radial coordinate \[cm\], ranges from 0 to radius
+    pub r_coord: Box<[f64]>,
+    /// Mass coordinate \[g\], ranges from 0 to mass
+    pub m_coord: Box<[f64]>,
+    /// Density \[g/cm^3\]
+    pub rho: Box<[f64]>,
+    /// Pressure \[Ba\]
+    pub p: Box<[f64]>,
+    /// First adiabatic exponent \[dimensionless\]
+    pub gamma1: Box<[f64]>,
+    /// Square of the buoyancy frequency \[s^-2\]
+    pub nsqrd: Box<[f64]>,
+    /// Angular rotation frequency \[rad/s\]
+    pub rot: Box<[f64]>,
+    /// Gravitional acceleration \[Ncm^2/g\]
+    pub grav: f64,
 }
 
 /// Errors that can be returned when loading a stellar model
@@ -110,13 +119,13 @@ impl StellarModel {
         Ok(StellarModel {
             radius,
             mass,
-            r_coord,
-            m_coord,
-            rho,
-            p,
-            gamma1,
-            nsqrd,
-            rot,
+            r_coord: r_coord.to_vec().into(),
+            m_coord: m_coord.to_vec().into(),
+            rho: rho.to_vec().into(),
+            p: p.to_vec().into(),
+            gamma1: gamma1.to_vec().into(),
+            nsqrd: nsqrd.to_vec().into(),
+            rot: rot.to_vec().into(),
             grav: GRAV,
         })
     }
@@ -126,7 +135,9 @@ impl StellarModel {
     pub fn overlay_rot<P: AsRef<Path>>(&mut self, file: P) -> Result<(), ModelError> {
         let input = &hdf5::File::open(file.as_ref())
             .map_err(|err| ModelError::HDF5OpenError(file.as_ref().to_owned(), err))?;
-        self.rot = read_dataset(input, "Omega_rot", self.r_coord.len())?;
+        self.rot = read_dataset(input, "Omega_rot", self.r_coord.len())?
+            .to_vec()
+            .into();
 
         Ok(())
     }

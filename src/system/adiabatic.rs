@@ -31,17 +31,17 @@ impl Rotating1D {
     /// spherical harmonic.
     pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Rotating1D {
         let ell = ell as f64;
+        let scale = (value.grav * value.mass / value.radius.powi(3)).sqrt();
 
-        let x = &value.r_coord / value.radius;
         let components: Vec<_> = value
             .rot
             .iter()
-            .zip(x)
+            .zip(&value.r_coord)
             .enumerate()
             .map(|(i, (&rot, x))| ModelPoint {
                 coeff: value.dimensionless_coefficients(i),
-                rot,
-                x,
+                rot: rot / scale,
+                x: x / value.radius,
             })
             .collect();
 
