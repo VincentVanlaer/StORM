@@ -88,11 +88,11 @@ impl Rotating1DPostprocessing {
         let freq_scale = model.freq_scale();
 
         let lambda = (ell * (ell + 1)) as f64;
-        let lambda_n1 = (ell * (ell - 1)) as f64;
+        let lambda_n1 = (ell * (ell.saturating_sub(1))) as f64;
         let lambda_p1 = ((ell + 2) * (ell + 1)) as f64;
-        let q_hd_n = q_kl1_hd(ell, ell - 1, m);
+        let q_hd_n = q_kl1_hd(ell, ell.saturating_sub(1), m);
         let q_hd_p = q_kl1_hd(ell, ell + 1, m);
-        let q_h_n = q_kl1_h(ell, ell - 1, m);
+        let q_h_n = q_kl1_h(ell, ell.saturating_sub(1), m);
         let q_h_p = q_kl1_h(ell, ell + 1, m);
         let mf = m as f64;
         let ell_i32: i32 = ell
