@@ -1,12 +1,10 @@
-use itertools::izip;
 use nalgebra::{ComplexField, Const, Dim, DimMul, Dyn, MatrixViewMut, OMatrix};
 use std::mem::MaybeUninit;
 
 use super::{Boundary, GridLength, Moments};
 use crate::linalg::{OMatrixArray, OwnedArray};
-use crate::model::StellarModel;
+use crate::model::{DimensionlessCoefficients, StellarModel};
 use crate::stepper::StepMoments;
-use std::f64::consts::PI;
 
 /// Spherically symmetric stellar oscillation equations with a full rotation term
 ///
@@ -23,10 +21,7 @@ type FourMatrix = OMatrix<f64, Const<4>, Const<4>>;
 
 #[derive(Clone, Copy, Debug)]
 struct ModelPoint {
-    u: f64,
-    v_gamma: f64,
-    a_star: f64,
-    c1: f64,
+    coeff: DimensionlessCoefficients,
     rot: f64,
     x: f64,
 }
@@ -37,25 +32,14 @@ impl Rotating1D {
     pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Rotating1D {
         let ell = ell as f64;
 
-        let r_cubed = value.r_coord.mapv(|a| a.powi(3));
-        let mut v_gamma =
-            value.grav * &value.m_coord * &value.rho / (&value.p * &value.r_coord * &value.gamma1);
-        let mut a_star = &r_cubed / (value.grav * &value.m_coord) * &value.nsqrd;
-        let mut u = 4.0 * PI * &value.rho * &r_cubed / &value.m_coord;
-        let mut c1 = &r_cubed / value.radius.powi(3) * value.mass / &value.m_coord;
         let x = &value.r_coord / value.radius;
-
-        v_gamma[0] = 0.0;
-        a_star[0] = 0.0;
-        u[0] = 3.0;
-        c1[0] = value.mass / value.radius.powi(3) * 3.0 / (4.0 * PI * value.rho[0]);
-
-        let components: Vec<_> = izip!(u, v_gamma, a_star, &value.rot, c1, x)
-            .map(|(u, v_gamma, a_star, &rot, c1, x)| ModelPoint {
-                u,
-                v_gamma,
-                a_star,
-                c1,
+        let components: Vec<_> = value
+            .rot
+            .iter()
+            .zip(x)
+            .enumerate()
+            .map(|(i, (&rot, x))| ModelPoint {
+                coeff: value.dimensionless_coefficients(i),
                 rot,
                 x,
             })
@@ -73,10 +57,10 @@ impl Rotating1D {
         for (i, val) in components.iter().enumerate() {
             preprocess::<true, Const<1>, _>(
                 Gated::<_, true>::new(val.rot),
-                val.u,
-                val.v_gamma,
-                val.a_star,
-                val.c1,
+                val.coeff.u,
+                val.coeff.v_gamma,
+                val.coeff.a_star,
+                val.coeff.c1,
                 ell,
                 m as f64,
                 preprocessed.index_mut(i),
@@ -149,10 +133,10 @@ impl Iterator for ModelPointsIterator<'_> {
             process::<true, Const<1>, _>(
                 Gated::<_, true>::new(lower.rot),
                 self.frequency,
-                lower.u,
-                lower.v_gamma,
-                lower.a_star,
-                lower.c1,
+                lower.coeff.u,
+                lower.coeff.v_gamma,
+                lower.coeff.a_star,
+                lower.coeff.c1,
                 self.model.ell,
                 self.model.m,
                 a.as_view_mut(),
@@ -167,10 +151,10 @@ impl Iterator for ModelPointsIterator<'_> {
             process::<true, Const<1>, _>(
                 Gated::<_, true>::new(upper.rot),
                 self.frequency,
-                upper.u,
-                upper.v_gamma,
-                upper.a_star,
-                upper.c1,
+                upper.coeff.u,
+                upper.coeff.v_gamma,
+                upper.coeff.a_star,
+                upper.coeff.c1,
                 self.model.ell,
                 self.model.m,
                 a.as_view_mut(),
@@ -325,10 +309,10 @@ impl Boundary<f64, Const<4>, Const<2>> for Rotating1D {
         inner_bound::<true, Const<1>, _>(
             Gated::<_, true>::new(props.rot),
             omega,
-            props.u,
-            props.v_gamma,
-            props.a_star,
-            props.c1,
+            props.coeff.u,
+            props.coeff.v_gamma,
+            props.coeff.a_star,
+            props.coeff.c1,
             self.ell,
             self.m,
             b.as_view_mut(),
@@ -344,10 +328,10 @@ impl Boundary<f64, Const<4>, Const<2>> for Rotating1D {
         outer_bound::<true, Const<1>, _>(
             Gated::<_, true>::new(props.rot),
             omega,
-            props.u,
-            props.v_gamma,
-            props.a_star,
-            props.c1,
+            props.coeff.u,
+            props.coeff.v_gamma,
+            props.coeff.a_star,
+            props.coeff.c1,
             self.ell,
             self.m,
             b.as_view_mut(),

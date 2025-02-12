@@ -1,6 +1,9 @@
 //! Loading and modifying stellar models
 
-use std::path::{Path, PathBuf};
+use std::{
+    f64::consts::PI,
+    path::{Path, PathBuf},
+};
 
 use hdf5::{File, H5Type};
 use ndarray::Array1;
@@ -76,6 +79,14 @@ fn read_dataset<T: H5Type>(
     Ok(res)
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DimensionlessCoefficients {
+    pub v_gamma: f64,
+    pub a_star: f64,
+    pub u: f64,
+    pub c1: f64,
+}
+
 impl StellarModel {
     /// Load a stellar model from a GYRE stellar model HDF5 file.
     ///
@@ -118,5 +129,25 @@ impl StellarModel {
         self.rot = read_dataset(input, "Omega_rot", self.r_coord.len())?;
 
         Ok(())
+    }
+
+    pub(crate) fn dimensionless_coefficients(&self, i: usize) -> DimensionlessCoefficients {
+        if i == 0 {
+            DimensionlessCoefficients {
+                v_gamma: 0.,
+                a_star: 0.,
+                u: 3.,
+                c1: self.mass / self.radius.powi(3) * 3. / (4. * PI * self.rho[0]),
+            }
+        } else {
+            let r_cubed = self.r_coord[i].powi(3);
+            DimensionlessCoefficients {
+                v_gamma: self.grav * self.m_coord[i] * self.rho[i]
+                    / (self.p[i] * self.r_coord[i] * self.gamma1[i]),
+                a_star: r_cubed / (self.grav * self.m_coord[i]) * self.nsqrd[i],
+                u: 4. * PI * self.rho[i] * r_cubed / self.m_coord[i],
+                c1: r_cubed / self.radius.powi(3) * self.mass / self.m_coord[i],
+            }
+        }
     }
 }
