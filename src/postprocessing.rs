@@ -2,6 +2,7 @@
 
 use std::f64::consts::PI;
 
+use itertools::Itertools;
 use nalgebra::{ComplexField, Const, DMatrix, DVector, Dyn, Matrix2, Vector2};
 use num_complex::Complex64;
 use num_traits::Zero;
@@ -41,22 +42,15 @@ pub struct Rotating1DPostprocessing {
     pub p: Box<[f64]>,
     /// ∇ξ
     pub chi: Box<[f64]>,
-    /// Clockwise winding number
-    pub clockwise_winding: f64,
-    /// Counter-clockwise winding number
-    pub counter_clockwise_winding: f64,
-}
-
-fn angle_diff(a: f64, b: f64) -> f64 {
-    let diff = a - b;
-
-    if diff > PI {
-        diff - 2. * PI
-    } else if diff < -PI {
-        diff + 2. * PI
-    } else {
-        diff
-    }
+    /// Clockwise crossing number (g-mode crossings)
+    pub cross_clockwise: u64,
+    /// Counter-clockwise crossing number (p-mode crossings)
+    pub cross_counter_clockwise: u64,
+    /// Radial order
+    ///
+    /// This is computed from the clockwise and counter-clockwise crossing number. The exact
+    /// formula depends on the degree of the mode
+    pub radial_order: i64,
 }
 
 impl Rotating1DPostprocessing {
@@ -263,22 +257,42 @@ impl Rotating1DPostprocessing {
             chi[i] *= norm;
         }
 
-        let (cww, ccww) = xi_r
-            .iter()
-            .zip(xi_h.iter())
-            .skip(1)
-            .map(|(&xi_r, &xi_h)| f64::atan2(xi_r, xi_h))
-            .filter(|arg0: &f64| f64::is_finite(*arg0))
-            .map_windows(|&[alpha1, alpha2]| angle_diff(alpha2, alpha1))
-            .fold((0., 0.), |(cww, ccww), val| {
-                if ell == 0 {
-                    (cww + val.abs(), ccww)
-                } else if val >= 0. {
-                    (cww, ccww + val)
-                } else {
-                    (cww - val, ccww)
+        let (cross_clockwise, cross_counter_clockwise, radial_order) = match ell {
+            0 => {
+                let (cw, ccw) = count_windings(&y1, &y2);
+
+                (cw, ccw, ccw as i64)
+            }
+            1 => {
+                let mut y1_alt = vec![0.; model.r_coord.len()].into_boxed_slice();
+                let mut y2_alt = vec![0.; model.r_coord.len()].into_boxed_slice();
+
+                for i in 0..y2_alt.len() {
+                    y1_alt[i] = (1. - model.dimensionless_coefficients(i).u / 3.) * y1[i]
+                        + (y3[i] - y4[i]) / 3.;
+                    y2_alt[i] = y2[i] - y1[i];
                 }
-            });
+
+                let (cw, ccw) = count_windings(&y1_alt[2..], &y2_alt[2..]);
+
+                if cw > ccw {
+                    (cw, ccw, ccw as i64 - cw as i64)
+                } else {
+                    (cw, ccw, ccw as i64 - cw as i64 + 1)
+                }
+            }
+            _ => {
+                let mut y2_alt = vec![0.; model.r_coord.len()].into_boxed_slice();
+
+                for i in 0..y2_alt.len() {
+                    y2_alt[i] = y2[i] + y3[i];
+                }
+
+                let (cw, ccw) = count_windings(&y1, &y2_alt);
+
+                (cw, ccw, ccw as i64 - cw as i64)
+            }
+        };
 
         Rotating1DPostprocessing {
             x: model.r_coord.clone(),
@@ -288,8 +302,6 @@ impl Rotating1DPostprocessing {
             y4,
             xi_r,
             xi_h,
-            clockwise_winding: cww / PI,
-            counter_clockwise_winding: ccww / PI,
             psi: psi_prime,
             dpsi: dpsi_prime,
             rho: rho_prime,
@@ -297,8 +309,58 @@ impl Rotating1DPostprocessing {
             chi,
             xi_tn,
             xi_tp,
+            cross_clockwise,
+            cross_counter_clockwise,
+            radial_order,
         }
     }
+}
+
+fn count_windings(y1: &[f64], y2: &[f64]) -> (u64, u64) {
+    let mut clockwise = 0;
+    let mut counter_clockwise = 0;
+
+    #[cfg(test)]
+    eprintln!("---");
+    y1.iter()
+        .zip(y2.iter())
+        .tuple_windows()
+        .enumerate()
+        .for_each(|(_i, ((&y1_1, &y2_1), (&y1_2, &y2_2)))| {
+            if y1_1 <= 0. && y1_2 > 0. {
+                // left to right
+                let yt = y2_1 - y1_1 * (y2_2 - y2_1) / (y1_2 - y1_1);
+                if yt > 0. {
+                    #[cfg(test)]
+                    eprintln!("↷ {_i}, {y1_1:.5e}, {y1_2:.5e}, {yt:.5e}");
+                    // Above
+                    clockwise += 1
+                } else {
+                    #[cfg(test)]
+                    eprintln!("↺ {_i}, {y1_1:.5e}, {y1_2:.5e}, {yt:.5e}");
+                    // Below (or exact zero, this is ignored)
+                    counter_clockwise += 1;
+                }
+            } else if y1_1 >= 0. && y1_2 < 0. {
+                // right to left
+                let yt = y2_1 - y1_1 * (y2_2 - y2_1) / (y1_2 - y1_1);
+                if yt > 0. {
+                    // Above
+                    #[cfg(test)]
+                    eprintln!("↶ {_i}, {y1_1:.5e}, {y1_2:.5e}, {yt:.5e}");
+                    counter_clockwise += 1
+                } else {
+                    #[cfg(test)]
+                    eprintln!("↻ {_i}, {y1_1:.5e}, {y1_2:.5e}, {yt:.5e}");
+                    // Below  (or exact zero, this is ignored)
+                    clockwise += 1
+                }
+            }
+        });
+
+    #[cfg(test)]
+    eprintln!("--- cw: {clockwise} ccw: {counter_clockwise} ---");
+    (clockwise, counter_clockwise)
 }
 
 fn beta_k(k: u64, m: i64) -> f64 {
@@ -744,5 +806,144 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
         dbeta: dbeta.into_boxed_slice(),
         ddbeta: ddbeta.into_boxed_slice(),
         rot,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        num::NonZeroU64,
+        path::{Path, PathBuf},
+    };
+
+    use itertools::Itertools;
+    use ndarray::linspace;
+
+    use crate::{
+        bracket::Precision,
+        dynamic_interface::{DifferenceSchemes, MultipleShooting},
+        model::StellarModel,
+        system::adiabatic::{GridScale, Rotating1D},
+    };
+
+    use super::Rotating1DPostprocessing;
+
+    fn compute_mode_id(
+        ell: u64,
+        m: i64,
+        lower: f64,
+        upper: f64,
+        steps: usize,
+        model: impl AsRef<Path>,
+    ) -> Vec<(u64, u64, i64)> {
+        let model = {
+            let main_dir: PathBuf = std::env::var("CARGO_MANIFEST_DIR").unwrap().into();
+            let model_file = main_dir.join(model);
+
+            StellarModel::from_gsm(model_file).unwrap()
+        };
+
+        let system = Rotating1D::from_model(&model, ell, m);
+        let determinant =
+            MultipleShooting::new(&system, DifferenceSchemes::Colloc2, &GridScale { scale: 0 });
+        let points = linspace(lower, upper, steps);
+
+        determinant
+            .scan_and_optimize(
+                points,
+                Precision::ULP(const { NonZeroU64::new(1).unwrap() }),
+            )
+            .map(|bracket| {
+                let post = Rotating1DPostprocessing::new(
+                    bracket.root,
+                    &determinant.eigenvector(bracket.root),
+                    ell,
+                    m,
+                    &model,
+                );
+
+                (
+                    post.cross_clockwise,
+                    post.cross_counter_clockwise,
+                    post.radial_order,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_mode_id_radial() {
+        assert_eq!(
+            compute_mode_id(0, 0, 3.0, 25.0, 25, "test-data/test-model-zams.GSM"),
+            (1..=19).map(|i| (0, i, i as i64)).collect_vec()
+        );
+    }
+
+    #[test]
+    fn test_mode_id_radial_other() {
+        assert_eq!(
+            compute_mode_id(0, 0, 2.0, 25.0, 25, "test-data/joel-test-model.GSM"),
+            (1..=17).map(|i| (0, i, i as i64)).collect_vec()
+        );
+    }
+
+    #[test]
+    fn test_mode_id_dipole() {
+        assert_eq!(
+            compute_mode_id(1, 0, 1., 25., 80, "test-data/test-model-zams.GSM"),
+            vec![
+                (2, 0, -2),
+                (1, 0, -1),
+                (0, 0, 1),
+                (0, 1, 2),
+                (0, 2, 3),
+                (0, 3, 4),
+                (0, 4, 5),
+                (0, 5, 6),
+                (0, 6, 7),
+                (0, 7, 8),
+                (0, 8, 9),
+                (0, 9, 10),
+                (0, 10, 11),
+                (0, 11, 12),
+                (0, 12, 13),
+                (0, 13, 14),
+                (0, 14, 15),
+                (0, 15, 16),
+                (0, 16, 17),
+                (0, 17, 18),
+                (0, 18, 19)
+            ]
+        )
+    }
+    #[test]
+    fn test_mode_id_quadrupole() {
+        assert_eq!(
+            compute_mode_id(2, 0, 2.0, 25.0, 80, "test-data/test-model-tams.GSM"),
+            vec![
+                (3, 0, -3),
+                (2, 0, -2),
+                (1, 0, -1),
+                (1, 1, 0),
+                (1, 2, 1),
+                (1, 3, 2),
+                (1, 4, 3),
+                (0, 4, 4),
+                (0, 5, 5),
+                (0, 6, 6),
+                (0, 7, 7),
+                (0, 8, 8),
+                (0, 9, 9),
+                (0, 10, 10),
+                (0, 11, 11),
+                (0, 12, 12),
+                (0, 13, 13),
+                (0, 14, 14),
+                (0, 15, 15),
+                (0, 16, 16),
+                (0, 17, 17),
+                (0, 18, 18)
+            ]
+        );
     }
 }

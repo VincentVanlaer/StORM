@@ -348,6 +348,8 @@ enum ModePropertyFlags {
     Degree,
     /// Azimuthal order of the mode. It is stored as `m`.
     AzimuthalOrder,
+    /// Radial order of the mode
+    RadialOrder,
     /// Perturbed frequencies, units are given by `frequency-units`. It is stored in a subgroup of
     /// the `deformation` group. The name of that subgroup is given by the azimuthal order selected
     /// for the perturbative calculations.
@@ -395,6 +397,7 @@ impl From<Vec<ModePropertyFlags>> for ModeProperties {
                 ModePropertyFlags::DeformedFrequency => prop.deformed_frequency = true,
                 ModePropertyFlags::DeformedEigenvector => prop.deformed_eigenvector = true,
                 ModePropertyFlags::CouplingMatrix => prop.coupling_matrix = true,
+                ModePropertyFlags::RadialOrder => prop.radial_order = true,
             }
         }
 
@@ -787,6 +790,7 @@ impl StormState {
         let mut freq = Vec::new();
         let mut ell = Vec::new();
         let mut m = Vec::new();
+        let mut radial_order = Vec::new();
 
         for (i, solution) in self.solutions.iter().enumerate() {
             let group = solution_group.create_group(format!("{i}").as_str())?;
@@ -797,6 +801,7 @@ impl StormState {
 
             if let Some(ref postprocessing) = self.postprocessing {
                 let postprocessing = &postprocessing[i];
+                radial_order.push(postprocessing.radial_order);
 
                 if profiles.y1 {
                     dataset!(group, "y1", &postprocessing.y1)?;
@@ -860,8 +865,8 @@ impl StormState {
             dataset!(output, "degree", &ell)?;
         }
 
-        if properties.radial_order {
-            todo!()
+        if properties.radial_order && self.postprocessing.is_some() {
+            dataset!(output, "radial-order", &radial_order)?;
         }
 
         if properties.azimuthal_order {
