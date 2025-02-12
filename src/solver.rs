@@ -214,7 +214,12 @@ where
     }
 
     let mut det = T::one();
-    for (n_step, moments) in iterator.enumerate() {
+    // PERF: we cannot use enumerate, as that breaks inlining. This should be refactored probably
+    // at some point
+    let mut n_step = 0;
+
+    #[expect(clippy::explicit_counter_loop)]
+    for moments in iterator {
         stepper.step(moments, &mut step);
         debug_assert!(n_step < total_steps);
         for r in 0..n {
@@ -286,6 +291,8 @@ where
                 *bands.index_mut((j + n, i)) = T::zero();
             }
         }
+
+        n_step += 1;
     }
 
     // Outer boundary
