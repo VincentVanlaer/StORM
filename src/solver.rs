@@ -284,6 +284,7 @@ where
             for i in (k + 1)..(n + n_inner) {
                 let m = unsafe { *bands.get_unchecked((k, i)) * pinv };
                 for j in 0..(2 * n) {
+                    // PERF: VFNMADD231PD
                     *unsafe { bands.get_unchecked_mut((j, i)) } -=
                         *unsafe { pivot_row.get_unchecked(j) } * m;
                 }
