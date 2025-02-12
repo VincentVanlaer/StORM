@@ -181,7 +181,7 @@ enum StormCommands {
         #[arg(allow_negative_numbers = true)]
         m: i64,
     },
-    /// Write the results to an HDF5 file. This will clear all data except for the input model.
+    /// Write the results to an HDF5 file. Unless `--keep-data` is passed, this will clear all data except for the input model.
     Output {
         /// The file to write the data to
         file: String,
@@ -209,6 +209,9 @@ enum StormCommands {
         /// These properties can be found in the `model` group. Values can be separated by commas.
         #[arg(long, value_delimiter = ',')]
         model_properties: Vec<ModelPropertyFlags>,
+        /// Do not delete current computation results
+        #[arg(long)]
+        keep_data: bool,
     },
 }
 
@@ -482,12 +485,14 @@ impl StormCommands {
                 profiles,
                 properties,
                 model_properties,
+                keep_data,
             } => state.output(
                 file,
                 frequency_units,
                 properties.into(),
                 profiles.into(),
                 model_properties.into(),
+                keep_data,
             ),
         }
     }
@@ -669,6 +674,7 @@ impl StormState {
         properties: ModeProperties,
         profiles: Profiles,
         model_properties: ModelProperties,
+        keep_data: bool,
     ) -> Result<(), Report> {
         let output = hdf5::File::create(file)?;
 
@@ -855,10 +861,12 @@ impl StormState {
             }
         }
 
-        self.solutions.clear();
-        self.postprocessing = None;
-        self.perturbed_structure = None;
-        self.perturbed_frequencies.clear();
+        if !keep_data {
+            self.solutions.clear();
+            self.postprocessing = None;
+            self.perturbed_structure = None;
+            self.perturbed_frequencies.clear();
+        }
 
         Ok(())
     }
