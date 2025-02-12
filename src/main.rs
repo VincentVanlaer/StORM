@@ -10,14 +10,13 @@ use ndarray::aview0;
 use nshare::AsNdarray2;
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
-use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
-use storm::postprocessing::{
-    ModeCoupling, ModeToPerturb, PerturbedMetric, Rotating1DPostprocessing, perturb_deformed,
-    perturb_structure,
-};
-
 use storm::bracket::{BracketResult, Precision};
+use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 use storm::model::StellarModel;
+use storm::perturbed::{
+    ModeCoupling, ModeToPerturb, PerturbedMetric, perturb_deformed, perturb_structure,
+};
+use storm::postprocessing::Rotating1DPostprocessing;
 use storm::system::adiabatic::{GridScale, Rotating1D};
 
 fn main() -> ExitCode {

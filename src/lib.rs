@@ -47,6 +47,7 @@ pub mod dynamic_interface;
 mod gaunt;
 mod linalg;
 pub mod model;
+pub mod perturbed;
 pub mod postprocessing;
 mod solver;
 mod stepper;
