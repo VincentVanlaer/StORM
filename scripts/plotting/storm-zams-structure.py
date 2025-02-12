@@ -23,7 +23,14 @@ def load_order(
 
     modes = np.array(
         [
-            np.outer(sol[str(key)]["pressure"][r_idx], leg[(degree[key], order)])
+            np.outer(
+                (
+                    sol[str(key)]["pressure"][r_idx]
+                    - sol[str(key)]["xi_r"][r_idx] * density[r_idx] * g[r_idx]
+                )
+                / pressure[r_idx],
+                leg[(degree[key], order)],
+            )
             for key in select
         ]
     )
@@ -49,7 +56,7 @@ def load_and_plot_file(name: str, path: str) -> None:
 
     r_coord = f["radial-coordinate"][:]
     r_coord = r_coord / np.max(r_coord)
-    idx = map_min_delta(r_coord, 0.002)
+    idx = map_min_delta(r_coord, 0.0005)
     r_coord = r_coord[idx]
 
     zonal = load_order(0, idx, f)
@@ -63,6 +70,8 @@ def load_and_plot_file(name: str, path: str) -> None:
     f.close()
 
 
+model = "test-data/top-zams-model.GSM"
+
 if len(sys.argv) == 2 and sys.argv[1] == "rerun":
     p = Path("test-data/generated/storm-zams-structure/")
 
@@ -75,12 +84,15 @@ if len(sys.argv) == 2 and sys.argv[1] == "rerun":
     scan --frequency-units=cycles-per-day 0 0 5. 30. 100
     scan --frequency-units=cycles-per-day 2 0 5. 30. 100
     scan --frequency-units=cycles-per-day 4 0 5. 30. 100
+    scan --frequency-units=cycles-per-day 6 0 5. 30. 100
 
     scan --frequency-units=cycles-per-day 2 1 5. 30. 100
     scan --frequency-units=cycles-per-day 4 1 5. 30. 100
+    scan --frequency-units=cycles-per-day 6 1 5. 30. 100
 
-    scan --frequency-units=cycles-per-day 4 -1 5. 30. 100
     scan --frequency-units=cycles-per-day 2 -1 5. 30. 100
+    scan --frequency-units=cycles-per-day 4 -1 5. 30. 100
+    scan --frequency-units=cycles-per-day 6 -1 5. 30. 100
 
     post-process
 
@@ -115,6 +127,18 @@ if len(sys.argv) == 2 and sys.argv[1] == "rerun":
 
     run(["cargo", "run", "--release", "--bin=storm"], input=input, text=True)
 
+
+f = h5py.File(model)
+
+pressure = f["P"][:]
+density = f["rho"][:]
+G = 6.67430e-8
+r = f["r"][:]
+g = G * f["M_r"][:] / r**2
+g[0] = 0
+
+
+f.close()
 
 load_and_plot_file("StORM: Even", "test-data/generated/storm-zams-structure/even.hdf5")
 load_and_plot_file("StORM: Odd", "test-data/generated/storm-zams-structure/odd.hdf5")
