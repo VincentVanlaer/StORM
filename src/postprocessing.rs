@@ -80,6 +80,23 @@ impl Rotating1DPostprocessing {
             .try_into()
             .expect("ell is never going to be so big to cause problems here");
 
+        let mut norm = 0.;
+
+        let trapezoid = {
+            let mut trapezoid = vec![0.; model.r_coord.len()];
+
+            trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]) / model.radius;
+            trapezoid[model.r_coord.len() - 1] = 0.5
+                * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2])
+                / model.radius;
+
+            for i in 1..(model.r_coord.len() - 1) {
+                trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]) / model.radius;
+            }
+
+            trapezoid
+        };
+
         for i in 1..y1.len() {
             y1[i] = eigenvector[i * 4];
             y2[i] = eigenvector[i * 4 + 1];
@@ -130,6 +147,11 @@ impl Rotating1DPostprocessing {
                 - lambda / model.r_coord[i] * xi_h[i];
             rho_prime[i] =
                 model.rho[i] * (-chi[i] + (v_gamma + a_star) * xi_r[i] / model.r_coord[i]);
+
+            norm += model.rho[i]
+                * model.r_coord[i].powi(2)
+                * (xi_r[i] * xi_r[i] + lambda * xi_h[i] * xi_h[i])
+                * trapezoid[i];
         }
 
         // Handle central point
@@ -157,6 +179,22 @@ impl Rotating1DPostprocessing {
         p_prime[0] = 0.;
         psi_prime[0] = 0.;
         rho_prime[0] = 0.;
+
+        let norm = 1. / norm.sqrt();
+
+        for i in 0..y1.len() {
+            y1[i] *= norm;
+            y2[i] *= norm;
+            y3[i] *= norm;
+            y4[i] *= norm;
+            xi_r[i] *= norm;
+            xi_h[i] *= norm;
+            psi_prime[i] *= norm;
+            dpsi_prime[i] *= norm;
+            rho_prime[i] *= norm;
+            p_prime[i] *= norm;
+            chi[i] *= norm;
+        }
 
         let (cww, ccww) = xi_r
             .iter()
