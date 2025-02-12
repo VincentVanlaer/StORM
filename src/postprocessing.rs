@@ -3,7 +3,7 @@
 use std::f64::consts::PI;
 
 use lapack::dggev3;
-use nalgebra::{ComplexField, DMatrix, DVector, Matrix2, Vector2};
+use nalgebra::{ComplexField, Const, DMatrix, DVector, Dyn, Matrix2, Vector2};
 use num_complex::Complex64;
 use num_traits::Zero;
 
@@ -630,8 +630,15 @@ pub fn perturb_deformed(
 
     let (eigenvalues, eigenvectors): (Vec<Complex64>, Vec<DVector<Complex64>>) = eigenvalues
         .iter()
-        .zip(eigenvectors.column_iter().map(|x| x.clone_owned()))
+        .zip(eigenvectors.column_iter())
         .filter(|&(val, _)| val.real() >= 0.)
+        .map(|(val, x)| {
+            (
+                val,
+                x.generic_view((modes.len(), 0), (Dyn(modes.len()), Const::<1>))
+                    .clone_owned(),
+            )
+        })
         .collect();
 
     ModeCoupling {
