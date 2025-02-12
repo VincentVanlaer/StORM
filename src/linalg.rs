@@ -1,11 +1,11 @@
 use std::{borrow::Borrow, marker::PhantomData, mem::MaybeUninit, ops::Add, ptr::NonNull};
 
 use nalgebra::{
+    ComplexField, Const, DefaultAllocator, Dim, Dyn, Field, RealField, Scalar, Storage, StorageMut,
+    ViewStorage, ViewStorageMut,
     allocator::Allocator,
     base::Matrix,
     uninit::{InitStatus, Uninit},
-    ComplexField, Const, DefaultAllocator, Dim, Dyn, Field, RealField, Scalar, Storage, StorageMut,
-    ViewStorage, ViewStorageMut,
 };
 use num_traits::Float;
 use simba::scalar::SupersetOf;
@@ -55,10 +55,12 @@ unsafe impl<T, const R: usize, const C: usize, const L: usize>
     }
 
     unsafe fn get_unchecked_mut(&mut self, r: usize, c: usize, i: usize) -> &mut T {
-        self.0
-            .get_unchecked_mut(i)
-            .get_unchecked_mut(c)
-            .get_unchecked_mut(r)
+        unsafe {
+            self.0
+                .get_unchecked_mut(i)
+                .get_unchecked_mut(c)
+                .get_unchecked_mut(r)
+        }
     }
 }
 
@@ -74,7 +76,7 @@ impl<const R: usize, const C: usize, const L: usize> ArrayAllocator<Const<R>, Co
     }
 
     unsafe fn assume_init<T: Scalar>(uninit: Self::BufferUninit<T>) -> Self::Buffer<T> {
-        SizedMatrixArray((&uninit as *const _ as *const [_; L]).read())
+        SizedMatrixArray(unsafe { (&uninit as *const _ as *const [_; L]).read() })
     }
 }
 
@@ -135,10 +137,12 @@ unsafe impl<T, R: Dim, C: Dim, L: Dim> ArrayStorage<T, R, C, L> for UnsizedMatri
     }
 
     unsafe fn get_unchecked_mut(&mut self, r: usize, c: usize, i: usize) -> &mut T {
-        &mut *self
-            .data
-            .as_ptr()
-            .add(r + c * self.rows.value() + i * self.columns.value() * self.rows.value())
+        unsafe {
+            &mut *self
+                .data
+                .as_ptr()
+                .add(r + c * self.rows.value() + i * self.columns.value() * self.rows.value())
+        }
     }
 }
 

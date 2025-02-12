@@ -5,10 +5,10 @@ use nalgebra::{Const, DefaultAllocator, Dim};
 use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
 };
-use crate::solver::{determinant, determinant_with_upper, DeterminantAllocs, UpperResult};
+use crate::solver::{DeterminantAllocs, UpperResult, determinant, determinant_with_upper};
 use crate::stepper::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8, Stepper};
-use crate::system::adiabatic::{GridScale, Rotating1D};
 use crate::system::System;
+use crate::system::adiabatic::{GridScale, Rotating1D};
 
 /// Supported difference schemes
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]

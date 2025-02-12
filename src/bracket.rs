@@ -189,7 +189,7 @@ impl BracketOptimizer for InverseQuadratic {
                         upper,
                         root: x,
                         evals,
-                    })
+                    });
                 }
                 ControlFlow::Continue(x) => x,
             };

@@ -1,7 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 use clap::{Parser, Subcommand};
-use color_eyre::eyre::{eyre, Context, ContextCompat, OptionExt, Report};
 use color_eyre::Result;
+use color_eyre::eyre::{Context, ContextCompat, OptionExt, Report, eyre};
 use core::f64;
 use hdf5::H5Type;
 use itertools::Itertools;
@@ -12,8 +12,8 @@ use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
 use storm::postprocessing::{
-    perturb_deformed, perturb_structure, ModeCoupling, ModeToPerturb, PerturbedMetric,
-    Rotating1DPostprocessing,
+    ModeCoupling, ModeToPerturb, PerturbedMetric, Rotating1DPostprocessing, perturb_deformed,
+    perturb_structure,
 };
 
 use storm::bracket::{BracketResult, Precision};

@@ -62,13 +62,13 @@ pub trait System<
 }
 
 impl<
-        T: Field + Scalar,
-        G: ?Sized,
-        N: Dim + nalgebra::DimSub<NInner>,
-        NInner: Dim,
-        Order: DimName,
-        U,
-    > System<T, G, N, NInner, Order> for U
+    T: Field + Scalar,
+    G: ?Sized,
+    N: Dim + nalgebra::DimSub<NInner>,
+    NInner: Dim,
+    Order: DimName,
+    U,
+> System<T, G, N, NInner, Order> for U
 where
     U: Moments<T, G, N, Order> + Boundary<T, N, NInner> + GridLength<G>,
     DefaultAllocator: ArrayAllocator<N, N, Order>,

@@ -286,19 +286,11 @@ fn q_kl2_hd(k: u64, l: u64, m: i64) -> f64 {
 }
 
 fn inner_prod_r(k: u64, l: u64) -> f64 {
-    if k == l {
-        1.
-    } else {
-        0.
-    }
+    if k == l { 1. } else { 0. }
 }
 
 fn inner_prod_h(k: u64, l: u64) -> f64 {
-    if k == l {
-        (l * (l + 1)) as f64
-    } else {
-        0.
-    }
+    if k == l { (l * (l + 1)) as f64 } else { 0. }
 }
 
 /// Input for the deformation solver
