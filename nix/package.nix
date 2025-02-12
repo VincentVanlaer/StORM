@@ -10,19 +10,23 @@ buildRustPackage {
   version = "0.0.0";
 
   src = lib.fileset.toSource {
-    root = ./.;
+    root = ../.;
     fileset = lib.fileset.unions [
-      ./Cargo.toml
-      ./Cargo.lock
-      ./src
+      ../Cargo.toml
+      ../Cargo.lock
+      ../src
     ];
   };
 
-  nativeBuildInputs = [pkg-config autoPatchelfHook];
-  buildInputs = [hdf5.dev];
+  nativeBuildInputs = [
+    pkg-config
+    autoPatchelfHook
+  ];
+  buildInputs = [ hdf5.dev ];
   doCheck = false;
+  auditable = false;
 
   cargoLock = {
-    lockFile = ./Cargo.lock;
+    lockFile = ../Cargo.lock;
   };
 }
