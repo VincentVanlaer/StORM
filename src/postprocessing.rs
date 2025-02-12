@@ -77,7 +77,7 @@ impl Rotating1DPostprocessing {
         let mut rho_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
         let mut chi = vec![0.; model.r_coord.len()].into_boxed_slice();
 
-        let time_scale = model.freq_scale();
+        let freq_scale = model.freq_scale();
 
         let lambda = (ell * (ell + 1)) as f64;
         let m = m as f64;
@@ -124,7 +124,7 @@ impl Rotating1DPostprocessing {
             dpsi_prime[i] =
                 y4[i] * dphi * model.r_coord[i].powi(ell_i32 - 2) / model.radius.powi(ell_i32 - 2);
 
-            let rsigma = (freq - m * model.rot[i]) * time_scale;
+            let rsigma = (freq - m * model.rot[i]) * freq_scale;
             let omega_rsq;
             let rel_rot;
 
@@ -133,7 +133,7 @@ impl Rotating1DPostprocessing {
                 omega_rsq = (lambda * (freq - rot) + 2. * rot) * (freq - rot);
                 rel_rot = 2. * rot / (lambda * (freq - rot) + 2. * rot);
 
-                let f = 2. * rot * time_scale / (ell * (ell + 1)) as f64;
+                let f = 2. * rot * freq_scale / (ell * (ell + 1)) as f64;
                 xi_h[i] = 1. / (rsigma * model.rho[i] * (rsigma + f))
                     * ((p_prime[i] + model.rho[i] * psi_prime[i]) / model.r_coord[i]
                         - f * rsigma * model.rho[i] * xi_r[i]);
@@ -175,7 +175,7 @@ impl Rotating1DPostprocessing {
             xi_r[0] = y1[0] * model.radius;
             dpsi_prime[0] = y4[0] * ddphi0 * model.radius;
 
-            let rsigma = (freq - m * model.rot[0]) * time_scale;
+            let rsigma = (freq - m * model.rot[0]) * freq_scale;
             let f = if ell != 0 {
                 2. * m * model.rot[0] / (ell * (ell + 1)) as f64
             } else {
