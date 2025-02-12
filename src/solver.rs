@@ -236,10 +236,10 @@ where
                 }
             }
 
-            // This needs to be loaded first before we rewrite and construct pivot_row. While it is
-            // possible to read the pivot element from pivot_row, the compiler will then spill
-            // pivot_row to the stack, so it can actually mov the data with the offset k, which it
-            // can't do while everything is in registers.
+            // PERF: This needs to be loaded first before we rewrite and construct pivot_row. While
+            // it is possible to read the pivot element from pivot_row, the compiler will then
+            // spill pivot_row to the stack, so it can actually mov the data with the offset k,
+            // which it can't do while everything is in registers.
             let pivot = unsafe { *bands.get_unchecked((k, max_idx)) };
             let mut pivot_row =
                 Matrix::from_element_generic(system.shape().mul(Const::<2>), Const::<1>, T::zero());
@@ -271,8 +271,9 @@ where
             }
 
             for i in (k + 1)..(n + n_inner) {
+                // PERF: this is one div instruction per loop, ideally this would be handled with
+                // SIMD, so that we have less div instructions running at the same time
                 let m = unsafe { *bands.get_unchecked((k, i)) / pivot };
-                // bands.column_mut(i).axpy(-m, &pivot, T::one());
                 for j in 0..(2 * n) {
                     *unsafe { bands.get_unchecked_mut((j, i)) } -=
                         *unsafe { pivot_row.get_unchecked(j) } * m;
