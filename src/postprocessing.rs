@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use crate::model::StellarModel;
+use crate::model::{DimensionlessCoefficients, StellarModel};
 
 /// Result from the post processing of a solution to the 1D oscillation equations
 pub struct Rotating1DPostprocessing {
@@ -20,6 +20,16 @@ pub struct Rotating1DPostprocessing {
     pub xi_r: Box<[f64]>,
     /// Horizontal displacement vector
     pub xi_h: Box<[f64]>,
+    /// Gravitational potential perturbation
+    pub psi: Box<[f64]>,
+    /// Derivative of the gravitional potential
+    pub dpsi: Box<[f64]>,
+    /// Density perturbation
+    pub rho: Box<[f64]>,
+    /// Pressure perturbation
+    pub p: Box<[f64]>,
+    /// ∇ξ
+    pub chi: Box<[f64]>,
     /// Clockwise winding number
     pub clockwise_winding: f64,
     /// Counter-clockwise winding number
@@ -52,17 +62,19 @@ impl Rotating1DPostprocessing {
 
         let mut y1 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
         let mut y2 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut y2_other = vec![0.; eigenvector.len() / 4].into_boxed_slice();
         let mut y3 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
         let mut y4 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
         let mut xi_r = vec![0.; eigenvector.len() / 4].into_boxed_slice();
         let mut xi_h = vec![0.; eigenvector.len() / 4].into_boxed_slice();
         let mut p_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut phi_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut dphi_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
+        let mut psi_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
+        let mut dpsi_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
+        let mut rho_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
+        let mut chi = vec![0.; eigenvector.len() / 4].into_boxed_slice();
 
         let freq_scale = (model.grav * model.mass / model.radius.powi(3)).sqrt();
 
+        let lambda = (ell * (ell + 1)) as f64;
         let m = m as f64;
         let ell_i32: i32 = ell
             .try_into()
@@ -74,28 +86,50 @@ impl Rotating1DPostprocessing {
             y3[i] = eigenvector[i * 4 + 2];
             y4[i] = eigenvector[i * 4 + 3];
 
+            let DimensionlessCoefficients {
+                v_gamma,
+                a_star,
+                u: _,
+                c1,
+            } = model.dimensionless_coefficients(i);
             let dphi = model.grav * model.m_coord[i] / model.r_coord[i].powi(2);
 
             xi_r[i] = y1[i] * model.r_coord[i].powi(ell_i32 - 1) / model.radius.powi(ell_i32 - 2);
             p_prime[i] = y2[i] * model.rho[i] * dphi * model.r_coord[i].powi(ell_i32 - 1)
                 / model.radius.powi(ell_i32 - 2);
-            phi_prime[i] =
+            psi_prime[i] =
                 y3[i] * dphi * model.r_coord[i].powi(ell_i32 - 1) / model.radius.powi(ell_i32 - 2);
-            dphi_prime[i] =
+            dpsi_prime[i] =
                 y4[i] * dphi * model.r_coord[i].powi(ell_i32 - 2) / model.radius.powi(ell_i32 - 2);
 
-            y2_other[i] = (p_prime[i] / model.rho[i] + phi_prime[i]) / (model.r_coord[i] * dphi);
-
             let rsigma = freq * freq_scale - m * model.rot[i];
-            if ell != 0 {
-                let f = 2. * m * model.rot[i] / (ell * (ell + 1)) as f64;
+            let omega_rsq;
+            let rel_rot;
 
+            if ell != 0 {
+                let rot = m * model.rot[i];
+                omega_rsq = (lambda * (freq - rot) + 2. * rot) * (freq - rot);
+                rel_rot = 2. * rot / (lambda * (freq - rot) + 2. * rot);
+
+                let f = 2. * rot * freq_scale / (ell * (ell + 1)) as f64;
                 xi_h[i] = 1. / (rsigma * model.rho[i] * (rsigma + f))
-                    * ((p_prime[i] + model.rho[i] * phi_prime[i]) / model.r_coord[i]
-                        - f * model.rho[i] * xi_r[i]);
+                    * ((p_prime[i] + model.rho[i] * psi_prime[i]) / model.r_coord[i]
+                        - f * rsigma * model.rho[i] * xi_r[i]);
             } else {
+                omega_rsq = lambda * freq.powi(2);
+                rel_rot = 0.;
                 xi_h[i] = 0.;
             }
+
+            let xdy1 = (v_gamma - 1. - ell as f64 - lambda * rel_rot) * y1[i]
+                + (-v_gamma + lambda.powi(2) / (omega_rsq * c1)) * y2[i]
+                + lambda.powi(2) / (omega_rsq * c1) * y3[i];
+            chi[i] = (ell + 1) as f64 * model.r_coord[i].powi(ell_i32 - 2)
+                / model.radius.powi(ell_i32 - 2)
+                * (y1[i] + xdy1)
+                - lambda / model.r_coord[i] * xi_h[i];
+            rho_prime[i] =
+                model.rho[i] * (-chi[i] + (v_gamma + a_star) * xi_r[i] / model.r_coord[i]);
         }
 
         // Handle central point
@@ -103,16 +137,15 @@ impl Rotating1DPostprocessing {
         y2[0] = eigenvector[1];
         y3[0] = eigenvector[2];
         y4[0] = eigenvector[3];
-        y2_other[0] = 0.;
 
         if ell != 1 {
             xi_r[0] = 0.;
-            dphi_prime[0] = 0.;
+            dpsi_prime[0] = 0.;
             xi_h[0] = 0.;
         } else {
             let ddphi0 = 4. / 3. * std::f64::consts::PI * model.rho[0] * model.grav;
             xi_r[0] = y1[0] * model.radius;
-            dphi_prime[0] = y4[0] * ddphi0 * model.radius;
+            dpsi_prime[0] = y4[0] * ddphi0 * model.radius;
 
             let rsigma = freq * freq_scale - model.rot[0];
             let f = 2. * m * model.rot[0] / (ell * (ell + 1)) as f64;
@@ -122,7 +155,8 @@ impl Rotating1DPostprocessing {
         }
 
         p_prime[0] = 0.;
-        phi_prime[0] = 0.;
+        psi_prime[0] = 0.;
+        rho_prime[0] = 0.;
 
         let (cww, ccww) = xi_r
             .iter()
@@ -151,6 +185,11 @@ impl Rotating1DPostprocessing {
             xi_h,
             clockwise_winding: cww / PI,
             counter_clockwise_winding: ccww / PI,
+            psi: psi_prime,
+            dpsi: dpsi_prime,
+            rho: rho_prime,
+            p: p_prime,
+            chi,
         }
     }
 }
