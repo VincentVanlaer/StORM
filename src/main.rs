@@ -809,7 +809,7 @@ impl StormState {
             dataset!(output, "m", &m)?;
         }
 
-        let perturbation_group = solution_group.create_group("deformation")?;
+        let perturbation_group = output.create_group("deformation")?;
 
         for mode_coupling in &self.perturbed_frequencies {
             let group = perturbation_group.create_group(&format!("{}", mode_coupling.m))?;
