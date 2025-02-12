@@ -41,6 +41,7 @@
 #![feature(trait_alias)]
 #![expect(incomplete_features)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
+#![allow(clippy::too_many_arguments)] // Bit silly
 #![warn(missing_docs)]
 
 extern crate lapack_src;

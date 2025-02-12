@@ -483,8 +483,7 @@ mod tests {
 
     #[test]
     fn test_unsized_matrix_array() {
-        let matrix_array =
-            OMatrixArray::new_with(Const::<4> {}, Const::<4> {}, Dyn { 0: 600 }, || 1.);
+        let matrix_array = OMatrixArray::new_with(Const::<4> {}, Const::<4> {}, Dyn(600), || 1.);
 
         assert_eq!(matrix_array.index(10)[(2, 2)], 1.);
     }

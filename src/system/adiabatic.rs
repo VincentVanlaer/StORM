@@ -45,14 +45,7 @@ impl Rotating1D {
             })
             .collect();
 
-        let mut preprocessed = OMatrixArray::new_with(
-            Const {},
-            Const {},
-            Dyn {
-                0: components.len(),
-            },
-            || 0.,
-        );
+        let mut preprocessed = OMatrixArray::new_with(Const, Const, Dyn(components.len()), || 0.);
 
         for (i, val) in components.iter().enumerate() {
             preprocess::<true, Const<1>, _>(
@@ -393,22 +386,24 @@ impl<T, const ACTIVE: bool> Gated<T, ACTIVE> {
 }
 
 #[inline(always)]
-pub(crate) fn preprocess<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
-    rotation: Gated<T, ROTATION>,
+pub(crate) fn preprocess<
+    const ROTATION: bool,
+    Degrees: Dim + DimMul<Const<4>>,
+    T: ComplexField + Copy,
+>(
+    _rotation: Gated<T, ROTATION>,
     u: T,
     v_gamma: T,
     a_star: T,
-    c1: T,
+    _c1: T,
     ell: T,
-    m: T,
+    _m: T,
     mut output: MatrixViewMut<
         T,
         <Degrees as DimMul<Const<4>>>::Output,
         <Degrees as DimMul<Const<4>>>::Output,
     >,
-) where
-    Degrees: DimMul<Const<4>>,
-{
+) {
     assert_eq!(output.shape(), (4, 4));
 
     let zero = T::from_subset(&0.);
@@ -439,12 +434,16 @@ pub(crate) fn preprocess<const ROTATION: bool, Degrees: Dim, T: ComplexField + C
 }
 
 #[inline(always)]
-pub(crate) fn process<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+pub(crate) fn process<
+    const ROTATION: bool,
+    Degrees: Dim + DimMul<Const<4>>,
+    T: ComplexField + Copy,
+>(
     rotation: Gated<T, ROTATION>,
     freq: T,
-    u: T,
-    v_gamma: T,
-    a_star: T,
+    _u: T,
+    _v_gamma: T,
+    _a_star: T,
     c1: T,
     ell: T,
     m: T,
@@ -453,15 +452,12 @@ pub(crate) fn process<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy
         <Degrees as DimMul<Const<4>>>::Output,
         <Degrees as DimMul<Const<4>>>::Output,
     >,
-) where
-    Degrees: DimMul<Const<4>>,
-{
+) {
     assert_eq!(output.shape(), (4, 4));
 
     let zero = T::from_subset(&0.);
     let one = T::from_subset(&1.);
     let two = T::from_subset(&2.);
-    let three = T::from_subset(&3.);
     let lambda = ell * (ell + one);
 
     if ell != zero {
@@ -483,7 +479,11 @@ pub(crate) fn process<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy
 }
 
 #[inline]
-pub(crate) fn inner_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+pub(crate) fn inner_bound<
+    const ROTATION: bool,
+    Degrees: Dim + DimMul<Const<4>> + DimMul<Const<2>>,
+    T: ComplexField + Copy,
+>(
     rotation: Gated<T, ROTATION>,
     freq: T,
     _u: T,
@@ -497,13 +497,10 @@ pub(crate) fn inner_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + 
         <Degrees as DimMul<Const<2>>>::Output,
         <Degrees as DimMul<Const<4>>>::Output,
     >,
-) where
-    Degrees: DimMul<Const<4>> + DimMul<Const<2>>,
-{
+) {
     let zero = T::from_subset(&0.);
     let one = T::from_subset(&1.);
     let two = T::from_subset(&2.);
-    let lambda = ell * (ell + one);
 
     if ell != zero {
         let rot = g!(rotation, m * rotation, zero);
@@ -525,10 +522,14 @@ pub(crate) fn inner_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + 
 }
 
 #[inline]
-pub(crate) fn outer_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + Copy>(
+pub(crate) fn outer_bound<
+    const ROTATION: bool,
+    Degrees: Dim + DimMul<Const<4>> + DimMul<Const<2>>,
+    T: ComplexField + Copy,
+>(
     _rotation: Gated<T, ROTATION>,
     _freq: T,
-    u: T,
+    _u: T,
     _v_gamma: T,
     _a_star: T,
     _c1: T,
@@ -539,9 +540,7 @@ pub(crate) fn outer_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + 
         <Degrees as DimMul<Const<2>>>::Output,
         <Degrees as DimMul<Const<4>>>::Output,
     >,
-) where
-    Degrees: DimMul<Const<4>> + DimMul<Const<2>>,
-{
+) {
     let zero = T::from_subset(&0.);
     let one = T::from_subset(&1.);
 

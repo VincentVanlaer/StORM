@@ -214,8 +214,7 @@ where
     }
 
     let mut det = T::one();
-    let mut n_step = 0;
-    for moments in iterator {
+    for (n_step, moments) in iterator.enumerate() {
         stepper.step(moments, &mut step);
         debug_assert!(n_step < total_steps);
         for r in 0..n {
@@ -287,8 +286,6 @@ where
                 *bands.index_mut((j + n, i)) = T::zero();
             }
         }
-
-        n_step += 1;
     }
 
     // Outer boundary

@@ -1,6 +1,5 @@
 //! Main interface for computing the determinant for a trial frequency
 
-use nalgebra::allocator::Allocator;
 use nalgebra::{Const, DefaultAllocator, Dim};
 
 use crate::bracket::{
@@ -8,6 +7,7 @@ use crate::bracket::{
 };
 use crate::solver::{determinant, determinant_with_upper, DeterminantAllocs, UpperResult};
 use crate::stepper::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8, Stepper};
+use crate::system::adiabatic::{GridScale, Rotating1D};
 use crate::system::System;
 
 /// Supported difference schemes
@@ -35,22 +35,11 @@ pub struct MultipleShooting<'system_and_grid> {
 
 impl<'system_and_grid> MultipleShooting<'system_and_grid> {
     /// Construct from a system, difference scheme and grid definition
-    pub fn new<N: Dim + nalgebra::DimSub<NInner>, NInner: Dim, G: ?Sized, S>(
-        system: &'system_and_grid S,
+    pub fn new(
+        system: &'system_and_grid Rotating1D,
         scheme: DifferenceSchemes,
-        grid: &'system_and_grid G,
-    ) -> MultipleShooting<'system_and_grid>
-    where
-        S: System<f64, G, N, NInner, Const<1>>,
-        S: System<f64, G, N, NInner, Const<2>>,
-        S: System<f64, G, N, NInner, Const<3>>,
-        S: System<f64, G, N, NInner, Const<4>>,
-        DefaultAllocator: DeterminantAllocs<N, NInner, Const<1>>,
-        DefaultAllocator: DeterminantAllocs<N, NInner, Const<2>>,
-        DefaultAllocator: DeterminantAllocs<N, NInner, Const<3>>,
-        DefaultAllocator: DeterminantAllocs<N, NInner, Const<4>>,
-        DefaultAllocator: Allocator<N, N>,
-    {
+        grid: &'system_and_grid GridScale,
+    ) -> MultipleShooting<'system_and_grid> {
         match scheme {
             DifferenceSchemes::Colloc2 => get_solvers_inner(system, grid, || Colloc2 {}),
             DifferenceSchemes::Colloc4 => get_solvers_inner(system, grid, || Colloc4 {}),

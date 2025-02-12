@@ -175,12 +175,11 @@ impl Rotating1DPostprocessing {
             dpsi_prime[0] = y4[0] * ddphi0 * model.radius;
 
             let rsigma = freq * time_scale - model.rot[0];
-            let f;
-            if ell != 0 {
-                f = 2. * m * model.rot[0] / (ell * (ell + 1)) as f64;
+            let f = if ell != 0 {
+                2. * m * model.rot[0] / (ell * (ell + 1)) as f64
             } else {
-                f = 0.;
-            }
+                0.
+            };
 
             xi_h[0] = 1. / (rsigma * (rsigma + f))
                 * ((y2[0] + y3[0]) * ddphi0 * model.radius - f * xi_r[0]);
@@ -326,9 +325,10 @@ pub struct ModeCoupling {
     pub l: DMatrix<f64>,
 }
 
-/// Using the structure deformation, perturb the frequencies and eigenfunctions of the modes. The
-/// rotation used to compute the modes should match the rotation frequency in the perturbed metric.
-/// Similarly, the azimuthal order should also match the way the modes are computed
+/// Using the structure deformation, perturb the frequencies and eigenfunctions of the modes.
+///
+/// The rotation used to compute the modes should match the rotation frequency in the perturbed
+/// metric. Similarly, the azimuthal order should also match the way the modes are computed
 pub fn perturb_deformed(
     model: &StellarModel,
     modes: &[ModeToPerturb],
@@ -691,7 +691,7 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
             );
         let diag = Matrix2::from_diagonal_element(1.);
 
-        let step = nalgebra::Matrix2::try_inverse(&diag - &a).unwrap() * (&diag + &a);
+        let step = nalgebra::Matrix2::try_inverse(diag - a).unwrap() * (diag + a);
 
         y[i] = step * y[i - 1];
     }

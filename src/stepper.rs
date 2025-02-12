@@ -161,8 +161,10 @@ where
 }
 
 // Collocation points
-const C2_1: f64 = -0.288675134594812882254;
-const C2_2: f64 = 0.288675134594812882254;
+
+// Actual value is 0.288675134594812882254
+const C2_1: f64 = -0.288_675_134_594_812_87;
+const C2_2: f64 = 0.288_675_134_594_812_87;
 
 // General method for deriving these calculations
 //
