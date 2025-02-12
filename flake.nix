@@ -51,9 +51,9 @@
       nativeBuildInputs = with pkgs; [
         cmake
         pkg-config
-        (python3.withPackages (p: [p.numpy p.scipy p.matplotlib p.mypy p.pyqt6 p.h5py]))
         openssl.dev
         openblasCompat.dev
+        (python3.withPackages (p: [p.numpy p.scipy p.matplotlib p.mypy p.pyqt6 p.h5py p.tqdm]))
         gnuplot
         hdf5.dev
         maxima
