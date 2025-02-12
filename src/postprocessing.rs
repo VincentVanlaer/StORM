@@ -2,12 +2,14 @@
 
 use std::f64::consts::PI;
 
-use lapack::dggev3;
 use nalgebra::{ComplexField, Const, DMatrix, DVector, Dyn, Matrix2, Vector2};
 use num_complex::Complex64;
 use num_traits::Zero;
 
-use crate::model::{DimensionlessCoefficients, StellarModel};
+use crate::{
+    linalg::qz,
+    model::{DimensionlessCoefficients, StellarModel},
+};
 
 /// Result from the post processing of a solution to the 1D oscillation equations
 pub struct Rotating1DPostprocessing {
@@ -540,93 +542,20 @@ pub fn perturb_deformed(
     b.view_range_mut(modes.len().., modes.len()..)
         .copy_from(&d_squared);
 
-    let mut eigenval_real = vec![0.; modes.len() * 2];
-    let mut eigenval_imag = vec![0.; modes.len() * 2];
-    let mut eigenval_scale = vec![0.; modes.len() * 2];
-    let mut eigenvectors = DMatrix::from_element(modes.len() * 2, modes.len() * 2, 0.);
+    let mut eigenval = DVector::from_element(modes.len() * 2, Complex64::zero());
+    let mut eigenval_scale = DVector::from_element(modes.len() * 2, 0.);
+    let mut eigenvectors =
+        DMatrix::from_element(modes.len() * 2, modes.len() * 2, Complex64::zero());
 
-    let n = (modes.len() * 2) as i32;
-    let mut info = 0;
-    let mut workspace = vec![0.; 1];
+    qz::qz(
+        &mut a,
+        &mut b,
+        &mut eigenval,
+        &mut eigenval_scale,
+        &mut eigenvectors,
+    );
 
-    unsafe {
-        dggev3(
-            b'N',
-            b'V',
-            n,
-            a.as_mut_slice(),
-            n,
-            b.as_mut_slice(),
-            n,
-            &mut eigenval_real,
-            &mut eigenval_imag,
-            &mut eigenval_scale,
-            [].as_mut_slice(),
-            1,
-            eigenvectors.as_mut_slice(),
-            n,
-            &mut workspace,
-            -1,
-            &mut info,
-        )
-    }
-
-    assert_eq!(info, 0);
-
-    let lwork = workspace[0] as i32;
-    let mut workspace = vec![0.; lwork as usize];
-
-    unsafe {
-        dggev3(
-            b'N',
-            b'V',
-            n,
-            a.as_mut_slice(),
-            n,
-            b.as_mut_slice(),
-            n,
-            &mut eigenval_real,
-            &mut eigenval_imag,
-            &mut eigenval_scale,
-            [].as_mut_slice(),
-            1,
-            eigenvectors.as_mut_slice(),
-            n,
-            &mut workspace,
-            lwork,
-            &mut info,
-        )
-    }
-
-    assert_eq!(info, 0);
-
-    let mut eigenvalues = vec![Complex64::zero(); eigenval_real.len()];
-
-    for i in 0..eigenvalues.len() {
-        eigenvalues[i] = Complex64::new(
-            eigenval_real[i] / eigenval_scale[i],
-            eigenval_imag[i] / eigenval_scale[i],
-        );
-    }
-
-    let mut skip_next = false;
-
-    let mut eigenvectors = eigenvectors.map(Complex64::from_real);
-
-    for i in 0..eigenvalues.len() {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        if eigenvalues[i].imaginary() != 0. {
-            let real_part = &eigenvectors.column(i).clone_owned();
-            let imag_part = &eigenvectors.column(i + 1).clone_owned();
-
-            eigenvectors.set_column(i, &(real_part + imag_part * Complex64::i()));
-            eigenvectors.set_column(i + 1, &(real_part - imag_part * Complex64::i()));
-            skip_next = true;
-        }
-    }
+    let eigenvalues = eigenval.component_div(&eigenval_scale.map(Complex64::from_real));
 
     let (eigenvalues, eigenvectors): (Vec<Complex64>, Vec<DVector<Complex64>>) = eigenvalues
         .iter()

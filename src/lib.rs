@@ -42,8 +42,6 @@
 #![allow(clippy::too_many_arguments)] // Bit silly
 #![warn(missing_docs)]
 
-extern crate lapack_src;
-
 pub mod bracket;
 pub mod dynamic_interface;
 mod linalg;
