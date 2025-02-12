@@ -11,11 +11,12 @@ StORM (which stands for Stellar Oscillations with Rotation ~and Magnetism~) comp
 
 To compile StORM, you will need the following prerequisites:
 
-* A rust nightly compiler, e.g. via [rustup](https://rustup.rs/)
+* A rust nightly compiler. Follow the [rust installation instructions](https://www.rust-lang.org/tools/install) and [add the `nightly`](https://rust-lang.github.io/rustup/concepts/channels.html#working-with-nightly-rust) toolchain.
 * The HDF5 library, with the necessary dependencies to actually find the library. See this [rust hdf5 bindings](https://github.com/metno/hdf5-rust?tab=readme-ov-file#building) repository for details. 
 
-If you are familiar with nix, you can also run `nix-shell` in this repository to get all the necessary dependencies.
+If you are familiar with nix, you can also run `nix-shell` in this repository to get all the necessary dependencies, or `nix-build` to directly build the StORM binaries.
 If you do not want to install HDF5 on your system, you can also uncomment the last line of `Cargo.toml` to automatically compile HDF5 and statically link it into the StORM binaries.
+Note that this requires cmake to be installed.
 
 After the necessary dependencies are installed, you can compile StORM by running `cargo build --release` or run it directly with `cargo run --release --bin storm`.
 
