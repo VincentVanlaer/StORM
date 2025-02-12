@@ -453,7 +453,8 @@ pub fn perturb_deformed(
             let l = &modes[left_mode];
             let r = &modes[right_mode];
             let q_kl2 = q_kl2(l.ell, r.ell, m);
-            let q_kl2_hd = q_kl2_hd(l.ell, r.ell, m);
+            let q_kl2_hrd = q_kl2_hd(l.ell, r.ell, m);
+            let q_kl2_hld = q_kl2_hd(r.ell, l.ell, m);
             let q_kl2_h = q_kl2_h(l.ell, r.ell, m);
             let q_rt_p;
             let q_rt_n;
@@ -485,9 +486,11 @@ pub fn perturb_deformed(
                 let vol = trapezoid[rc] * model.r_coord[rc].powi(2) * model.rho[rc];
 
                 let val = vol
-                    * (rr * (inner_prod_r + 2. * q_kl2 * (epsilon[rc] + adepsilon[rc]))
-                        + (rh + hr) * q_kl2_hd * epsilon[rc]
-                        + hh * (inner_prod_h + 2. * q_kl2_h * epsilon[rc]));
+                    * (rr * inner_prod_r
+                        + hh * inner_prod_h
+                        + rr * 2. * q_kl2 * (epsilon[rc] + adepsilon[rc])
+                        + (rh * q_kl2_hrd + hr * q_kl2_hld + hh * 2. * q_kl2_h) * epsilon[rc]);
+
                 assert!(
                     val.is_finite(),
                     "Not finite number at {}, {}",
@@ -501,7 +504,7 @@ pub fn perturb_deformed(
                 let val = vol
                     * 2.
                     * (inner_prod_r * (hr + rh + hh)
-                        + (rh + hr) * q_kl2 * 2. * (epsilon[rc] + adepsilon[rc])
+                        + (rh + hr) * q_kl2 * (2. * epsilon[rc] + adepsilon[rc])
                         + hh * (inner_prod_r + 6. * q_kl2) * 2. * epsilon[rc]);
 
                 let val_t = vol
@@ -539,7 +542,7 @@ pub fn perturb_deformed(
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_r[rc]
                             * dthreeepsilonadepsilon[rc]
-                        + q_kl2_hd
+                        + q_kl2_hrd
                             * model.rho[rc]
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_h[rc]
@@ -553,14 +556,14 @@ pub fn perturb_deformed(
                         - model.grav * model.m_coord[rc] / model.r_coord[rc].powi(2)
                             * rh
                             * model.rho[rc]
-                            * q_kl2_hd
+                            * q_kl2_hrd
                             * threeepsilonadepsilon[rc]
                             / model.r_coord[rc]
                         + model.gamma1[rc]
                             * model.p[rc]
                             * l.post_processing.chi[rc]
                             * (q_kl2 * r.post_processing.xi_r[rc] * dthreeepsilonadepsilon[rc]
-                                + q_kl2_hd
+                                + q_kl2_hrd
                                     * r.post_processing.xi_h[rc]
                                     * threeepsilonadepsilon[rc]
                                     / model.r_coord[rc]));
