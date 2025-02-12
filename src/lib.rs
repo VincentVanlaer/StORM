@@ -43,6 +43,8 @@
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
 #![warn(missing_docs)]
 
+extern crate lapack_src;
+
 pub mod bracket;
 pub mod dynamic_interface;
 mod linalg;

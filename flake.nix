@@ -52,6 +52,8 @@
         cmake
         pkg-config
         (python3.withPackages (p: [p.numpy p.scipy p.matplotlib p.mypy p.pyqt6 p.h5py]))
+        openssl.dev
+        openblasCompat.dev
         gnuplot
         hdf5.dev
         maxima
