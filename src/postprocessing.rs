@@ -168,7 +168,7 @@ impl Rotating1DPostprocessing {
                 * (p_prime[i] / (model.gamma1[i] * model.p[i])
                     + a_star * xi_r[i] / model.r_coord[i]);
 
-            if m.abs() as u64 == ell || ell == 1 {
+            if m.unsigned_abs() == ell || ell == 1 {
                 xi_tn[i] = 0.;
             } else {
                 xi_tn[i] = 2. * model.rot[i]
@@ -229,7 +229,7 @@ impl Rotating1DPostprocessing {
             chi[0] = 0.;
         }
 
-        if m.abs() as u64 == ell || ell == 1 {
+        if m.unsigned_abs() == ell || ell == 1 {
             xi_tn[0] = 0.;
         } else {
             xi_tn[0] = 2. * model.rot[0]
