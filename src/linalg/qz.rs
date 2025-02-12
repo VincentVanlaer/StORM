@@ -89,6 +89,10 @@ fn deflate<T: RealField + Copy, D: Dim>(
         tol = b[(idx, idx + 1)].abs();
     }
 
+    if state.lower + 2 >= state.upper {
+        return None;
+    }
+
     // Actual deflation
     for idx in state.lower..(state.upper - 1) {
         let mut scale = a[(idx, idx)].abs() + a[(idx + 1, idx + 1)].abs();
@@ -904,8 +908,20 @@ mod tests {
             }
         );
 
-        assert_eq!(Complex64 { im: 10.000000000000009, re: 3.932342611736938e-15 }, eigenvalues[0]);
-        assert_eq!(Complex64 { im: -10.000000000000007, re: 4.570981397001066e-15 }, eigenvalues[1]);
+        assert_eq!(
+            Complex64 {
+                im: 10.000000000000009,
+                re: 3.932342611736938e-15
+            },
+            eigenvalues[0]
+        );
+        assert_eq!(
+            Complex64 {
+                im: -10.000000000000007,
+                re: 4.570981397001066e-15
+            },
+            eigenvalues[1]
+        );
         assert_eq!(Complex64::from_real(4.999999999999996), eigenvalues[2]);
     }
 }
