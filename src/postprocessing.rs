@@ -442,31 +442,52 @@ pub fn perturb_deformed(
     let mut d_linear = DMatrix::from_element(modes.len(), modes.len(), 0.);
     let mut d_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
 
+    // 2i * rho * (omega - mOmega) * Omega * xi_l * ez x xi_r
+    let mut r_linear = DMatrix::from_element(modes.len(), modes.len(), 0.);
+    let mut r_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
+
+    let mut l_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
+
     for left_mode in 0..modes.len() {
         for right_mode in 0..modes.len() {
             let l = &modes[left_mode];
             let r = &modes[right_mode];
+            let q_kl2 = q_kl2(l.ell, r.ell, m);
+            let q_kl2_hd = q_kl2_hd(l.ell, r.ell, m);
+            let q_kl2_h = q_kl2_h(l.ell, r.ell, m);
+            let q_rt_p;
+            let q_rt_n;
+            let q_ht_p;
+            let q_ht_n;
+            if l.ell == r.ell {
+                q_rt_p = q_kl1_hd(l.ell, r.ell + 1, m);
+                q_rt_n = q_kl1_hd(l.ell, r.ell - 1, m);
+                q_ht_p = -q_kl1_h(l.ell, r.ell + 1, m);
+                q_ht_n = -q_kl1_h(l.ell, r.ell - 1, m);
+            } else {
+                q_rt_p = 0.;
+                q_rt_n = 0.;
+                q_ht_p = 0.;
+                q_ht_n = 0.;
+            }
+            let inner_prod_r = inner_prod_r(l.ell, r.ell);
+            let inner_prod_h = inner_prod_h(l.ell, r.ell);
 
             for rc in 1..l.post_processing.x.len() {
-                let val = trapezoid[rc]
-                    * model.r_coord[rc].powi(2)
-                    * model.rho[rc]
-                    * ((inner_prod_r(l.ell, r.ell)
-                        + 2. * q_kl2(l.ell, r.ell, m) * (epsilon[rc] + adepsilon[rc]))
-                        * l.post_processing.xi_r[rc]
-                        * r.post_processing.xi_r[rc]
-                        + l.post_processing.xi_r[rc]
-                            * r.post_processing.xi_h[rc]
-                            * q_kl2_hd(l.ell, r.ell, m)
-                            * epsilon[rc]
-                        + l.post_processing.xi_h[rc]
-                            * r.post_processing.xi_r[rc]
-                            * q_kl2_hd(r.ell, l.ell, m)
-                            * epsilon[rc]
-                        + l.post_processing.xi_h[rc]
-                            * r.post_processing.xi_h[rc]
-                            * (inner_prod_h(r.ell, l.ell)
-                                + 2. * q_kl2_h(r.ell, l.ell, m) * epsilon[rc]));
+                let rr = l.post_processing.xi_r[rc] * r.post_processing.xi_r[rc];
+                let rh = l.post_processing.xi_r[rc] * r.post_processing.xi_h[rc];
+                let hr = l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc];
+                let hh = l.post_processing.xi_h[rc] * r.post_processing.xi_h[rc];
+                let rtp = l.post_processing.xi_r[rc] * r.post_processing.xi_tp[rc];
+                let rtn = l.post_processing.xi_r[rc] * r.post_processing.xi_tn[rc];
+                let htp = l.post_processing.xi_h[rc] * r.post_processing.xi_tp[rc];
+                let htn = l.post_processing.xi_h[rc] * r.post_processing.xi_tn[rc];
+                let vol = trapezoid[rc] * model.r_coord[rc].powi(2) * model.rho[rc];
+
+                let val = vol
+                    * (rr * (inner_prod_r + 2. * q_kl2 * (epsilon[rc] + adepsilon[rc]))
+                        + (rh + hr) * q_kl2_hd * epsilon[rc]
+                        + hh * (inner_prod_h + 2. * q_kl2_h * epsilon[rc]));
                 assert!(
                     val.is_finite(),
                     "Not finite number at {}, {}",
@@ -476,113 +497,73 @@ pub fn perturb_deformed(
                 d_squared[(left_mode, right_mode)] += val;
                 d_linear[(left_mode, right_mode)] += 2. * mf * model.rot[rc] * val;
                 d_zero[(left_mode, right_mode)] += mf * mf * model.rot[rc] * model.rot[rc] * val;
-            }
-        }
-    }
 
-    // 2i * rho * (omega - mOmega) * Omega * xi_l * ez x xi_r
-    let mut r_linear = DMatrix::from_element(modes.len(), modes.len(), 0.);
-    let mut r_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
-
-    for left_mode in 0..modes.len() {
-        for right_mode in 0..modes.len() {
-            let l = &modes[left_mode];
-            let r = &modes[right_mode];
-
-            for rc in 1..l.post_processing.x.len() {
-                let val = trapezoid[rc]
+                let val = vol
                     * 2.
-                    * model.rho[rc]
-                    * model.r_coord[rc].powi(2)
-                    * (inner_prod_r(r.ell, l.ell)
-                        * ((l.post_processing.xi_r[rc] + l.post_processing.xi_h[rc])
-                            * r.post_processing.xi_h[rc]
-                            + l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc])
-                        + l.post_processing.xi_r[rc]
-                            * r.post_processing.xi_h[rc]
-                            * q_kl2(l.ell, r.ell, m)
-                            * 2.
-                            * (epsilon[rc] + adepsilon[rc])
-                        + l.post_processing.xi_h[rc]
-                            * r.post_processing.xi_r[rc]
-                            * q_kl2(l.ell, r.ell, m)
-                            * 2.
-                            * (epsilon[rc] + adepsilon[rc])
-                        + l.post_processing.xi_h[rc]
-                            * r.post_processing.xi_h[rc]
-                            * (if r.ell == l.ell { 1. } else { 0. } + 6. * q_kl2(l.ell, r.ell, m))
-                            * 2.
-                            * epsilon[rc]);
+                    * (inner_prod_r * (hr + rh + hh)
+                        + (rh + hr) * q_kl2 * 2. * (epsilon[rc] + adepsilon[rc])
+                        + hh * (inner_prod_r + 6. * q_kl2) * 2. * epsilon[rc]);
+
+                let val_t = vol
+                    * 2.
+                    * model.rot[rc]
+                    * (q_rt_p * rtp + q_rt_n * rtn + q_ht_n * htn + q_ht_p * htp);
+
                 assert!(
                     val.is_finite(),
                     "Not finite number at {}, {}",
                     left_mode,
                     right_mode
                 );
-                r_linear[(left_mode, right_mode)] += mf * model.rot[rc] * val;
-                r_zero[(left_mode, right_mode)] += mf * mf * model.rot[rc] * model.rot[rc] * val;
-            }
-        }
-    }
+                r_linear[(left_mode, right_mode)] += mf * model.rot[rc] * val + val_t;
+                r_zero[(left_mode, right_mode)] +=
+                    mf * model.rot[rc] * (mf * model.rot[rc] * val + val_t);
 
-    let mut l_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
-
-    for left_mode in 0..modes.len() {
-        for right_mode in 0..modes.len() {
-            let l = &modes[left_mode];
-            let r = &modes[right_mode];
-
-            for rc in 1..l.post_processing.x.len() {
                 l_zero[(left_mode, right_mode)] += trapezoid[rc]
                     * model.r_coord[rc].powi(2)
                     * ((r.freq - mf * model.rot[rc]).powi(2)
                         * model.rho[rc]
-                        * (inner_prod_r(r.ell, l.ell)
-                            * l.post_processing.xi_r[rc]
-                            * r.post_processing.xi_r[rc]
-                            + inner_prod_h(r.ell, l.ell)
-                                * l.post_processing.xi_h[rc]
-                                * r.post_processing.xi_h[rc])
-                        - 2. * mf * model.rot[rc] * (r.freq - mf * model.rot[rc]) * model.rho[rc] * inner_prod_r(r.ell, l.ell) * (
-                            (l.post_processing.xi_r[rc] +  l.post_processing.xi_h[rc])*  r.post_processing.xi_h[rc] +  l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc])
-                        // gravity perturbation
-                        + q_kl2(l.ell, r.ell, m)
+                        * (inner_prod_r * rr + inner_prod_h * hh)
+                        + 2. * mf
+                            * model.rot[rc]
+                            * (r.freq - mf * model.rot[rc])
+                            * model.rho[rc]
+                            * inner_prod_r
+                            * (rh + hr + hh)
+                        + q_kl2
                             * l.post_processing.psi[rc]
                             * r.post_processing.rho[rc]
                             * threeepsilonadepsilon[rc]
-                        + q_kl2(l.ell, r.ell, m)
+                        + q_kl2
                             * model.rho[rc]
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_r[rc]
                             * dthreeepsilonadepsilon[rc]
-                        + q_kl2_hd(l.ell, r.ell, m)
+                        + q_kl2_hd
                             * model.rho[rc]
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_h[rc]
-                            * threeepsilonadepsilon[rc] / model.r_coord[rc]
-                        // density perturbation
+                            * threeepsilonadepsilon[rc]
+                            / model.r_coord[rc]
                         - model.grav * model.m_coord[rc] / model.r_coord[rc].powi(2)
-                            * l.post_processing.xi_r[rc]
-                            * r.post_processing.xi_r[rc]
+                            * rr
                             * model.rho[rc]
-                            * q_kl2(l.ell, r.ell, m)
+                            * q_kl2
                             * dthreeepsilonadepsilon[rc]
                         - model.grav * model.m_coord[rc] / model.r_coord[rc].powi(2)
-                            * l.post_processing.xi_r[rc]
-                            * r.post_processing.xi_h[rc]
+                            * rh
                             * model.rho[rc]
-                            * q_kl2_hd(l.ell, r.ell, m)
-                            * threeepsilonadepsilon[rc] / model.r_coord[rc]
-                        // pressure perturbation
+                            * q_kl2_hd
+                            * threeepsilonadepsilon[rc]
+                            / model.r_coord[rc]
                         + model.gamma1[rc]
                             * model.p[rc]
                             * l.post_processing.chi[rc]
-                            * (q_kl2(l.ell, r.ell, m)
-                                * r.post_processing.xi_r[rc]
-                                * dthreeepsilonadepsilon[rc]
-                                + q_kl2_hd(l.ell, r.ell, m)
+                            * (q_kl2 * r.post_processing.xi_r[rc] * dthreeepsilonadepsilon[rc]
+                                + q_kl2_hd
                                     * r.post_processing.xi_h[rc]
-                                    * threeepsilonadepsilon[rc] / model.r_coord[rc]));
+                                    * threeepsilonadepsilon[rc]
+                                    / model.r_coord[rc]));
                 assert!(
                     l_zero[(left_mode, right_mode)].is_finite(),
                     "Not finite number at {}, {}, {}: {}",
@@ -604,11 +585,11 @@ pub fn perturb_deformed(
     let mut b = DMatrix::from_element(modes.len() * 2, modes.len() * 2, 0.);
 
     a.view_range_mut(modes.len().., 0..modes.len())
-        .copy_from(&(-&d_zero - &r_zero + &l_zero));
+        .copy_from(&(-&d_zero + &r_zero + &l_zero));
     a.view_range_mut(0..modes.len(), modes.len()..)
         .fill_diagonal(1.);
     a.view_range_mut(modes.len().., modes.len()..)
-        .copy_from(&(&d_linear + &r_linear));
+        .copy_from(&(&d_linear - &r_linear));
 
     b.view_range_mut(0..modes.len(), 0..modes.len())
         .fill_diagonal(1.);
