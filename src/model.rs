@@ -161,4 +161,8 @@ impl StellarModel {
             }
         }
     }
+
+    pub(crate) fn freq_scale(&self) -> f64 {
+        (self.grav * self.mass / self.radius.powi(3)).sqrt()
+    }
 }
