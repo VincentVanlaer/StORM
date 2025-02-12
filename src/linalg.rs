@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, marker::PhantomData, mem::MaybeUninit, ops::Add};
+use std::{borrow::Borrow, marker::PhantomData, mem::MaybeUninit, ops::Add, ptr::NonNull};
 
 use nalgebra::{
     allocator::Allocator,
@@ -79,7 +79,12 @@ impl<const R: usize, const C: usize, const L: usize> ArrayAllocator<Const<R>, Co
 }
 
 pub(crate) struct UnsizedMatrixArray<T, R: Dim, C: Dim, L: Dim> {
-    data: core::ptr::Unique<T>,
+    // If at some point this needs to support Send & Sync, then this needs to be upgraded into
+    // something equivalent to core::ptr::Unique
+    //
+    // See also https://users.rust-lang.org/t/where-did-unique-t-go/68807 for more information
+    // about concerns regarding dropchk
+    data: NonNull<T>,
     rows: R,
     columns: C,
     length: L,
@@ -97,7 +102,7 @@ impl<T, R: Dim, C: Dim, L: Dim> UnsizedMatrixArray<T, R, C, L> {
         assert_eq!(data.len(), rows.value() * columns.value() * length.value());
 
         UnsizedMatrixArray {
-            data: core::ptr::Unique::new(data.as_mut_ptr()).unwrap(),
+            data: NonNull::new(data.as_mut_ptr()).unwrap(),
             rows,
             columns,
             length,
