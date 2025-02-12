@@ -153,10 +153,13 @@ enum StormCommands {
         /// Spherical degree
         ell: u64,
         /// Azimuthal order
+        #[arg(allow_negative_numbers = true)]
         m: i64,
         /// Lower frequency of the scan range
+        #[arg(allow_negative_numbers = true)]
         lower: f64,
         /// Upper frequency of the scan range
+        #[arg(allow_negative_numbers = true)]
         upper: f64,
         /// Number of scanning steps
         steps: usize,
@@ -183,6 +186,7 @@ enum StormCommands {
         /// Azimuthal order to do the perturbations for.
         /// This will filter the modes than have been obtain with scan to only those that have the
         /// same azimuthal order as selected here
+        #[arg(allow_negative_numbers = true)]
         m: i64,
     },
     /// Write the results to an HDF5 file
