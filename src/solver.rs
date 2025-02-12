@@ -100,7 +100,7 @@ impl<T: DeterminantField> UpperResult<T> {
     }
 
     pub(crate) fn eigenvectors(&self) -> Vec<T> {
-        let mut eigenvectors = vec![T::zero(); self.n_systems * self.n];
+        let mut eigenvectors = vec![T::zero(); (self.n_systems + 1) * self.n];
         let len = eigenvectors.len();
 
         eigenvectors[len - 1] = T::one();
@@ -114,7 +114,7 @@ impl<T: DeterminantField> UpperResult<T> {
             eigenvectors[len - i - 1] = next_val;
         }
 
-        for k in 0..(self.n_systems - 1) {
+        for k in 0..self.n_systems {
             for i in 0..self.n {
                 let mut next_val = T::zero();
                 for j in 0..(i + self.n) {

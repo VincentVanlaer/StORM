@@ -60,17 +60,17 @@ impl Rotating1DPostprocessing {
         assert!(eigenvector.len().is_multiple_of(4));
         assert_eq!(model.r_coord[0], 0.);
 
-        let mut y1 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut y2 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut y3 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut y4 = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut xi_r = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut xi_h = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut p_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut psi_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut dpsi_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut rho_prime = vec![0.; eigenvector.len() / 4].into_boxed_slice();
-        let mut chi = vec![0.; eigenvector.len() / 4].into_boxed_slice();
+        let mut y1 = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut y2 = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut y3 = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut y4 = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut xi_r = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut xi_h = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut p_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut psi_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut dpsi_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut rho_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut chi = vec![0.; model.r_coord.len()].into_boxed_slice();
 
         let freq_scale = (model.grav * model.mass / model.radius.powi(3)).sqrt();
 
@@ -98,10 +98,10 @@ impl Rotating1DPostprocessing {
         };
 
         for i in 1..y1.len() {
-            y1[i] = eigenvector[i * 4];
-            y2[i] = eigenvector[i * 4 + 1];
-            y3[i] = eigenvector[i * 4 + 2];
-            y4[i] = eigenvector[i * 4 + 3];
+            y1[i] = eigenvector[(i - 1) * 4];
+            y2[i] = eigenvector[(i - 1) * 4 + 1];
+            y3[i] = eigenvector[(i - 1) * 4 + 2];
+            y4[i] = eigenvector[(i - 1) * 4 + 3];
 
             let DimensionlessCoefficients {
                 v_gamma,
@@ -133,7 +133,7 @@ impl Rotating1DPostprocessing {
                     * ((p_prime[i] + model.rho[i] * psi_prime[i]) / model.r_coord[i]
                         - f * rsigma * model.rho[i] * xi_r[i]);
             } else {
-                omega_rsq = lambda * freq.powi(2);
+                omega_rsq = 1.;
                 rel_rot = 0.;
                 xi_h[i] = 0.;
             }
@@ -145,8 +145,9 @@ impl Rotating1DPostprocessing {
                 / model.radius.powi(ell_i32 - 2)
                 * (y1[i] + xdy1)
                 - lambda / model.r_coord[i] * xi_h[i];
-            rho_prime[i] =
-                model.rho[i] * (-chi[i] + (v_gamma + a_star) * xi_r[i] / model.r_coord[i]);
+            rho_prime[i] = model.rho[i]
+                * (p_prime[i] / (model.gamma1[i] * model.p[i])
+                    + a_star * xi_r[i] / model.r_coord[i]);
 
             norm += model.rho[i]
                 * model.r_coord[i].powi(2)
@@ -170,15 +171,29 @@ impl Rotating1DPostprocessing {
             dpsi_prime[0] = y4[0] * ddphi0 * model.radius;
 
             let rsigma = freq * freq_scale - model.rot[0];
-            let f = 2. * m * model.rot[0] / (ell * (ell + 1)) as f64;
+            let f;
+            if ell != 0 {
+                f = 2. * m * model.rot[0] / (ell * (ell + 1)) as f64;
+            } else {
+                f = 0.;
+            }
 
             xi_h[0] = 1. / (rsigma * (rsigma + f))
                 * ((y2[0] + y3[0]) * ddphi0 * model.radius - f * xi_r[0]);
         }
 
-        p_prime[0] = 0.;
-        psi_prime[0] = 0.;
-        rho_prime[0] = 0.;
+        if ell == 0 {
+            p_prime[0] =
+                y2[0] * model.rho[0].powi(2) * model.radius.powi(2) * model.grav * 4. / 3. * PI;
+            psi_prime[0] = y3[0] * model.rho[0] * model.radius.powi(2) * model.grav * 4. / 3. * PI;
+            rho_prime[0] = model.rho[0] * p_prime[0] / (model.gamma1[0] * model.p[0]);
+            chi[0] = -rho_prime[0] / model.rho[0];
+        } else {
+            p_prime[0] = 0.;
+            psi_prime[0] = 0.;
+            rho_prime[0] = 0.;
+            chi[0] = 0.;
+        }
 
         let norm = 1. / norm.sqrt();
 
@@ -214,7 +229,7 @@ impl Rotating1DPostprocessing {
             });
 
         Rotating1DPostprocessing {
-            x: model.r_coord.as_slice().unwrap().to_owned().into(),
+            x: model.r_coord.clone(),
             y1,
             y2,
             y3,
