@@ -507,30 +507,21 @@ pub(crate) fn inner_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + 
 
     if ell != zero {
         let rot = g!(rotation, m * rotation, zero);
-        let omega_rsq = (lambda * (freq - rot) + two * rot) * (freq - rot);
-        let rel_rot = two * rot / (lambda * (freq - rot) + two * rot);
+        let omega2 = (freq - rot + two * rot / ell) * (freq - rot);
 
-        *output.index_mut((0, 0)) =
-            c1 * (freq - rot).powi(2) * (one - (two * rot).powi(2) / omega_rsq);
-        *output.index_mut((0, 1)) = lambda * rel_rot - ell;
-        *output.index_mut((0, 2)) = lambda * rel_rot - ell;
-        *output.index_mut((0, 3)) = zero;
-
-        *output.index_mut((1, 0)) = zero;
-        *output.index_mut((1, 1)) = zero;
-        *output.index_mut((1, 2)) = ell;
-        *output.index_mut((1, 3)) = -one;
+        *output.index_mut((0, 0)) = c1 * omega2;
     } else {
         *output.index_mut((0, 0)) = c1 * freq * freq;
-        *output.index_mut((0, 1)) = zero;
-        *output.index_mut((0, 2)) = zero;
-        *output.index_mut((0, 3)) = zero;
-
-        *output.index_mut((1, 0)) = zero;
-        *output.index_mut((1, 1)) = zero;
-        *output.index_mut((1, 2)) = zero;
-        *output.index_mut((1, 3)) = -one;
     }
+
+    *output.index_mut((0, 1)) = -ell;
+    *output.index_mut((0, 2)) = -ell;
+    *output.index_mut((0, 3)) = zero;
+
+    *output.index_mut((1, 0)) = zero;
+    *output.index_mut((1, 1)) = zero;
+    *output.index_mut((1, 2)) = ell;
+    *output.index_mut((1, 3)) = -one;
 }
 
 #[inline]
@@ -559,7 +550,7 @@ pub(crate) fn outer_bound<const ROTATION: bool, Degrees: Dim, T: ComplexField + 
     *output.index_mut((0, 2)) = zero;
     *output.index_mut((0, 3)) = zero;
 
-    *output.index_mut((1, 0)) = u;
+    *output.index_mut((1, 0)) = zero;
     *output.index_mut((1, 1)) = zero;
     *output.index_mut((1, 2)) = ell + one;
     *output.index_mut((1, 3)) = one;
