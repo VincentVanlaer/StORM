@@ -23,10 +23,14 @@ pub struct Rotating1DPostprocessing {
     pub y3: Box<[f64]>,
     /// y4 solution vector
     pub y4: Box<[f64]>,
-    /// Radial displacement vector
+    /// Radial displacement component
     pub xi_r: Box<[f64]>,
-    /// Horizontal displacement vector
+    /// Horizontal displacement component
     pub xi_h: Box<[f64]>,
+    /// Toroidal displacement component for l - 1, phase shifted by (-i)
+    pub xi_tn: Box<[f64]>,
+    /// Toroidal displacement component for l + 1, phase shifted by (-i)
+    pub xi_tp: Box<[f64]>,
     /// Gravitational potential perturbation
     pub psi: Box<[f64]>,
     /// Derivative of the gravitional potential
@@ -73,6 +77,8 @@ impl Rotating1DPostprocessing {
         let mut y4 = vec![0.; model.r_coord.len()].into_boxed_slice();
         let mut xi_r = vec![0.; model.r_coord.len()].into_boxed_slice();
         let mut xi_h = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut xi_tn = vec![0.; model.r_coord.len()].into_boxed_slice();
+        let mut xi_tp = vec![0.; model.r_coord.len()].into_boxed_slice();
         let mut p_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
         let mut psi_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
         let mut dpsi_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
@@ -82,7 +88,13 @@ impl Rotating1DPostprocessing {
         let freq_scale = model.freq_scale();
 
         let lambda = (ell * (ell + 1)) as f64;
-        let m = m as f64;
+        let lambda_n1 = (ell * (ell - 1)) as f64;
+        let lambda_p1 = ((ell + 2) * (ell + 1)) as f64;
+        let q_hd_n = q_kl1_hd(ell, ell - 1, m);
+        let q_hd_p = q_kl1_hd(ell, ell + 1, m);
+        let q_h_n = q_kl1_h(ell, ell - 1, m);
+        let q_h_p = q_kl1_h(ell, ell + 1, m);
+        let mf = m as f64;
         let ell_i32: i32 = ell
             .try_into()
             .expect("ell is never going to be so big to cause problems here");
@@ -126,12 +138,12 @@ impl Rotating1DPostprocessing {
             dpsi_prime[i] =
                 y4[i] * dphi * model.r_coord[i].powi(ell_i32 - 2) / model.radius.powi(ell_i32 - 2);
 
-            let rsigma = (freq - m * model.rot[i]) * freq_scale;
+            let rsigma = (freq - mf * model.rot[i]) * freq_scale;
             let omega_rsq;
             let rel_rot;
 
             if ell != 0 {
-                let rot = m * model.rot[i];
+                let rot = mf * model.rot[i];
                 omega_rsq = (lambda * (freq - rot) + 2. * rot) * (freq - rot);
                 rel_rot = 2. * rot / (lambda * (freq - rot) + 2. * rot);
 
@@ -156,6 +168,22 @@ impl Rotating1DPostprocessing {
                 * (p_prime[i] / (model.gamma1[i] * model.p[i])
                     + a_star * xi_r[i] / model.r_coord[i]);
 
+            if m.abs() as u64 == ell || ell == 1 {
+                xi_tn[i] = 0.;
+            } else {
+                xi_tn[i] = 2. * model.rot[i]
+                    / (lambda_n1 * (freq - mf * model.rot[i]) + 2. * mf * model.rot[i])
+                    * (-q_hd_n * xi_r[i] + q_h_n * xi_h[i]);
+            }
+
+            if ell == 0 {
+                xi_tp[i] = 0.;
+            } else {
+                xi_tp[i] = 2. * model.rot[i]
+                    / (lambda_p1 * (freq - mf * model.rot[i]) + 2. * mf * model.rot[i])
+                    * (-q_hd_p * xi_r[i] + q_h_p * xi_h[i]);
+            }
+
             norm += model.rho[i]
                 * model.r_coord[i].powi(2)
                 * (xi_r[i] * xi_r[i] + lambda * xi_h[i] * xi_h[i])
@@ -177,9 +205,9 @@ impl Rotating1DPostprocessing {
             xi_r[0] = y1[0] * model.radius;
             dpsi_prime[0] = y4[0] * ddphi0 * model.radius;
 
-            let rsigma = (freq - m * model.rot[0]) * freq_scale;
+            let rsigma = (freq - mf * model.rot[0]) * freq_scale;
             let f = if ell != 0 {
-                2. * m * model.rot[0] * freq_scale / (ell * (ell + 1)) as f64
+                2. * mf * model.rot[0] * freq_scale / (ell * (ell + 1)) as f64
             } else {
                 0.
             };
@@ -201,6 +229,22 @@ impl Rotating1DPostprocessing {
             chi[0] = 0.;
         }
 
+        if m.abs() as u64 == ell || ell == 1 {
+            xi_tn[0] = 0.;
+        } else {
+            xi_tn[0] = 2. * model.rot[0]
+                / (lambda_n1 * (freq - mf * model.rot[0]) + 2. * mf * model.rot[0])
+                * (-q_hd_n * xi_r[0] + q_h_n * xi_h[0]);
+        }
+
+        if ell == 0 {
+            xi_tp[0] = 0.;
+        } else {
+            xi_tp[0] = 2. * model.rot[0]
+                / (lambda_p1 * (freq - mf * model.rot[0]) + 2. * mf * model.rot[0])
+                * (-q_hd_p * xi_r[0] + q_h_p * xi_h[0]);
+        }
+
         let norm = 1. / norm.sqrt();
 
         for i in 0..y1.len() {
@@ -210,6 +254,8 @@ impl Rotating1DPostprocessing {
             y4[i] *= norm;
             xi_r[i] *= norm;
             xi_h[i] *= norm;
+            xi_tn[i] *= norm;
+            xi_tp[i] *= norm;
             psi_prime[i] *= norm;
             dpsi_prime[i] *= norm;
             rho_prime[i] *= norm;
@@ -249,6 +295,8 @@ impl Rotating1DPostprocessing {
             rho: rho_prime,
             p: p_prime,
             chi,
+            xi_tn,
+            xi_tp,
         }
     }
 }
@@ -258,6 +306,17 @@ fn beta_k(k: u64, m: i64) -> f64 {
     let m = m as f64;
 
     ((k * k - m * m) / (4. * k * k - 1.)).sqrt()
+}
+
+fn q_kl1(k: u64, l: u64, m: i64) -> f64 {
+    (-1.).powi((m % 2) as i32)
+        * if k == l + 1 {
+            beta_k(k, m)
+        } else if l == k + 1 {
+            beta_k(l, m)
+        } else {
+            0.
+        }
 }
 
 fn q_kl2(k: u64, l: u64, m: i64) -> f64 {
@@ -273,11 +332,25 @@ fn q_kl2(k: u64, l: u64, m: i64) -> f64 {
         }
 }
 
+fn q_kl1_h(k: u64, l: u64, m: i64) -> f64 {
+    let lambda_k = (k * (k + 1)) as f64;
+    let lambda_l = (l * (l + 1)) as f64;
+
+    q_kl1(k, l, m) * ((lambda_k + lambda_l) / 2. - 1.)
+}
+
 fn q_kl2_h(k: u64, l: u64, m: i64) -> f64 {
     let lambda_k = (k * (k + 1)) as f64;
     let lambda_l = (l * (l + 1)) as f64;
 
     q_kl2(k, l, m) * ((lambda_k + lambda_l) / 2. - 3.)
+}
+
+fn q_kl1_hd(k: u64, l: u64, m: i64) -> f64 {
+    let lambda_k = (k * (k + 1)) as f64;
+    let lambda_l = (l * (l + 1)) as f64;
+
+    q_kl1(k, l, m) * ((lambda_l - lambda_k) / 2. + 1.)
 }
 
 fn q_kl2_hd(k: u64, l: u64, m: i64) -> f64 {

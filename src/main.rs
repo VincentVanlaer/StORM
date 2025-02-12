@@ -259,6 +259,12 @@ enum ProfileFlags {
     /// Horizontal displacement
     #[clap(name = "xi_h")]
     XiH,
+    /// Toroidal displacement (l + 1)
+    #[clap(name = "xi_tp")]
+    XiTp,
+    /// Toroidal displacement (l - 1)
+    #[clap(name = "xi_tn")]
+    XiTn,
     /// Pressure perturbation
     Pressure,
     /// Density perturbation
@@ -280,6 +286,8 @@ struct Profiles {
     y4: bool,
     xi_r: bool,
     xi_h: bool,
+    xi_tn: bool,
+    xi_tp: bool,
     pressure: bool,
     density: bool,
     gravity_potential: bool,
@@ -295,6 +303,8 @@ impl Profiles {
             || self.y4
             || self.xi_r
             || self.xi_h
+            || self.xi_tp
+            || self.xi_tn
             || self.pressure
             || self.density
             || self.gravity_potential
@@ -321,6 +331,8 @@ impl From<Vec<ProfileFlags>> for Profiles {
                 ProfileFlags::GravityPotential => prof.gravity_potential = true,
                 ProfileFlags::GravityAcceleration => prof.gravity_acceleration = true,
                 ProfileFlags::Divergence => prof.divergence = true,
+                ProfileFlags::XiTp => prof.xi_tp = true,
+                ProfileFlags::XiTn => prof.xi_tn = true,
             }
         }
 
@@ -808,6 +820,14 @@ impl StormState {
 
                 if profiles.xi_h {
                     dataset!(group, "xi_h", &postprocessing.xi_h)?;
+                }
+
+                if profiles.xi_tp {
+                    dataset!(group, "xi_tp", &postprocessing.xi_tp)?;
+                }
+
+                if profiles.xi_tn {
+                    dataset!(group, "xi_tn", &postprocessing.xi_tn)?;
                 }
 
                 if profiles.pressure {
