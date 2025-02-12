@@ -7,7 +7,7 @@ use nalgebra::{
     ComplexField, Const, DefaultAllocator, Dim, Dyn, Field, RealField, Scalar, Storage, StorageMut,
     ViewStorage, ViewStorageMut,
 };
-use num::Float;
+use num_traits::Float;
 use simba::scalar::SupersetOf;
 
 pub(crate) struct MatrixArray<T, R, C, L, S> {

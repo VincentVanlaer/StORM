@@ -1,5 +1,5 @@
 use nalgebra::{ComplexField, Const, DefaultAllocator, Dim, DimName, Matrix, Scalar};
-use num::{One, Zero};
+use num_traits::{One, Zero};
 
 use crate::{
     linalg::{ArrayAllocator, MatrixArray},

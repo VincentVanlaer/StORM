@@ -4,7 +4,8 @@ use std::f64::consts::PI;
 
 use lapack::dggev3;
 use nalgebra::{ComplexField, DMatrix, Matrix2, Vector2};
-use num::{complex::Complex64, Zero};
+use num_complex::Complex64;
+use num_traits::Zero;
 
 use crate::model::{DimensionlessCoefficients, StellarModel};
 
