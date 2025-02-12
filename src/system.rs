@@ -1,6 +1,6 @@
 //! Systems of equations, interface and implementations
 use crate::{
-    linalg::{ArrayAllocator, OwnedArray},
+    linalg::storage::{ArrayAllocator, OwnedArray},
     stepper::StepMoments,
 };
 use nalgebra::{DefaultAllocator, Dim, DimName, DimSub, Field, OMatrix, Scalar};

@@ -2,7 +2,7 @@ use nalgebra::{ComplexField, Const, DefaultAllocator, Dim, DimName, Matrix, Scal
 use num_traits::{One, Zero};
 
 use crate::{
-    linalg::{ArrayAllocator, MatrixArray},
+    linalg::storage::{ArrayAllocator, MatrixArray},
     stepper::{Step, Stepper},
     system::System,
 };

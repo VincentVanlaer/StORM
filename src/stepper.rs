@@ -2,7 +2,7 @@ use nalgebra::{
     ComplexField, Const, DefaultAllocator, Dim, Matrix, Scalar, ViewStorage, allocator::Allocator,
 };
 
-use crate::linalg::{ArrayStorage, Exp, MatrixArray, assign_matrix, commutator};
+use crate::linalg::storage::{ArrayStorage, Exp, MatrixArray, assign_matrix, commutator};
 
 pub(crate) struct StepMoments<T, N, Order, S> {
     pub moments: MatrixArray<T, N, N, Order, S>,

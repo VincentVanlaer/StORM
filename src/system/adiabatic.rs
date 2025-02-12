@@ -2,7 +2,7 @@ use nalgebra::{ComplexField, Const, Dim, DimMul, Dyn, MatrixViewMut, OMatrix};
 use std::mem::MaybeUninit;
 
 use super::{Boundary, GridLength, Moments};
-use crate::linalg::{OMatrixArray, OwnedArray};
+use crate::linalg::storage::{OMatrixArray, OwnedArray};
 use crate::model::{DimensionlessCoefficients, StellarModel};
 use crate::stepper::StepMoments;
 
