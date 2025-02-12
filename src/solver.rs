@@ -267,17 +267,16 @@ where
             det *= pivot;
 
             debug_assert!(det.is_finite());
+            let pinv = T::one() / pivot;
 
             for i in (k + 1)..(2 * n) {
                 upper.set(n_step, k, i - k, unsafe {
-                    *pivot_row.get_unchecked(i) / pivot
+                    *pivot_row.get_unchecked(i) * pinv
                 });
             }
 
             for i in (k + 1)..(n + n_inner) {
-                // PERF: this is one div instruction per loop, ideally this would be handled with
-                // SIMD, so that we have less div instructions running at the same time
-                let m = unsafe { *bands.get_unchecked((k, i)) / pivot };
+                let m = unsafe { *bands.get_unchecked((k, i)) * pinv };
                 for j in 0..(2 * n) {
                     *unsafe { bands.get_unchecked_mut((j, i)) } -=
                         *unsafe { pivot_row.get_unchecked(j) } * m;
