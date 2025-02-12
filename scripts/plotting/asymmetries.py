@@ -4,6 +4,7 @@ from subprocess import Popen, PIPE
 from math import sqrt, inf, pi
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
+from matplotlib.cm import viridis
 import h5py
 import numpy as np
 from pathlib import Path
@@ -32,6 +33,8 @@ class ModeMap:
 
         track_freqs = np.array([track[-1] for track in self._mode_track])
 
+        print(mode_frequencies)
+
         assert len(mode_frequencies) >= len(track_freqs)
 
         min_norm = inf
@@ -49,7 +52,7 @@ class ModeMap:
         degrees_from_vector = degrees_from_vector[min_idx : min_idx + len(track_freqs)]
 
         # check for crossings
-        for idx in np.nonzero(np.diff(mode_frequencies) < 0.001)[0]:
+        for idx in np.nonzero(np.diff(mode_frequencies) < 0.005)[0]:
             if degrees_from_vector[idx] != self._degrees[idx]:
                 if not (
                     degrees_from_vector[idx] == self._degrees[idx + 1]
@@ -134,6 +137,12 @@ class MultipletMap:
             ],
         )
 
+    def colors(self, upper: float, lower: float) -> list[float]:
+        return [
+            viridis((track[0].zero - lower) / (upper - lower))
+            for track in self._combined_tracks
+        ]
+
 
 def load_modes(parity: str, m: int, limit_lower: float, limit_upper: float) -> ModeMap:
     base = f"test-data/generated/storm-asymmetries/{parity}-{m}"
@@ -144,6 +153,8 @@ def load_modes(parity: str, m: int, limit_lower: float, limit_upper: float) -> M
         f = h5py.File(f_name)
 
         rot = f["model"].attrs["deformation-rotation-frequency"]
+        # rot = float(f_name.stem.split("_")[1])
+        orig_freqs = f["frequency"][:]
         freqs = f["deformation"][str(m)]["frequency"]["re"][:]
         vectors = f["deformation"][str(m)]["eigenvector"]["re"][:]
         degrees = f["degree"][:]
@@ -161,6 +172,7 @@ def load_modes(parity: str, m: int, limit_lower: float, limit_upper: float) -> M
             inferred_degrees.append(degree_types[np.argmax(degree_matches)])
 
         data.append((rot, freqs, np.array(inferred_degrees)))
+        # data.append((rot, orig_freqs, degrees))
 
         f.close()
 
@@ -202,6 +214,9 @@ def scan_input_even(order: int, rot: float) -> list[str]:
         f"scan --frequency-units=cycles-per-day 2 {m} {2.0 + m * rot} {30.0 + m * rot} 300 --precision=1e-6",
         f"scan --frequency-units=cycles-per-day 4 {m} {2.0 + m * rot} {30.0 + m * rot} 300 --precision=1e-6",
         f"scan --frequency-units=cycles-per-day 6 {m} {2.0 + m * rot} {30.0 + m * rot} 300 --precision=1e-6",
+        f"scan --frequency-units=cycles-per-day 2 {m} {0.8 + m * rot} {2.0 + m * rot} 300 --precision=1e-6 --inverse",
+        f"scan --frequency-units=cycles-per-day 4 {m} {0.8 + m * rot} {2.0 + m * rot} 300 --precision=1e-6 --inverse",
+        f"scan --frequency-units=cycles-per-day 6 {m} {0.8 + m * rot} {2.0 + m * rot} 300 --precision=1e-6 --inverse",
     ]
 
 
@@ -211,6 +226,10 @@ def scan_input_odd(order: int, rot: float) -> list[str]:
         f"scan --frequency-units=cycles-per-day 3 {m} {2.0 + m * rot} {30.0 + m * rot} 300 --precision=1e-6",
         f"scan --frequency-units=cycles-per-day 5 {m} {2.0 + m * rot} {30.0 + m * rot} 300 --precision=1e-6",
         f"scan --frequency-units=cycles-per-day 7 {m} {2.0 + m * rot} {30.0 + m * rot} 300 --precision=1e-6",
+        f"scan --frequency-units=cycles-per-day 1 {m} {0.8 + m * rot} {2.0 + m * rot} 300 --precision=1e-6 --inverse",
+        f"scan --frequency-units=cycles-per-day 3 {m} {0.8 + m * rot} {2.0 + m * rot} 300 --precision=1e-6 --inverse",
+        f"scan --frequency-units=cycles-per-day 5 {m} {0.8 + m * rot} {2.0 + m * rot} 300 --precision=1e-6 --inverse",
+        f"scan --frequency-units=cycles-per-day 7 {m} {0.8 + m * rot} {2.0 + m * rot} 300 --precision=1e-6 --inverse",
     ]
 
 
@@ -243,8 +262,8 @@ if len(sys.argv) == 2 and sys.argv[1] == "rerun":
 
         lines = [f"input {model}\n"]
 
-        for i in range(1001):
-            rot = i / 1000 * 0.2
+        for i in range(101):
+            rot = i / 100 * 0.2
             lines.extend(rot_input(rot))
             lines.extend(scan_input_odd(m, rot * freq_scale))
             lines.extend(finish_and_output(m, i, rot, "odd"))
@@ -256,8 +275,8 @@ if len(sys.argv) == 2 and sys.argv[1] == "rerun":
 
         lines = [f"input {model}\n"]
 
-        for i in range(1001):
-            rot = i / 1000 * 0.2
+        for i in range(101):
+            rot = i / 100 * 0.2
             lines.extend(rot_input(rot))
             lines.extend(scan_input_even(m, rot * freq_scale))
             lines.extend(finish_and_output(m, i, rot, "even"))
@@ -267,9 +286,11 @@ if len(sys.argv) == 2 and sys.argv[1] == "rerun":
     for p in procs:
         p.wait()
 
-odd_zero = load_modes("odd", 0, 3.0, 20.0)
-odd_negative = load_modes("odd", -1, 3.0, 20.0)
-odd_positive = load_modes("odd", 1, 3.0, 20.0)
+odd_lower = 0.1
+odd_upper = 20.0
+odd_zero = load_modes("odd", 0, odd_lower, odd_upper)
+odd_negative = load_modes("odd", -1, odd_lower, odd_upper)
+odd_positive = load_modes("odd", 1, odd_lower, odd_upper)
 
 even_zero = load_modes("even", 0, 3.0, 20.0)
 even_negative = load_modes("even", -1, 3.0, 20.0)
@@ -320,8 +341,8 @@ plt.figure(num="Odd asymmetries")
 
 rot, asymmetries = odd_multiplets.asymmetries()
 
-for a in asymmetries:
-    plt.plot(np.array(rot) / freq_scale, a, color="C0")
+for a, color in zip(asymmetries, viridis(np.linspace(0, 1, len(asymmetries)))):
+    plt.plot(np.array(rot) / freq_scale, a, color=color)
 
 plt.title(r"$\mathcal{A}_1$ asymmetry $\ell = 1$")
 plt.xlabel(r"Rotation frequency [$\Omega_k$]")
