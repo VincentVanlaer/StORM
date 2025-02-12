@@ -332,7 +332,7 @@ pub fn perturb_deformed(
         beta,
         dbeta,
         ddbeta,
-        rot,
+        rot: _,
     }: &PerturbedMetric,
 ) -> ModeCoupling {
     let trapezoid = {
@@ -361,8 +361,8 @@ pub fn perturb_deformed(
         dthreeepsilonadepsilon[i] = 4. * dbeta[i] + model.r_coord[i] * ddbeta[i];
     }
 
-    let rot = m as f64 * rot;
     // rho * (omega + mOmega) * xi_l * xi_r
+    let mf = m as f64;
     let mut d_squared = DMatrix::from_element(modes.len(), modes.len(), 0.);
     let mut d_linear = DMatrix::from_element(modes.len(), modes.len(), 0.);
     let mut d_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
@@ -399,8 +399,8 @@ pub fn perturb_deformed(
                     right_mode
                 );
                 d_squared[(left_mode, right_mode)] += val;
-                d_linear[(left_mode, right_mode)] += rot * val;
-                d_zero[(left_mode, right_mode)] += rot * rot * val;
+                d_linear[(left_mode, right_mode)] += mf * model.rot[rc] * val;
+                d_zero[(left_mode, right_mode)] += mf * mf * model.rot[rc] * model.rot[rc] * val;
             }
         }
     }
@@ -440,8 +440,8 @@ pub fn perturb_deformed(
                     left_mode,
                     right_mode
                 );
-                r_linear[(left_mode, right_mode)] += rot * val;
-                r_zero[(left_mode, right_mode)] += rot * rot * val;
+                r_linear[(left_mode, right_mode)] += mf * model.rot[rc] * val;
+                r_zero[(left_mode, right_mode)] += mf * mf * model.rot[rc] * model.rot[rc] * val;
             }
         }
     }
