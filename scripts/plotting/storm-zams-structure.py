@@ -15,8 +15,8 @@ leg = legendre(theta)
 def load_order(
     order: int, r_idx: np.ndarray, f: h5py.File
 ) -> tuple[np.ndarray, np.ndarray]:
-    azimuthal = f["m"][:]
-    sol = f["solutions"]
+    azimuthal = f["azimuthal-order"][:]
+    sol = f["mode-profiles"]
     degree = f["degree"][:]
 
     select = np.flatnonzero(azimuthal == order)

@@ -211,8 +211,8 @@ enum StormCommands {
         properties: Vec<ModePropertyFlags>,
         /// Profiles to include in the output. Requires post-processing.
         ///
-        /// These profiles can be found in sub groups of the `solutions` group. The name of the
-        /// group is the index in the main solution arrays (e.g. `freq`). Values can be separated
+        /// These profiles can be found in sub groups of the `mode-profiles` group. The name of the
+        /// group is the index in the main solution arrays (e.g. `frequency`). Values can be separated
         /// by commas.
         ///
         /// All profiles are normalized.
@@ -345,7 +345,7 @@ enum ModePropertyFlags {
     Frequency,
     /// Spherical degree of the mode
     Degree,
-    /// Azimuthal order of the mode. It is stored as `m`.
+    /// Azimuthal order of the mode
     AzimuthalOrder,
     /// Radial order of the mode
     RadialOrder,
@@ -784,7 +784,7 @@ impl StormState {
             }
         }
 
-        let solution_group = output.create_group("solutions")?;
+        let solution_group = output.create_group("mode-profiles")?;
 
         let mut freq = Vec::new();
         let mut ell = Vec::new();
@@ -869,7 +869,7 @@ impl StormState {
         }
 
         if properties.azimuthal_order {
-            dataset!(output, "m", &m)?;
+            dataset!(output, "azimuthal-order", &m)?;
         }
 
         let perturbation_group = output.create_group("deformation")?;
