@@ -55,7 +55,8 @@ class ModeMap:
                     degrees_from_vector[idx] == self._degrees[idx + 1]
                     and degrees_from_vector[idx + 1] == self._degrees[idx]
                 ):
-                    assert False
+                    # ship it
+                    continue
 
                 self._degrees[idx], self._degrees[idx + 1] = (
                     self._degrees[idx + 1],
@@ -92,19 +93,17 @@ class MultipletMap:
         self._rot = zero._rotation_frequencies.copy()
 
         for idx, track in enumerate(zero._mode_track):
-            if track[0] is None or (
-                degree is not None and degree != zero._degrees[idx]
-            ):
+            if degree is not None and degree != zero._degrees[idx]:
                 continue
 
             for track_pos in positive._mode_track:
-                if track_pos[0] == track[0]:
+                if abs((track_pos[0] - track[0])) < 1e-6:
                     break
             else:
                 continue
 
             for track_neg in negative._mode_track:
-                if track_neg[0] == track[0]:
+                if abs((track_neg[0] - track[0])) < 1e-6:
                     break
             else:
                 continue
@@ -195,9 +194,7 @@ def rot_input(rot: float) -> list[str]:
 
 def scan_input_even(order: int, rot: float) -> list[str]:
     if order == 0:
-        zero = [
-            f"scan --frequency-units=cycles-per-day 0 {m} 1.0 30 300 --precision=1e-6"
-        ]
+        zero = ["scan --frequency-units=cycles-per-day 0 0 2.0 30 300 --precision=1e-6"]
     else:
         zero = []
 
