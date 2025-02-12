@@ -221,7 +221,9 @@ where
     #[expect(clippy::explicit_counter_loop)]
     for moments in iterator {
         stepper.step(moments, &mut step);
+
         debug_assert!(n_step < total_steps);
+
         for r in 0..n {
             for c in 0..n {
                 *bands.index_mut((c, r + n_inner)) = *step.left().index((r, c));
@@ -266,7 +268,11 @@ where
 
             det *= pivot;
 
-            debug_assert!(det.is_finite());
+            debug_assert!(
+                pivot.is_finite() && det.is_finite(),
+                "det = {det}, pivot = {pivot}, n = {n_step}"
+            );
+
             let pinv = T::one() / pivot;
 
             for i in (k + 1)..(2 * n) {
