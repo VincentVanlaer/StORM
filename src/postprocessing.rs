@@ -361,8 +361,8 @@ pub fn perturb_deformed(
         dthreeepsilonadepsilon[i] = 4. * dbeta[i] + model.r_coord[i] * ddbeta[i];
     }
 
-    // rho * (omega + mOmega) * xi_l * xi_r
     let mf = m as f64;
+    // rho * (omega - mOmega) * xi_l * xi_r
     let mut d_squared = DMatrix::from_element(modes.len(), modes.len(), 0.);
     let mut d_linear = DMatrix::from_element(modes.len(), modes.len(), 0.);
     let mut d_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
@@ -399,13 +399,13 @@ pub fn perturb_deformed(
                     right_mode
                 );
                 d_squared[(left_mode, right_mode)] += val;
-                d_linear[(left_mode, right_mode)] += mf * model.rot[rc] * val;
+                d_linear[(left_mode, right_mode)] += 2. * mf * model.rot[rc] * val;
                 d_zero[(left_mode, right_mode)] += mf * mf * model.rot[rc] * model.rot[rc] * val;
             }
         }
     }
 
-    // 2i * rho * (omega + mOmega) * Omega * xi_l * ez x xi_r
+    // 2i * rho * (omega - mOmega) * Omega * xi_l * ez x xi_r
     let mut r_linear = DMatrix::from_element(modes.len(), modes.len(), 0.);
     let mut r_zero = DMatrix::from_element(modes.len(), modes.len(), 0.);
 
@@ -419,11 +419,15 @@ pub fn perturb_deformed(
                     * 2.
                     * model.rho[rc]
                     * model.r_coord[rc].powi(2)
-                    * (l.post_processing.xi_r[rc]
-                        * l.post_processing.xi_h[rc]
-                        * q_kl2(l.ell, r.ell, m)
-                        * 2.
-                        * (epsilon[rc] + adepsilon[rc])
+                    * (inner_prod_r(r.ell, l.ell)
+                        * ((l.post_processing.xi_r[rc] + l.post_processing.xi_h[rc])
+                            * r.post_processing.xi_h[rc]
+                            + l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc])
+                        + l.post_processing.xi_r[rc]
+                            * l.post_processing.xi_h[rc]
+                            * q_kl2(l.ell, r.ell, m)
+                            * 2.
+                            * (epsilon[rc] + adepsilon[rc])
                         + l.post_processing.xi_h[rc]
                             * r.post_processing.xi_r[rc]
                             * q_kl2(l.ell, r.ell, m)
@@ -456,7 +460,7 @@ pub fn perturb_deformed(
             for rc in 1..l.post_processing.x.len() {
                 l_zero[(left_mode, right_mode)] += trapezoid[rc]
                     * model.r_coord[rc].powi(2)
-                    * (r.freq.powi(2)
+                    * ((r.freq - mf * model.rot[rc]).powi(2)
                         * model.rho[rc]
                         * (inner_prod_r(r.ell, l.ell)
                             * l.post_processing.xi_r[rc]
@@ -464,6 +468,8 @@ pub fn perturb_deformed(
                             + inner_prod_h(r.ell, l.ell)
                                 * l.post_processing.xi_h[rc]
                                 * r.post_processing.xi_h[rc])
+                        - 2. * mf * model.rot[rc] * (r.freq - mf * model.rot[rc]) * model.rho[rc] * inner_prod_r(r.ell, l.ell) * (
+                            (l.post_processing.xi_r[rc] +  l.post_processing.xi_h[rc])*  r.post_processing.xi_h[rc] +  l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc])
                         // gravity perturbation
                         + q_kl2(l.ell, r.ell, m)
                             * l.post_processing.psi[rc]
@@ -523,11 +529,11 @@ pub fn perturb_deformed(
     let mut b = DMatrix::from_element(modes.len() * 2, modes.len() * 2, 0.);
 
     a.view_range_mut(modes.len().., 0..modes.len())
-        .copy_from(&(&d_zero - &r_zero + &l_zero));
+        .copy_from(&(-&d_zero - &r_zero + &l_zero));
     a.view_range_mut(0..modes.len(), modes.len()..)
         .fill_diagonal(1.);
     a.view_range_mut(modes.len().., modes.len()..)
-        .copy_from(&(&d_linear - &r_linear));
+        .copy_from(&(&d_linear + &r_linear));
 
     b.view_range_mut(0..modes.len(), 0..modes.len())
         .fill_diagonal(1.);
