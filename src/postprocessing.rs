@@ -179,7 +179,7 @@ impl Rotating1DPostprocessing {
 
             let rsigma = (freq - m * model.rot[0]) * freq_scale;
             let f = if ell != 0 {
-                2. * m * model.rot[0] / (ell * (ell + 1)) as f64
+                2. * m * model.rot[0] * freq_scale / (ell * (ell + 1)) as f64
             } else {
                 0.
             };
@@ -426,7 +426,7 @@ pub fn perturb_deformed(
                             * r.post_processing.xi_h[rc]
                             + l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc])
                         + l.post_processing.xi_r[rc]
-                            * l.post_processing.xi_h[rc]
+                            * r.post_processing.xi_h[rc]
                             * q_kl2(l.ell, r.ell, m)
                             * 2.
                             * (epsilon[rc] + adepsilon[rc])
