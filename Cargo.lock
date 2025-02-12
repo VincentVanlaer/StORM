@@ -230,15 +230,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
-name = "coredump"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7b12ca865ce2c375a629bc88221bdcdfaf9bdf6d8e966d7a6dbd2f6c4ceb335"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "either"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -835,7 +826,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "color-eyre",
- "coredump",
  "hdf5-metno",
  "itertools",
  "nalgebra",

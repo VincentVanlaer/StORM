@@ -29,7 +29,6 @@ thiserror = "1.0.64"
 hdf5 = { package = "hdf5-metno", version = "0.10" }
 nalgebra = { version = "=0.33.2", default-features = false, features = ["alloc"] }
 simba = { version = "0.9.0", default-features = false, features = ["std"] }
-coredump = "0.1.2"
 itertools = "0.14.0"
 nshare = { version = "0.10.0", features = ["nalgebra", "ndarray"], default-features = false }
 shlex = "1.3.0"
