@@ -11,6 +11,7 @@ pub(crate) struct UpperResult<T> {
     data: Box<[T]>,
     n: usize,
     n_systems: usize,
+    column_pivot: Vec<(usize, usize)>,
 }
 
 pub(crate) fn determinant<
@@ -96,6 +97,7 @@ impl<T: DeterminantField> UpperResult<T> {
             .into_boxed_slice(),
             n: matrix_size,
             n_systems: points,
+            column_pivot: Vec::with_capacity(matrix_size),
         }
     }
 
@@ -125,12 +127,17 @@ impl<T: DeterminantField> UpperResult<T> {
             }
         }
 
+        for &(c1, c2) in self.column_pivot.iter().rev() {
+            (eigenvectors[c1], eigenvectors[c2]) = (eigenvectors[c2], eigenvectors[c1]);
+        }
+
         eigenvectors
     }
 }
 
 trait SetUpperResult<T> {
     fn set(&mut self, point: usize, k: usize, i: usize, val: T);
+    fn column_pivot(&mut self, c1: usize, c2: usize);
 }
 
 impl<T> SetUpperResult<T> for UpperResult<T> {
@@ -146,10 +153,15 @@ impl<T> SetUpperResult<T> for UpperResult<T> {
                 + (i - 1)] = val;
         }
     }
+
+    fn column_pivot(&mut self, c1: usize, c2: usize) {
+        self.column_pivot.push((c1, c2));
+    }
 }
 
 impl<T> SetUpperResult<T> for () {
     fn set(&mut self, _point: usize, _k: usize, _i: usize, _val: T) {}
+    fn column_pivot(&mut self, _c1: usize, _c2: usize) {}
 }
 
 pub(crate) trait DeterminantField = ComplexField<RealField: Zero> + Scalar + One + Zero + Copy;
@@ -185,7 +197,7 @@ fn determinant_inner<
 where
     DefaultAllocator: DeterminantAllocs<N, NInner, Order>,
 {
-    let iterator = system.evaluate_moments(grid, frequency);
+    let mut iterator = system.evaluate_moments(grid, frequency);
     let total_steps = iterator.len();
     assert_eq!(total_steps, system.len(grid));
     let outer_boundary = system.outer_boundary(frequency);
@@ -218,7 +230,118 @@ where
     // at some point
     let mut n_step = 0;
 
-    #[expect(clippy::explicit_counter_loop)]
+    // In order to keep the algebraic equations at the inner boundary local, we need to use column
+    // pivotting in the first iteration of the loop
+    if let Some(moments) = iterator.next() {
+        stepper.step(moments, &mut step);
+
+        for r in 0..n {
+            for c in 0..n {
+                *bands.index_mut((c, r + n_inner)) = *step.left().index((r, c));
+                *bands.index_mut((c + n, r + n_inner)) = *step.right().index((r, c));
+            }
+        }
+
+        for k in 0..n {
+            let pivot;
+
+            if k < n_inner {
+                let mut max_idx = k;
+                let mut max_val: T::RealField = unsafe { bands.get_unchecked((k, k)) }.abs();
+
+                for i in (k + 1)..n {
+                    if unsafe { bands.get_unchecked((i, k)) }.abs() > max_val {
+                        max_idx = i;
+                        max_val = bands.index((i, k)).abs();
+                    }
+                }
+
+                pivot = unsafe { *bands.get_unchecked((max_idx, k)) };
+
+                if max_idx != k {
+                    upper.column_pivot(max_idx, k);
+                    for i in k..(n + n_inner) {
+                        unsafe {
+                            let c1 = *bands.get_unchecked((max_idx, i));
+                            let c2 = *bands.get_unchecked((k, i));
+
+                            *bands.get_unchecked_mut((max_idx, i)) = c2;
+                            *bands.get_unchecked_mut((k, i)) = c1;
+                        }
+                    }
+                    det *= -T::one();
+                }
+            } else {
+                let mut max_idx = k;
+                let mut max_val: T::RealField = unsafe { bands.get_unchecked((k, k)) }.abs();
+
+                for i in (k + 1)..(n + n_inner) {
+                    if unsafe { bands.get_unchecked((k, i)) }.abs() > max_val {
+                        max_idx = i;
+                        max_val = bands.index((k, i)).abs();
+                    }
+                }
+
+                pivot = unsafe { *bands.get_unchecked((k, max_idx)) };
+
+                if max_idx != k {
+                    for i in 0..(2 * n) {
+                        unsafe {
+                            let r1 = *bands.get_unchecked((i, max_idx));
+                            let r2 = *bands.get_unchecked((i, k));
+
+                            *bands.get_unchecked_mut((i, max_idx)) = r2;
+                            *bands.get_unchecked_mut((i, k)) = r1;
+                        }
+                    }
+                    det *= -T::one();
+                }
+            }
+
+            let mut pivot_row =
+                Matrix::from_element_generic(system.shape().mul(Const::<2>), Const::<1>, T::zero());
+
+            for i in 0..(2 * n) {
+                unsafe {
+                    *pivot_row.get_unchecked_mut(i) = *bands.get_unchecked((i, k));
+                }
+            }
+
+            det *= pivot;
+
+            debug_assert!(
+                det.is_finite() && det != T::zero(),
+                "det = {det}, pivot = {pivot}, n = {n_step}"
+            );
+
+            let pinv = T::one() / pivot;
+
+            for i in (k + 1)..(2 * n) {
+                upper.set(n_step, k, i - k, unsafe {
+                    *pivot_row.get_unchecked(i) * pinv
+                });
+            }
+
+            for i in (k + 1)..(n + n_inner) {
+                let m = unsafe { *bands.get_unchecked((k, i)) * pinv };
+                for j in 0..(2 * n) {
+                    // PERF: VFNMADD231PD
+                    *unsafe { bands.get_unchecked_mut((j, i)) } -=
+                        *unsafe { pivot_row.get_unchecked(j) } * m;
+                }
+            }
+        }
+
+        for i in 0..n_inner {
+            for j in 0..n {
+                *bands.index_mut((j, i)) = *bands.index((j + n, i + n));
+                *bands.index_mut((j + n, i)) = T::zero();
+            }
+        }
+
+        n_step += 1;
+    }
+
     for moments in iterator {
         stepper.step(moments, &mut step);
 
