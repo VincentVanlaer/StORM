@@ -263,6 +263,12 @@ enum ProfileFlags {
     Pressure,
     /// Density perturbation
     Density,
+    /// Gravity potential perturbation
+    GravityPotential,
+    /// Gravity acceleration perturbation
+    GravityAcceleration,
+    /// Divergence of the displacement
+    Divergence,
 }
 
 #[derive(Default)]
@@ -276,6 +282,9 @@ struct Profiles {
     xi_h: bool,
     pressure: bool,
     density: bool,
+    gravity_potential: bool,
+    gravity_acceleration: bool,
+    divergence: bool,
 }
 
 impl Profiles {
@@ -288,6 +297,9 @@ impl Profiles {
             || self.xi_h
             || self.pressure
             || self.density
+            || self.gravity_potential
+            || self.gravity_acceleration
+            || self.divergence
     }
 }
 
@@ -306,6 +318,9 @@ impl From<Vec<ProfileFlags>> for Profiles {
                 ProfileFlags::XiH => prof.xi_h = true,
                 ProfileFlags::Pressure => prof.pressure = true,
                 ProfileFlags::Density => prof.density = true,
+                ProfileFlags::GravityPotential => prof.gravity_potential = true,
+                ProfileFlags::GravityAcceleration => prof.gravity_acceleration = true,
+                ProfileFlags::Divergence => prof.divergence = true,
             }
         }
 
@@ -319,8 +334,6 @@ enum ModePropertyFlags {
     Frequency,
     /// Spherical degree of the mode
     Degree,
-    /// Radial order of the mode (requires post-processing)
-    RadialOrder,
     /// Azimuthal order of the mode. It is stored as `m`.
     AzimuthalOrder,
     /// Perturbed frequencies, units are given by `frequency-units`. It is stored in a subgroup of
@@ -366,7 +379,6 @@ impl From<Vec<ModePropertyFlags>> for ModeProperties {
             match flag {
                 ModePropertyFlags::Frequency => prop.frequency = true,
                 ModePropertyFlags::Degree => prop.degree = true,
-                ModePropertyFlags::RadialOrder => prop.radial_order = true,
                 ModePropertyFlags::AzimuthalOrder => prop.azimuthal_order = true,
                 ModePropertyFlags::DeformedFrequency => prop.deformed_frequency = true,
                 ModePropertyFlags::DeformedEigenvector => prop.deformed_eigenvector = true,
@@ -804,6 +816,18 @@ impl StormState {
 
                 if profiles.density {
                     dataset!(group, "density", &postprocessing.rho)?;
+                }
+
+                if profiles.gravity_potential {
+                    dataset!(group, "gravity-acceleration", &postprocessing.dpsi)?;
+                }
+
+                if profiles.gravity_potential {
+                    dataset!(group, "gravity-potential", &postprocessing.psi)?;
+                }
+
+                if profiles.divergence {
+                    dataset!(group, "divergence", &postprocessing.chi)?;
                 }
             }
         }
