@@ -33,11 +33,9 @@
 //! # }
 //! ```
 #![feature(generic_const_exprs)]
-#![feature(const_option)]
 #![feature(iter_map_windows)]
 #![feature(never_type)]
 #![feature(unwrap_infallible)]
-#![feature(unsigned_is_multiple_of)]
 #![feature(trait_alias)]
 #![expect(incomplete_features)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
