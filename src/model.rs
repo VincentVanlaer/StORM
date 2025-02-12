@@ -136,7 +136,9 @@ impl StellarModel {
     pub fn overlay_rot<P: AsRef<Path>>(&mut self, file: P) -> Result<(), ModelError> {
         let input = &hdf5::File::open(file.as_ref())
             .map_err(|err| ModelError::HDF5OpenError(file.as_ref().to_owned(), err))?;
+        let scale = self.freq_scale();
         self.rot = read_dataset(input, "Omega_rot", self.r_coord.len())?
+            .mapv(|rot: f64| rot / scale)
             .to_vec()
             .into();
 
