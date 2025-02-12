@@ -44,6 +44,7 @@
 
 pub mod bracket;
 pub mod dynamic_interface;
+mod gaunt;
 mod linalg;
 pub mod model;
 pub mod postprocessing;
