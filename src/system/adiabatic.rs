@@ -31,7 +31,6 @@ impl Rotating1D {
     /// spherical harmonic.
     pub fn from_model(value: &StellarModel, ell: u64, m: i64) -> Rotating1D {
         let ell = ell as f64;
-        let scale = value.freq_scale();
 
         let components: Vec<_> = value
             .rot
@@ -40,7 +39,7 @@ impl Rotating1D {
             .enumerate()
             .map(|(i, (&rot, x))| ModelPoint {
                 coeff: value.dimensionless_coefficients(i),
-                rot: rot / scale,
+                rot,
                 x: x / value.radius,
             })
             .collect();

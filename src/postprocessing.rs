@@ -124,7 +124,7 @@ impl Rotating1DPostprocessing {
             dpsi_prime[i] =
                 y4[i] * dphi * model.r_coord[i].powi(ell_i32 - 2) / model.radius.powi(ell_i32 - 2);
 
-            let rsigma = freq * time_scale - m * model.rot[i];
+            let rsigma = (freq - m * model.rot[i]) * time_scale;
             let omega_rsq;
             let rel_rot;
 
@@ -175,7 +175,7 @@ impl Rotating1DPostprocessing {
             xi_r[0] = y1[0] * model.radius;
             dpsi_prime[0] = y4[0] * ddphi0 * model.radius;
 
-            let rsigma = freq * time_scale - model.rot[0];
+            let rsigma = (freq - m * model.rot[0]) * time_scale;
             let f = if ell != 0 {
                 2. * m * model.rot[0] / (ell * (ell + 1)) as f64
             } else {
@@ -722,8 +722,7 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
             * a2
             * y[i].x
             * (model.r_coord[i] / model.radius)
-            * rot.powi(2)
-            / (model.grav * model.mass / model.radius.powi(3));
+            * rot.powi(2);
         dbeta[i] = beta[i] / model.r_coord[i] - beta[i] * dmda
             + beta[i] / (y[i].x * model.r_coord[i]) * y[i].y;
         ddbeta[i] = -2. * beta[i] / model.r_coord[i] * dmda

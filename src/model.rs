@@ -35,7 +35,7 @@ pub struct StellarModel {
     pub gamma1: Box<[f64]>,
     /// Square of the buoyancy frequency \[s^-2\]
     pub nsqrd: Box<[f64]>,
-    /// Angular rotation frequency \[rad/s\]
+    /// Angular rotation frequency \[sqrt(GM/R^3)\]
     pub rot: Box<[f64]>,
     /// Gravitional acceleration \[Ncm^2/g\]
     pub grav: f64,
@@ -106,15 +106,16 @@ impl StellarModel {
         let input = &hdf5::File::open(file.as_ref())
             .map_err(|err| ModelError::HDF5OpenError(file.as_ref().to_owned(), err))?;
         let n = read_attr(input, "n")?;
-        let radius = read_attr(input, "R_star")?;
-        let mass = read_attr(input, "M_star")?;
+        let radius: f64 = read_attr(input, "R_star")?;
+        let mass: f64 = read_attr(input, "M_star")?;
         let r_coord = read_dataset(input, "r", n)?;
         let m_coord = read_dataset(input, "M_r", n)?;
         let rho = read_dataset(input, "rho", n)?;
         let p = read_dataset(input, "P", n)?;
         let gamma1 = read_dataset(input, "Gamma_1", n)?;
         let nsqrd = read_dataset(input, "N2", n)?;
-        let rot = read_dataset(input, "Omega_rot", n)?;
+        let rot = read_dataset(input, "Omega_rot", n)?
+            .mapv(|rot: f64| rot / (GRAV * mass / radius.powi(3)).sqrt());
 
         Ok(StellarModel {
             radius,
