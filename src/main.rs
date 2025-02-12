@@ -26,22 +26,37 @@ fn main() -> ExitCode {
     let interactive_input = io::stdin().is_terminal();
     color_eyre::install().unwrap();
 
+    let mut arg = std::env::args().nth(1).map(|f| {
+        std::fs::read_to_string(f)
+            .unwrap()
+            .lines()
+            .map(String::from)
+            .collect_vec()
+            .into_iter()
+    });
+
     loop {
-        let readline = rl.readline("[storm] > ");
-        let command = match readline {
-            Ok(line) => {
-                let _ = rl.add_history_entry(&line);
-                line
-            }
-            Err(rustyline::error::ReadlineError::Interrupted) => {
-                continue;
-            }
-            Err(rustyline::error::ReadlineError::Eof) => {
-                break;
-            }
-            Err(err) => {
-                eprintln!("Error: {:?}", err);
-                break;
+        let command = if let Some(ref mut arg) = arg {
+            let Some(command) = arg.next() else { break };
+
+            command
+        } else {
+            let readline = rl.readline("[storm] > ");
+            match readline {
+                Ok(line) => {
+                    let _ = rl.add_history_entry(&line);
+                    line
+                }
+                Err(rustyline::error::ReadlineError::Interrupted) => {
+                    continue;
+                }
+                Err(rustyline::error::ReadlineError::Eof) => {
+                    break;
+                }
+                Err(err) => {
+                    eprintln!("Error: {:?}", err);
+                    break;
+                }
             }
         };
 
