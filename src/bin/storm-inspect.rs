@@ -13,7 +13,7 @@ use storm::{
     },
     dynamic_interface::{DifferenceSchemes, MultipleShooting},
     model::StellarModel,
-    system::adiabatic::{GridScale, Rotating1D},
+    system::adiabatic::Rotating1D,
 };
 
 struct IntermediateStateBalanced {
@@ -33,9 +33,8 @@ fn main() -> Result<()> {
 
     let model = StellarModel::from_gsm("test-data/test-model-tams.GSM")?;
     let system = Rotating1D::from_model(&model, 0, 0);
-    let grid = &GridScale { scale: 0 };
     let searcher = &InverseQuadratic {};
-    let determinant = MultipleShooting::new(&system, difference_scheme, grid);
+    let determinant = MultipleShooting::new(&system, difference_scheme);
 
     let dets: Vec<_> = linspace(lower, upper, steps)
         .map(|x| Point {

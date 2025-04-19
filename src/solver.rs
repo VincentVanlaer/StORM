@@ -1,11 +1,7 @@
-use nalgebra::{ComplexField, Const, DefaultAllocator, Dim, DimName, Matrix, Scalar};
-use num_traits::{One, Zero};
+use nalgebra::{ComplexField, Const, DefaultAllocator, Dim, Matrix, OMatrix};
+use num_traits::Zero;
 
-use crate::{
-    linalg::storage::{ArrayAllocator, MatrixArray},
-    stepper::{Step, Stepper},
-    system::System,
-};
+use crate::{linalg::storage::ArrayAllocator, system::filler::DiscretizedSystem};
 
 pub(crate) struct UpperResult<T> {
     data: Box<[T]>,
@@ -15,47 +11,35 @@ pub(crate) struct UpperResult<T> {
 }
 
 pub(crate) fn determinant<
-    T: DeterminantField,
+    T: ComplexField + Copy,
     N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
     NInner: Dim,
-    Order: DimName,
-    G: ?Sized,
-    I: System<T, G, N, NInner, Order>,
-    S: Stepper<T, N, Order>,
 >(
-    system: &I,
-    stepper: &S,
-    grid: &G,
+    system: &impl DiscretizedSystem<T, N, NInner>,
     frequency: T,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner, Order>,
+    DefaultAllocator: DeterminantAllocs<N, NInner>,
 {
-    determinant_inner(system, stepper, grid, frequency, &mut ())
+    determinant_inner(system, frequency, &mut ())
 }
 
 pub(crate) fn determinant_with_upper<
-    T: DeterminantField,
+    T: ComplexField + Copy,
     N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
     NInner: Dim,
-    Order: DimName,
-    G: ?Sized,
-    I: System<T, G, N, NInner, Order>,
-    S: Stepper<T, N, Order>,
 >(
-    system: &I,
-    stepper: &S,
-    grid: &G,
+    system: &impl DiscretizedSystem<T, N, NInner>,
     frequency: T,
     upper: &mut UpperResult<T>,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner, Order>,
+    DefaultAllocator: DeterminantAllocs<N, NInner>,
 {
     assert_eq!(upper.n, system.shape().value());
-    assert_eq!(upper.n_systems, system.len(grid));
+    assert_eq!(upper.n_systems, system.len());
 
-    determinant_inner(system, stepper, grid, frequency, upper)
+    determinant_inner(system, frequency, upper)
 }
 
 fn gauss(lower: usize, upper: usize) -> usize {
@@ -87,7 +71,7 @@ fn gauss(lower: usize, upper: usize) -> usize {
 //                         0 0 1 * ┃ 1 ┃ has less data to the           * 0
 //                         0 0 0 ^ ┃ 0 ┛ right due to edge of matrix      *
 
-impl<T: DeterminantField> UpperResult<T> {
+impl<T: ComplexField + Copy> UpperResult<T> {
     pub(crate) fn new(matrix_size: usize, points: usize) -> UpperResult<T> {
         UpperResult {
             data: vec![
@@ -164,14 +148,11 @@ impl<T> SetUpperResult<T> for () {
     fn column_pivot(&mut self, _c1: usize, _c2: usize) {}
 }
 
-pub(crate) trait DeterminantField = ComplexField<RealField: Zero> + Scalar + One + Zero + Copy;
-
 pub(crate) trait DeterminantAllocs<
     N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
     NInner: Dim,
-    Order: DimName,
-> = ArrayAllocator<N, N, Order>
-    + ArrayAllocator<N, N, Const<2>>
+> = ArrayAllocator<N, N, Const<2>>
+    + nalgebra::allocator::Allocator<N, N>
     + nalgebra::allocator::Allocator<NInner, N>
     + nalgebra::allocator::Allocator<<N as nalgebra::DimSub<NInner>>::Output, N>
     + nalgebra::allocator::Allocator<
@@ -180,28 +161,27 @@ pub(crate) trait DeterminantAllocs<
     > + nalgebra::allocator::Allocator<<N as nalgebra::DimMul<Const<2>>>::Output, Const<1>>;
 
 fn determinant_inner<
-    T: DeterminantField,
+    T: ComplexField + Copy,
     N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
     NInner: Dim,
-    Order: DimName,
-    G: ?Sized,
-    I: System<T, G, N, NInner, Order>,
-    S: Stepper<T, N, Order>,
 >(
-    system: &I,
-    stepper: &S,
-    grid: &G,
+    system: &impl DiscretizedSystem<T, N, NInner>,
     frequency: T,
     upper: &mut impl SetUpperResult<T>,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner, Order>,
+    DefaultAllocator: DeterminantAllocs<N, NInner>,
 {
-    let mut iterator = system.evaluate_moments(grid, frequency);
-    let total_steps = iterator.len();
-    assert_eq!(total_steps, system.len(grid));
-    let outer_boundary = system.outer_boundary(frequency);
-    let inner_boundary = system.inner_boundary(frequency);
+    let outer_boundary = {
+        let mut outer_boundary = OMatrix::zeros_generic(system.shape_outer(), system.shape());
+        system.outer_boundary(frequency, &mut outer_boundary);
+        outer_boundary
+    };
+    let inner_boundary = {
+        let mut inner_boundary = OMatrix::zeros_generic(system.shape_inner(), system.shape());
+        system.inner_boundary(frequency, &mut inner_boundary);
+        inner_boundary
+    };
 
     let n_inner = inner_boundary.shape().0;
     let n = system.shape().value();
@@ -212,12 +192,8 @@ where
         T::zero(),
     );
 
-    let mut step = Step::new(MatrixArray::new_with(
-        system.shape(),
-        system.shape(),
-        Const::<2>,
-        || T::zero(),
-    ));
+    let mut left: OMatrix<T, N, N> = OMatrix::zeros_generic(system.shape(), system.shape());
+    let mut right: OMatrix<T, N, N> = OMatrix::zeros_generic(system.shape(), system.shape());
 
     for i in 0..n_inner {
         for j in 0..n {
@@ -226,19 +202,17 @@ where
     }
 
     let mut det = T::one();
-    // PERF: we cannot use enumerate, as that breaks inlining. This should be refactored probably
-    // at some point
     let mut n_step = 0;
 
     // In order to keep the algebraic equations at the inner boundary local, we need to use column
     // pivotting in the first iteration of the loop
-    if let Some(moments) = iterator.next() {
-        stepper.step(moments, &mut step);
+    if n_step != system.len() {
+        system.fill_implicit(n_step, frequency, &mut left, &mut right);
 
         for r in 0..n {
             for c in 0..n {
-                *bands.index_mut((c, r + n_inner)) = *step.left().index((r, c));
-                *bands.index_mut((c + n, r + n_inner)) = *step.right().index((r, c));
+                *bands.index_mut((c, r + n_inner)) = *left.index((r, c));
+                *bands.index_mut((c + n, r + n_inner)) = *right.index((r, c));
             }
         }
 
@@ -342,15 +316,13 @@ where
         n_step += 1;
     }
 
-    for moments in iterator {
-        stepper.step(moments, &mut step);
-
-        debug_assert!(n_step < total_steps);
+    while n_step < system.len() {
+        system.fill_implicit(n_step, frequency, &mut left, &mut right);
 
         for r in 0..n {
             for c in 0..n {
-                *bands.index_mut((c, r + n_inner)) = *step.left().index((r, c));
-                *bands.index_mut((c + n, r + n_inner)) = *step.right().index((r, c));
+                *bands.index_mut((c, r + n_inner)) = *left.index((r, c));
+                *bands.index_mut((c + n, r + n_inner)) = *right.index((r, c));
             }
         }
 
@@ -454,7 +426,7 @@ where
         }
 
         for i in (k + 1)..n {
-            upper.set(total_steps, k, i - k, *bands.index((i, k)));
+            upper.set(n_step, k, i - k, *bands.index((i, k)));
         }
 
         debug_assert!(pivot.is_finite(), "det = {det}, pivot = {pivot}");

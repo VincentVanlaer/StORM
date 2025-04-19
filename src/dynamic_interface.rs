@@ -1,14 +1,16 @@
 //! Main interface for computing the determinant for a trial frequency
 
-use nalgebra::{Const, DefaultAllocator, Dim};
+use nalgebra::{DefaultAllocator, Dim, Dyn};
 
 use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
 };
+use crate::linalg::storage::ArrayAllocator;
 use crate::solver::{DeterminantAllocs, UpperResult, determinant, determinant_with_upper};
-use crate::stepper::{Colloc2, Colloc4, Magnus2, Magnus4, Magnus6, Magnus8, Stepper};
-use crate::system::System;
-use crate::system::adiabatic::{GridScale, Rotating1D};
+use crate::stepper::{Colloc2, Colloc4, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8};
+use crate::system::BoundedSystem;
+use crate::system::adiabatic::Rotating1D;
+use crate::system::filler::InterpolatedSystem;
 
 /// Supported difference schemes
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -21,9 +23,9 @@ pub enum DifferenceSchemes {
     Magnus2,
     /// Fourth-order magnus method
     Magnus4,
-    /// Sixt-order magnus method
+    /// Sixth-order magnus method
     Magnus6,
-    /// Eigth-order magnus method
+    /// Eight-order magnus method
     Magnus8,
 }
 
@@ -33,20 +35,19 @@ pub struct MultipleShooting<'system_and_grid> {
     eigenvector: Box<dyn Fn(f64) -> (f64, Vec<f64>) + 'system_and_grid>,
 }
 
-impl<'system_and_grid> MultipleShooting<'system_and_grid> {
+impl<'system> MultipleShooting<'system> {
     /// Construct from a system, difference scheme and grid definition
     pub fn new(
-        system: &'system_and_grid Rotating1D,
+        system: &'system Rotating1D,
         scheme: DifferenceSchemes,
-        grid: &'system_and_grid GridScale,
-    ) -> MultipleShooting<'system_and_grid> {
+    ) -> MultipleShooting<'system> {
         match scheme {
-            DifferenceSchemes::Colloc2 => get_solvers_inner(system, grid, || Colloc2 {}),
-            DifferenceSchemes::Colloc4 => get_solvers_inner(system, grid, || Colloc4 {}),
-            DifferenceSchemes::Magnus2 => get_solvers_inner(system, grid, || Magnus2 {}),
-            DifferenceSchemes::Magnus4 => get_solvers_inner(system, grid, || Magnus4 {}),
-            DifferenceSchemes::Magnus6 => get_solvers_inner(system, grid, || Magnus6 {}),
-            DifferenceSchemes::Magnus8 => get_solvers_inner(system, grid, || Magnus8 {}),
+            DifferenceSchemes::Colloc2 => get_solvers_inner(system, || Colloc2 {}),
+            DifferenceSchemes::Colloc4 => get_solvers_inner(system, || Colloc4 {}),
+            DifferenceSchemes::Magnus2 => get_solvers_inner(system, || Magnus2 {}),
+            DifferenceSchemes::Magnus4 => get_solvers_inner(system, || Magnus4 {}),
+            DifferenceSchemes::Magnus6 => get_solvers_inner(system, || Magnus6 {}),
+            DifferenceSchemes::Magnus8 => get_solvers_inner(system, || Magnus8 {}),
         }
     }
 
@@ -94,26 +95,25 @@ fn get_solvers_inner<
         + nalgebra::DimMul<nalgebra::Const<2>>
         + nalgebra::DimAdd<NInner>,
     NInner: Dim,
-    const ORDER: usize,
-    G: ?Sized,
-    S: System<f64, G, N, NInner, Const<ORDER>>,
-    T: Stepper<f64, N, Const<ORDER>> + 'static,
+    S: BoundedSystem<f64, N, NInner>,
+    T: ImplicitStepper + 'static,
 >(
     system: &'a S,
-    grid: &'a G,
     stepper: impl Fn() -> T,
 ) -> MultipleShooting<'a>
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner, Const<ORDER>>,
+    DefaultAllocator: DeterminantAllocs<N, NInner> + ArrayAllocator<N, N, Dyn>,
+    DefaultAllocator: ArrayAllocator<N, N, <T as ImplicitStepper>::Points>,
 {
-    let stepper1 = stepper();
-    let stepper2 = stepper();
-    MultipleShooting {
-        det: Box::new(move |freq: f64| determinant(system, &stepper1, grid, freq)),
-        eigenvector: Box::new(move |freq: f64| {
-            let mut upper = UpperResult::new(system.shape().value(), system.len(grid));
+    let system1 = InterpolatedSystem::construct(system, stepper());
+    let system2 = InterpolatedSystem::construct(system, stepper());
 
-            let det = determinant_with_upper(system, &stepper2, grid, freq, &mut upper);
+    MultipleShooting {
+        det: Box::new(move |freq: f64| determinant(&system1, freq)),
+        eigenvector: Box::new(move |freq: f64| {
+            let mut upper = UpperResult::new(system.shape().value(), system.len());
+
+            let det = determinant_with_upper(&system2, freq, &mut upper);
 
             (det, upper.eigenvectors())
         }),
@@ -126,11 +126,7 @@ mod test {
 
     use itertools::Itertools;
 
-    use crate::{
-        bracket::Precision,
-        model::StellarModel,
-        system::adiabatic::{GridScale, Rotating1D},
-    };
+    use crate::{bracket::Precision, model::StellarModel, system::adiabatic::Rotating1D};
 
     use super::{DifferenceSchemes, MultipleShooting};
 
@@ -147,7 +143,7 @@ mod test {
         };
 
         let system = Rotating1D::from_model(&model, 0, 0);
-        let determinant = MultipleShooting::new(&system, scheme, &GridScale { scale: 0 });
+        let determinant = MultipleShooting::new(&system, scheme);
         let points = linspace(1.0, 25.0, 25);
 
         determinant
@@ -166,25 +162,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047969427911106,
-                4.2667915306564,
-                5.171728807660531,
-                6.112930394061321,
-                7.202774101005002,
-                8.382777523385197,
-                9.592736355494658,
-                10.77538297607734,
-                11.920160441669331,
-                13.05326602375103,
-                14.210737686345766,
-                15.394098074086251,
-                16.58815426385916,
-                17.78597344082322,
-                18.98787865895907,
-                20.197902625841344,
-                21.41511269856594,
-                22.63672979399207,
-                23.86199363895272
+                3.3047663569130536,
+                4.266727223492225,
+                5.171680659690917,
+                6.112879114681654,
+                7.2027153541863225,
+                8.382714828522186,
+                9.59266836206982,
+                10.775310463253373,
+                11.920082692026774,
+                13.053178735669679,
+                14.210638397586763,
+                15.393986102230592,
+                16.5880292511668,
+                17.785834047646592,
+                18.98772299363563,
+                20.19772931960939,
+                21.41491994242974,
+                22.63651632763216,
+                23.861757854250527
             ]
         );
     }
@@ -195,25 +191,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047896449679843,
-                4.266782871411036,
-                5.171732424611369,
-                6.112937739951343,
-                7.202775746645694,
-                8.382762195864952,
-                9.592696471082316,
-                10.77530988332594,
-                11.920043357996246,
-                13.053083431404987,
-                14.210467959285369,
-                15.393721553518894,
-                16.58765280541169,
-                17.785321533083316,
-                18.98704725549496,
-                20.196865138499653,
-                21.413835715224057,
-                22.635186632037843,
-                23.860148646314116
+                3.304759390925722,
+                4.266719191005982,
+                5.171684714065866,
+                6.1128868978790365,
+                7.2027174752957155,
+                8.382699981515483,
+                9.59262895920255,
+                10.775237833272321,
+                11.919966049749013,
+                13.052996583668008,
+                14.21036911853832,
+                15.393610039165731,
+                16.58752825992596,
+                17.785182622168932,
+                18.98689209331154,
+                20.196692359114056,
+                21.413643512575046,
+                22.63497374699179,
+                23.859913473250632
             ]
         );
     }
@@ -224,25 +220,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3048019432659745,
-                4.266807960554894,
-                5.171750428386139,
-                6.112957242387451,
-                7.202797673892647,
-                8.382786646338415,
-                9.592720228514478,
-                10.775332909504652,
-                11.920066840614448,
-                13.053112312466066,
-                14.210501630785924,
-                15.393758906716727,
-                16.587691644607055,
-                17.78536501668777,
-                18.987098747787538,
-                20.19692173423978,
-                21.41390205096295,
-                22.635257211212295,
-                23.86022748366069
+                3.3047713704245694,
+                4.266743680981153,
+                5.171702299941156,
+                6.112905983585802,
+                7.202738950833407,
+                8.382723977190482,
+                9.592652263571749,
+                10.77526042774985,
+                11.919989125372588,
+                13.05302506479156,
+                14.21040239052509,
+                15.39364699235548,
+                16.587566699774317,
+                17.785225703318673,
+                18.986943176671076,
+                20.196748539158158,
+                21.4137094263566,
+                22.635043899316315,
+                23.85999187918837
             ]
         );
     }
@@ -253,25 +249,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047896558958634,
-                4.266782894678752,
-                5.171732442025188,
-                6.112937758574142,
-                7.202775768331735,
-                8.382762219588976,
-                9.592696497375957,
-                10.775309911902587,
-                11.920043389135222,
-                13.053083467140631,
-                14.210468000766209,
-                15.393721600726396,
-                16.587652857959355,
-                17.785321591447847,
-                18.987047320701805,
-                20.196865209951476,
-                21.41383579350626,
-                22.635186714586958,
-                23.860148732846703
+                3.3047593916481066,
+                4.266719192746616,
+                5.171684715567708,
+                6.112886899795954,
+                7.202717477992444,
+                8.382699985122144,
+                9.592628963845492,
+                10.775237838963534,
+                11.919966056603883,
+                13.052996592400568,
+                14.21036912946466,
+                15.393610052143487,
+                16.587528274555247,
+                17.785182638743187,
+                18.986892112467753,
+                20.196692379988278,
+                21.41364353540085,
+                22.634973769188907,
+                23.859913494479585
             ]
         );
     }
@@ -282,25 +278,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.304789641149825,
-                4.266782863369539,
-                5.17173241868035,
-                6.112937733797447,
-                7.202775739799653,
-                8.382762188825506,
-                9.592696463664621,
-                10.775309875571157,
-                11.920043349735453,
-                13.053083422056023,
-                14.210467948252706,
-                15.393721540216877,
-                16.58765278909604,
-                17.785321512864854,
-                18.987047230243707,
-                20.19686510650507,
-                21.413835674669965,
-                22.63518658015305,
-                23.860148580415117
+                3.3047593946264087,
+                4.266719198741911,
+                5.171684719753799,
+                6.112886903881922,
+                7.202717482211953,
+                8.382699988994167,
+                9.592628967346549,
+                10.775237841907023,
+                11.919966058823988,
+                13.052996593538865,
+                14.210369129178005,
+                15.393610050060138,
+                16.587528270322863,
+                17.78518263130526,
+                18.9868921003179,
+                20.196692362436366,
+                21.4136435106173,
+                22.634973736981387,
+                23.859913452528318
             ]
         );
     }
@@ -311,25 +307,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.304789641128967,
-                4.266782863325164,
-                5.1717324186472275,
-                6.112937733762265,
-                7.202775739759051,
-                8.382762188781655,
-                9.592696463616349,
-                10.775309875518843,
-                11.920043349678426,
-                13.053083421990706,
-                14.210467948176362,
-                15.393721540128249,
-                16.587652788994053,
-                17.78532151274762,
-                18.987047230108402,
-                20.19686510634906,
-                21.413835674489754,
-                22.635186579946158,
-                23.86014858017804
+                3.304759394623479,
+                4.26671919873601,
+                5.171684719749656,
+                6.112886903877849,
+                7.202717482207723,
+                8.382699988990208,
+                9.592628967342932,
+                10.775237841903934,
+                11.919966058821533,
+                13.052996593537092,
+                14.210369129177167,
+                15.393610050060659,
+                16.587528270325205,
+                17.785182631309826,
+                18.98689210032505,
+                20.1966923624467,
+                21.413643510631335,
+                22.63497373700006,
+                23.859913452552167
             ]
         );
     }

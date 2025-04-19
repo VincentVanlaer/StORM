@@ -1,162 +1,74 @@
 use nalgebra::{
-    ComplexField, Const, DefaultAllocator, Dim, Matrix, Scalar, ViewStorage, allocator::Allocator,
+    ComplexField, Const, DefaultAllocator, Dim, DimName, Matrix, StorageMut, allocator::Allocator,
 };
 
 use crate::linalg::storage::{ArrayStorage, Exp, MatrixArray, assign_matrix, commutator};
 
-pub(crate) struct StepMoments<T, N, Order, S> {
-    pub moments: MatrixArray<T, N, N, Order, S>,
-}
+pub(crate) trait ImplicitStepper {
+    type Points: DimName;
 
-pub(crate) struct Step<T, N, S> {
-    steps: MatrixArray<T, N, N, Const<2>, S>,
-}
+    fn points(&self) -> Vec<f64>;
 
-impl<T: Scalar, N: Dim, S: ArrayStorage<T, N, N, Const<2>>> Step<T, N, S> {
-    pub(crate) fn new(steps: MatrixArray<T, N, N, Const<2>, S>) -> Self {
-        Step { steps }
-    }
-
-    pub(crate) fn left(&self) -> Matrix<T, N, N, ViewStorage<T, N, N, Const<1>, N>> {
-        self.steps.index(0)
-    }
-
-    pub(crate) fn right(&self) -> Matrix<T, N, N, ViewStorage<T, N, N, Const<1>, N>> {
-        self.steps.index(1)
-    }
-}
-
-pub(crate) trait Stepper<T, N, Order> {
-    fn step<S1: ArrayStorage<T, N, N, Order>, S2: ArrayStorage<T, N, N, Const<2>>>(
+    fn apply<T: ComplexField, N: Dim>(
         &self,
-        step_input: StepMoments<T, N, Order, S1>,
-        step: &mut Step<T, N, S2>,
-    );
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        right: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>;
 }
 
-pub(crate) struct Magnus2 {}
+pub(crate) trait ExplicitStepper {
+    type Points: DimName;
 
-impl<T: ComplexField, N: Dim> Stepper<T, N, Const<1>> for Magnus2
-where
-    DefaultAllocator: Allocator<N, N>,
-{
-    fn step<S1: ArrayStorage<T, N, N, Const<1>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+    fn points(&self) -> Vec<f64>;
+
+    fn apply<T: ComplexField, N: Dim>(
         &self,
-        mut step_input: StepMoments<T, N, Const<1>, S1>,
-        step: &mut Step<T, N, S2>,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>;
+}
+
+impl<S: ExplicitStepper> ImplicitStepper for S {
+    type Points = S::Points;
+
+    fn points(&self) -> Vec<f64> {
+        self.points()
+    }
+
+    #[inline(always)]
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        right: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        right.fill_with_identity();
+
+        self.apply(left, values)
+    }
+}
+
+pub(crate) struct Euler {}
+
+impl ExplicitStepper for Euler {
+    type Points = Const<1>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.].into()
+    }
+
+    #[inline(always)]
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
     ) {
-        let mut omega = step_input.moments.index_mut(0);
-
-        omega.exp();
-
-        assign_matrix(&mut step.steps.index_mut(0), omega);
-        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
-    }
-}
-
-pub(crate) struct Magnus4 {}
-
-impl<T: ComplexField, N: Dim> Stepper<T, N, Const<2>> for Magnus4
-where
-    DefaultAllocator: Allocator<N, N>,
-{
-    fn step<S1: ArrayStorage<T, N, N, Const<2>>, S2: ArrayStorage<T, N, N, Const<2>>>(
-        &self,
-        step_input: StepMoments<T, N, Const<2>, S1>,
-        step: &mut Step<T, N, S2>,
-    ) {
-        let b1 = &step_input.moments.index(0);
-        let b2 = &step_input.moments.index(1);
-
-        let mut omega = b1 - commutator(b1, b2) * T::from_subset(&(1.0 / 12.0));
-
-        omega.exp();
-
-        assign_matrix(&mut step.steps.index_mut(0), omega);
-        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
-    }
-}
-
-pub(crate) struct Magnus6 {}
-
-impl<T: ComplexField, N: Dim> Stepper<T, N, Const<3>> for Magnus6
-where
-    DefaultAllocator: Allocator<N, N>,
-{
-    fn step<S1: ArrayStorage<T, N, N, Const<3>>, S2: ArrayStorage<T, N, N, Const<2>>>(
-        &self,
-        step_input: StepMoments<T, N, Const<3>, S1>,
-        step: &mut Step<T, N, S2>,
-    ) {
-        let b1 = &step_input.moments.index(0);
-        let b2 = &step_input.moments.index(1);
-        let b3 = &step_input.moments.index(2);
-
-        let c1 = &commutator(b1, b2);
-        let c2 = &(commutator(b1, b3 * T::from_subset(&(2.)) + c1) * T::from_subset(&(-1. / 60.)));
-
-        let mut omega = b1
-            + b3 * T::from_subset(&(1. / 12.))
-            + commutator(b1 * T::from_subset(&(-20.)) - b3 + c1, b2 + c2)
-                * T::from_subset(&(1. / 240.));
-
-        omega.exp();
-
-        assign_matrix(&mut step.steps.index_mut(0), omega);
-        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
-    }
-}
-
-pub(crate) struct Magnus8 {}
-
-impl<T: ComplexField, N: Dim> Stepper<T, N, Const<4>> for Magnus8
-where
-    DefaultAllocator: Allocator<N, N>,
-{
-    fn step<S1: ArrayStorage<T, N, N, Const<4>>, S2: ArrayStorage<T, N, N, Const<2>>>(
-        &self,
-        step_input: StepMoments<T, N, Const<4>, S1>,
-        step: &mut Step<T, N, S2>,
-    ) {
-        let b1 = &step_input.moments.index(0);
-        let b2 = &step_input.moments.index(1);
-        let b3 = &step_input.moments.index(2);
-        let b4 = &step_input.moments.index(2);
-
-        let s1 = &(commutator(
-            b1 + b3 * T::from_subset(&(1. / 28.)),
-            b2 + b4 * T::from_subset(&(3. / 28.)),
-        ) * T::from_subset(&(-1. / 28.)));
-        let r1 =
-            &(commutator(b1, b3 * T::from_subset(&(-1. / 14.)) + s1) * T::from_subset(&(1. / 3.)));
-        let s2 = &commutator(
-            b1 + b3 * T::from_subset(&(1. / 28.)) + s1,
-            b2 + b4 * T::from_subset(&(3. / 28.)) + r1,
-        );
-        let s2_prime = &commutator(b2, s1);
-        let r2 = &commutator(
-            b1 + s1 * T::from_subset(&(5. / 4.)),
-            b3 * T::from_subset(&(2.0)) + s2 + s2_prime * T::from_subset(&(0.5)),
-        );
-        let s3 = &(commutator(
-            b1 + b3 * T::from_subset(&(1. / 12.))
-                + s1 * T::from_subset(&(-7. / 3.))
-                + s2 * T::from_subset(&(-1. / 6.)),
-            b2 * T::from_subset(&(-9.))
-                + b4 * T::from_subset(&(-9. / 4.))
-                + r1 * T::from_subset(&(63.))
-                + r2,
-        ));
-
-        let mut omega = b1
-            + b3 * T::from_subset(&(1. / 12.))
-            + s2 * T::from_subset(&(-7. / 120.))
-            + s3 * T::from_subset(&(1. / 360.));
-
-        omega.exp();
-
-        assign_matrix(&mut step.steps.index_mut(0), omega);
-        step.steps.index_mut(1).fill_diagonal(T::from_subset(&-1.));
+        left.copy_from(&values.index(0));
     }
 }
 
@@ -165,6 +77,15 @@ where
 // Actual value is 0.288675134594812882254
 const C2_1: f64 = -0.288_675_134_594_812_87;
 const C2_2: f64 = 0.288_675_134_594_812_87;
+
+const C3_1: f64 = -0.387_298_334_620_741_7;
+const C3_2: f64 = 0.;
+const C3_3: f64 = 0.387_298_334_620_741_7;
+
+const C4_1: f64 = -0.861_136_311_594_052_6 / 2.;
+const C4_2: f64 = -0.339_981_043_584_856_26 / 2.;
+const C4_3: f64 = 0.339_981_043_584_856_26 / 2.;
+const C4_4: f64 = 0.861_136_311_594_052_6 / 2.;
 
 // General method for deriving these calculations
 //
@@ -199,51 +120,59 @@ const C2_2: f64 = 0.288_675_134_594_812_87;
 
 pub(crate) struct Colloc2 {}
 
-impl<T: ComplexField, N: Dim> Stepper<T, N, Const<1>> for Colloc2
-where
-    DefaultAllocator: Allocator<N, N>,
-{
+impl ImplicitStepper for Colloc2 {
+    type Points = Const<1>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5].into()
+    }
+
     #[inline(always)]
-    fn step<S1: ArrayStorage<T, N, N, Const<1>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+    fn apply<T: ComplexField, N: Dim>(
         &self,
-        step_input: StepMoments<T, N, Const<1>, S1>,
-        step: &mut Step<T, N, S2>,
-    ) {
-        let b1 = &step_input.moments.index(0);
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        right: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        let b1 = &values.index(0);
 
         let jump = &(b1 * T::from_subset(&(0.5)));
         let eye = &(Matrix::identity_generic(b1.shape_generic().0, b1.shape_generic().1));
 
-        assign_matrix(&mut step.steps.index_mut(0), jump + eye);
-        assign_matrix(&mut step.steps.index_mut(1), jump - eye);
+        assign_matrix(left, jump + eye);
+        assign_matrix(right, jump - eye);
     }
 }
 
 pub(crate) struct Colloc4 {}
 
-impl<T: ComplexField, N: Dim> Stepper<T, N, Const<2>> for Colloc4
-where
-    DefaultAllocator: Allocator<N, N>,
-{
+impl ImplicitStepper for Colloc4 {
+    type Points = Const<2>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5 + C2_1, 0.5 + C2_2].into()
+    }
+
     #[inline(always)]
-    fn step<S1: ArrayStorage<T, N, N, Const<2>>, S2: ArrayStorage<T, N, N, Const<2>>>(
+    fn apply<T: ComplexField, N: Dim>(
         &self,
-        step_input: StepMoments<T, N, Const<2>, S1>,
-        step: &mut Step<T, N, S2>,
-    ) {
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        right: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
         let c1 = T::from_subset(&C2_1);
         let c2 = T::from_subset(&C2_2);
         let one_fourth = T::from_subset(&0.25);
 
-        // Moments
-        let m1 = &step_input.moments.index(0);
-        let m2 = &step_input.moments.index(1);
-
         // Collocation points
-        let a1 = &(m1 + m2 * c1.clone());
-        let a2 = &(m1 + m2 * c2.clone());
+        let a1 = &values.index(0);
+        let a2 = &values.index(1);
 
-        let eye = &(Matrix::identity_generic(m1.shape_generic().0, m1.shape_generic().1));
+        let eye = &(Matrix::identity_generic(a1.shape_generic().0, a1.shape_generic().1));
 
         let a2a1 = &(a2 * a1);
 
@@ -257,7 +186,184 @@ where
 
         let jump = (k1 + k2) * one_fourth;
 
-        assign_matrix(&mut step.steps.index_mut(0), &jump + eye);
-        assign_matrix(&mut step.steps.index_mut(1), &jump - eye);
+        assign_matrix(left, &jump + eye);
+        assign_matrix(right, &jump - eye);
+    }
+}
+
+pub(crate) struct Magnus2 {}
+
+impl ExplicitStepper for Magnus2 {
+    type Points = Const<1>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5].into()
+    }
+
+    #[inline(always)]
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        let mut omega = values.index(0).clone_owned();
+
+        omega.exp();
+
+        assign_matrix(left, omega);
+    }
+}
+
+pub(crate) struct Magnus4 {}
+
+impl ExplicitStepper for Magnus4 {
+    type Points = Const<2>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5 + C2_1, 0.5 + C2_2].into()
+    }
+
+    #[inline(always)]
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        let a1 = &values.index(0);
+        let a2 = &values.index(1);
+
+        let b1 = &((a1 + a2) * T::from_subset(&0.5));
+        let b2 = &((a2 - a1) * T::from_subset(&(0.5 * C2_2)));
+
+        assign_matrix(left, b1 - commutator(b1, b2));
+
+        left.exp();
+    }
+}
+
+pub(crate) struct Magnus6 {}
+
+impl ExplicitStepper for Magnus6 {
+    type Points = Const<3>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5 + C3_1, 0.5 + C3_2, 0.5 + C3_3].into()
+    }
+
+    #[inline(always)]
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        let a1 = &values.index(0);
+        let a2 = &values.index(1);
+        let a3 = &values.index(2);
+        let ten_three = T::from_subset(&(10. / 3.));
+
+        let b1 = a2;
+        let b2 = &((a3 - a1) * (T::from_subset(&C3_3) * ten_three.clone()));
+        let b3 = &((a3 - a2 * T::from_subset(&2.) + a1) * ten_three);
+
+        let c1 = &commutator(b1, b2);
+        let c2 = &(commutator(b1, b3 * T::from_subset(&(2.)) + c1) * T::from_subset(&(-1. / 60.)));
+
+        assign_matrix(
+            left,
+            b1 + b3 * T::from_subset(&(1. / 12.))
+                + commutator(b1 * T::from_subset(&(-20.)) - b3 + c1, b2 + c2)
+                    * T::from_subset(&(1. / 240.)),
+        );
+
+        left.exp();
+    }
+}
+
+pub(crate) struct Magnus8 {}
+
+const W1: f64 = 0.347_854_845_137_453_85 / 2.;
+const W2: f64 = 0.652_145_154_862_546_1 / 2.;
+
+const B1_A1S: f64 = 9. / 4. * W1 - 15. * W1 * C4_1 * C4_1;
+const B1_A2S: f64 = 9. / 4. * W2 - 15. * W2 * C4_2 * C4_2;
+
+const B2_A1A: f64 = 75. * W1 * C4_4 - 420. * W1 * C4_4 * C4_4 * C4_4;
+const B2_A2A: f64 = 75. * W2 * C4_3 - 420. * W2 * C4_3 * C4_3 * C4_3;
+
+const B3_A1S: f64 = -15. * W1 + 180. * W1 * C4_1 * C4_1;
+// const B3_A1S: f64 = -B3_A1S
+
+const B4_A1A: f64 = -420. * W1 * C4_4 + 2800. * W1 * C4_4 * C4_4 * C4_4;
+const B4_A2A: f64 = -420. * W2 * C4_3 + 2800. * W2 * C4_3 * C4_3 * C4_3;
+
+impl ExplicitStepper for Magnus8 {
+    type Points = Const<4>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5 + C4_1, 0.5 + C4_2, 0.5 + C4_3, 0.5 + C4_4].into()
+    }
+
+    #[inline(always)]
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        let a1 = &values.index(0);
+        let a2 = &values.index(1);
+        let a3 = &values.index(2);
+        let a4 = &values.index(3);
+
+        let a1s = &(a1 + a4);
+        let a1a = &(a4 - a1);
+        let a2s = &(a2 + a3);
+        let a2a = &(a3 - a2);
+
+        let b1 = &(a1s * T::from_subset(&B1_A1S) + a2s * T::from_subset(&B1_A2S));
+        let b2 = &(a1a * T::from_subset(&B2_A1A) + a2a * T::from_subset(&B2_A2A));
+        let b3 = &((a1s - a2s) * T::from_subset(&B3_A1S));
+        let b4 = &(a1a * T::from_subset(&B4_A1A) + a2a * T::from_subset(&B4_A2A));
+
+        let s1 = &(commutator(
+            b1 + b3 * T::from_subset(&(1. / 28.)),
+            b2 + b4 * T::from_subset(&(3. / 28.)),
+        ) * T::from_subset(&(-1. / 28.)));
+        let r1 =
+            &(commutator(b1, b3 * T::from_subset(&(-1. / 14.)) + s1) * T::from_subset(&(1. / 3.)));
+        let s2 = &commutator(
+            b1 + b3 * T::from_subset(&(1. / 28.)) + s1,
+            b2 + b4 * T::from_subset(&(3. / 28.)) + r1,
+        );
+        let s2_prime = &commutator(b2, s1);
+        let r2 = &commutator(
+            b1 + s1 * T::from_subset(&(5. / 4.)),
+            b3 * T::from_subset(&(2.0)) + s2 + s2_prime * T::from_subset(&(0.5)),
+        );
+        let s3 = &(commutator(
+            b1 + b3 * T::from_subset(&(1. / 12.))
+                + s1 * T::from_subset(&(-7. / 3.))
+                + s2 * T::from_subset(&(-1. / 6.)),
+            b2 * T::from_subset(&(-9.))
+                + b4 * T::from_subset(&(-9. / 4.))
+                + r1 * T::from_subset(&(63.))
+                + r2,
+        ));
+
+        assign_matrix(
+            left,
+            b1 + b3 * T::from_subset(&(1. / 12.))
+                + s2 * T::from_subset(&(-7. / 120.))
+                + s3 * T::from_subset(&(1. / 360.)),
+        );
+
+        left.exp();
     }
 }

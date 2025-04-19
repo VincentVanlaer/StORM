@@ -17,7 +17,7 @@ use storm::perturbed::{
     ModeCoupling, ModeToPerturb, PerturbedMetric, perturb_deformed, perturb_structure,
 };
 use storm::postprocessing::Rotating1DPostprocessing;
-use storm::system::adiabatic::{GridScale, Rotating1D};
+use storm::system::adiabatic::Rotating1D;
 
 fn main() -> ExitCode {
     let mut state = StormState::default();
@@ -608,8 +608,7 @@ impl StormState {
         let lower = frequency_units.convert_to_natural(lower, input);
 
         let system = Rotating1D::from_model(input, ell, m);
-        let determinant =
-            MultipleShooting::new(&system, difference_scheme, &GridScale { scale: 0 });
+        let determinant = MultipleShooting::new(&system, difference_scheme);
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
         } else {

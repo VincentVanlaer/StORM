@@ -108,10 +108,10 @@ impl Rotating1DPostprocessing {
         };
 
         for i in 1..y1.len() {
-            y1[i] = eigenvector[(i - 1) * 4];
-            y2[i] = eigenvector[(i - 1) * 4 + 1];
-            y3[i] = eigenvector[(i - 1) * 4 + 2];
-            y4[i] = eigenvector[(i - 1) * 4 + 3];
+            y1[i] = eigenvector[i * 4];
+            y2[i] = eigenvector[i * 4 + 1];
+            y3[i] = eigenvector[i * 4 + 2];
+            y4[i] = eigenvector[i * 4 + 3];
 
             let DimensionlessCoefficients {
                 v_gamma,
@@ -374,7 +374,7 @@ mod tests {
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, MultipleShooting},
         model::StellarModel,
-        system::adiabatic::{GridScale, Rotating1D},
+        system::adiabatic::Rotating1D,
     };
 
     use super::Rotating1DPostprocessing;
@@ -395,8 +395,7 @@ mod tests {
         };
 
         let system = Rotating1D::from_model(&model, ell, m);
-        let determinant =
-            MultipleShooting::new(&system, DifferenceSchemes::Colloc2, &GridScale { scale: 0 });
+        let determinant = MultipleShooting::new(&system, DifferenceSchemes::Colloc2);
         let points = linspace(lower, upper, steps);
 
         determinant

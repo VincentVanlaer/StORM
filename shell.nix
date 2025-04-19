@@ -1,6 +1,7 @@
 {
   pkgs ? import <nixpkgs> { },
   fenix ? (import ./nix/pins.nix { inherit pkgs; }).fenix,
+  gyre ? (import ./nix/pins.nix { inherit pkgs; }).gyre,
 }:
 let
   rust-toolchain = fenix.combine [
@@ -35,6 +36,7 @@ package.overrideAttrs (attrs: {
       maxima
       bacon
       nodePackages.browser-sync
+      gyre
     ];
 
   shellHook = ''
