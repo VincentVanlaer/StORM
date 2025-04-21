@@ -394,8 +394,8 @@ mod tests {
             StellarModel::from_gsm(model_file).unwrap()
         };
 
-        let system = Rotating1D::from_model(&model, ell, m);
-        let determinant = MultipleShooting::new(&system, DifferenceSchemes::Colloc2);
+        let system = Rotating1D::new(ell, m);
+        let determinant = MultipleShooting::new(&model, system, DifferenceSchemes::Colloc2);
         let points = linspace(lower, upper, steps);
 
         determinant

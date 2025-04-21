@@ -1,7 +1,10 @@
-use nalgebra::{ComplexField, Const, DefaultAllocator, Dim, Matrix, OMatrix};
+use nalgebra::{
+    ComplexField, Const, DefaultAllocator, Dim, DimAdd, DimMul, DimSub, Matrix, OMatrix,
+    allocator::Allocator,
+};
 use num_traits::Zero;
 
-use crate::{linalg::storage::ArrayAllocator, system::filler::DiscretizedSystem};
+use crate::system::discretized::DiscretizedSystem;
 
 pub(crate) struct UpperResult<T> {
     data: Box<[T]>,
@@ -12,29 +15,27 @@ pub(crate) struct UpperResult<T> {
 
 pub(crate) fn determinant<
     T: ComplexField + Copy,
-    N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
-    NInner: Dim,
+    System: DiscretizedSystem<T, N: DimMul<Const<2>> + DimAdd<System::NInner>>,
 >(
-    system: &impl DiscretizedSystem<T, N, NInner>,
+    system: &System,
     frequency: T,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner>,
+    DefaultAllocator: DeterminantAllocs<System::N, System::NInner>,
 {
     determinant_inner(system, frequency, &mut ())
 }
 
 pub(crate) fn determinant_with_upper<
     T: ComplexField + Copy,
-    N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
-    NInner: Dim,
+    System: DiscretizedSystem<T, N: DimMul<Const<2>> + DimAdd<System::NInner>>,
 >(
-    system: &impl DiscretizedSystem<T, N, NInner>,
+    system: &System,
     frequency: T,
     upper: &mut UpperResult<T>,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner>,
+    DefaultAllocator: DeterminantAllocs<System::N, System::NInner>,
 {
     assert_eq!(upper.n, system.shape().value());
     assert_eq!(upper.n_systems, system.len());
@@ -148,29 +149,23 @@ impl<T> SetUpperResult<T> for () {
     fn column_pivot(&mut self, _c1: usize, _c2: usize) {}
 }
 
-pub(crate) trait DeterminantAllocs<
-    N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
-    NInner: Dim,
-> = ArrayAllocator<N, N, Const<2>>
-    + nalgebra::allocator::Allocator<N, N>
-    + nalgebra::allocator::Allocator<NInner, N>
-    + nalgebra::allocator::Allocator<<N as nalgebra::DimSub<NInner>>::Output, N>
-    + nalgebra::allocator::Allocator<
-        <N as nalgebra::DimMul<Const<2>>>::Output,
-        <N as nalgebra::DimAdd<NInner>>::Output,
-    > + nalgebra::allocator::Allocator<<N as nalgebra::DimMul<Const<2>>>::Output, Const<1>>;
+pub(crate) trait DeterminantAllocs<N: Dim + DimSub<NInner> + DimMul<Const<2>> + DimAdd<NInner>, NInner: Dim> =
+    Allocator<N, N>
+        + Allocator<NInner, N>
+        + Allocator<<N as DimSub<NInner>>::Output, N>
+        + Allocator<<N as DimMul<Const<2>>>::Output, <N as DimAdd<NInner>>::Output>
+        + Allocator<<N as DimMul<Const<2>>>::Output, Const<1>>;
 
 fn determinant_inner<
     T: ComplexField + Copy,
-    N: Dim + nalgebra::DimSub<NInner> + nalgebra::DimMul<Const<2>> + nalgebra::DimAdd<NInner>,
-    NInner: Dim,
+    System: DiscretizedSystem<T, N: DimMul<Const<2>> + DimAdd<System::NInner>>,
 >(
-    system: &impl DiscretizedSystem<T, N, NInner>,
+    system: &System,
     frequency: T,
     upper: &mut impl SetUpperResult<T>,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner>,
+    DefaultAllocator: DeterminantAllocs<System::N, System::NInner>,
 {
     let outer_boundary = {
         let mut outer_boundary = OMatrix::zeros_generic(system.shape_outer(), system.shape());
@@ -192,8 +187,10 @@ where
         T::zero(),
     );
 
-    let mut left: OMatrix<T, N, N> = OMatrix::zeros_generic(system.shape(), system.shape());
-    let mut right: OMatrix<T, N, N> = OMatrix::zeros_generic(system.shape(), system.shape());
+    let mut left: OMatrix<T, System::N, System::N> =
+        OMatrix::zeros_generic(system.shape(), system.shape());
+    let mut right: OMatrix<T, System::N, System::N> =
+        OMatrix::zeros_generic(system.shape(), system.shape());
 
     for i in 0..n_inner {
         for j in 0..n {
@@ -207,7 +204,7 @@ where
     // In order to keep the algebraic equations at the inner boundary local, we need to use column
     // pivotting in the first iteration of the loop
     if n_step != system.len() {
-        system.fill_implicit(n_step, frequency, &mut left, &mut right);
+        system.fill(n_step, frequency, &mut left, &mut right);
 
         for r in 0..n {
             for c in 0..n {
@@ -317,7 +314,7 @@ where
     }
 
     while n_step < system.len() {
-        system.fill_implicit(n_step, frequency, &mut left, &mut right);
+        system.fill(n_step, frequency, &mut left, &mut right);
 
         for r in 0..n {
             for c in 0..n {

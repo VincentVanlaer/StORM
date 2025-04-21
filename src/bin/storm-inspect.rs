@@ -32,9 +32,9 @@ fn main() -> Result<()> {
     let difference_scheme = DifferenceSchemes::Colloc2;
 
     let model = StellarModel::from_gsm("test-data/test-model-tams.GSM")?;
-    let system = Rotating1D::from_model(&model, 0, 0);
+    let system = Rotating1D::new(0, 0);
     let searcher = &InverseQuadratic {};
-    let determinant = MultipleShooting::new(&system, difference_scheme);
+    let determinant = MultipleShooting::new(&model, system, difference_scheme);
 
     let dets: Vec<_> = linspace(lower, upper, steps)
         .map(|x| Point {

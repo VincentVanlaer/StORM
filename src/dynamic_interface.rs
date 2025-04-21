@@ -1,16 +1,16 @@
 //! Main interface for computing the determinant for a trial frequency
 
-use nalgebra::{DefaultAllocator, Dim, Dyn};
+use nalgebra::{Const, DefaultAllocator, Dim, Dyn};
 
 use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
 };
 use crate::linalg::storage::ArrayAllocator;
+use crate::model::StellarModel;
 use crate::solver::{DeterminantAllocs, UpperResult, determinant, determinant_with_upper};
 use crate::stepper::{Colloc2, Colloc4, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8};
-use crate::system::BoundedSystem;
 use crate::system::adiabatic::Rotating1D;
-use crate::system::filler::InterpolatedSystem;
+use crate::system::discretized::{DiscretizedRotating1D, DiscretizedSystem};
 
 /// Supported difference schemes
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -30,24 +30,25 @@ pub enum DifferenceSchemes {
 }
 
 /// Type erased interface for computing the determinant and the eigenvector of a problem
-pub struct MultipleShooting<'system_and_grid> {
-    det: Box<dyn Fn(f64) -> f64 + 'system_and_grid>,
-    eigenvector: Box<dyn Fn(f64) -> (f64, Vec<f64>) + 'system_and_grid>,
+pub struct MultipleShooting {
+    det: Box<dyn Fn(f64) -> f64>,
+    eigenvector: Box<dyn Fn(f64) -> (f64, Vec<f64>)>,
 }
 
-impl<'system> MultipleShooting<'system> {
+impl MultipleShooting {
     /// Construct from a system, difference scheme and grid definition
     pub fn new(
-        system: &'system Rotating1D,
+        model: &StellarModel,
+        system: Rotating1D,
         scheme: DifferenceSchemes,
-    ) -> MultipleShooting<'system> {
+    ) -> MultipleShooting {
         match scheme {
-            DifferenceSchemes::Colloc2 => get_solvers_inner(system, || Colloc2 {}),
-            DifferenceSchemes::Colloc4 => get_solvers_inner(system, || Colloc4 {}),
-            DifferenceSchemes::Magnus2 => get_solvers_inner(system, || Magnus2 {}),
-            DifferenceSchemes::Magnus4 => get_solvers_inner(system, || Magnus4 {}),
-            DifferenceSchemes::Magnus6 => get_solvers_inner(system, || Magnus6 {}),
-            DifferenceSchemes::Magnus8 => get_solvers_inner(system, || Magnus8 {}),
+            DifferenceSchemes::Colloc2 => get_solvers_inner(model, system, || Colloc2 {}),
+            DifferenceSchemes::Colloc4 => get_solvers_inner(model, system, || Colloc4 {}),
+            DifferenceSchemes::Magnus2 => get_solvers_inner(model, system, || Magnus2 {}),
+            DifferenceSchemes::Magnus4 => get_solvers_inner(model, system, || Magnus4 {}),
+            DifferenceSchemes::Magnus6 => get_solvers_inner(model, system, || Magnus6 {}),
+            DifferenceSchemes::Magnus8 => get_solvers_inner(model, system, || Magnus8 {}),
         }
     }
 
@@ -88,30 +89,23 @@ impl<'system> MultipleShooting<'system> {
     }
 }
 
-fn get_solvers_inner<
-    'a,
-    N: Dim
-        + nalgebra::DimSub<NInner>
-        + nalgebra::DimMul<nalgebra::Const<2>>
-        + nalgebra::DimAdd<NInner>,
-    NInner: Dim,
-    S: BoundedSystem<f64, N, NInner>,
-    T: ImplicitStepper + 'static,
->(
-    system: &'a S,
+fn get_solvers_inner<T: ImplicitStepper + 'static>(
+    model: &StellarModel,
+    system: Rotating1D,
     stepper: impl Fn() -> T,
-) -> MultipleShooting<'a>
+) -> MultipleShooting
 where
-    DefaultAllocator: DeterminantAllocs<N, NInner> + ArrayAllocator<N, N, Dyn>,
-    DefaultAllocator: ArrayAllocator<N, N, <T as ImplicitStepper>::Points>,
+    DefaultAllocator:
+        DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
+    DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
-    let system1 = InterpolatedSystem::construct(system, stepper());
-    let system2 = InterpolatedSystem::construct(system, stepper());
+    let system1 = DiscretizedRotating1D::new(model, stepper(), system);
+    let system2 = DiscretizedRotating1D::new(model, stepper(), system);
 
     MultipleShooting {
         det: Box::new(move |freq: f64| determinant(&system1, freq)),
         eigenvector: Box::new(move |freq: f64| {
-            let mut upper = UpperResult::new(system.shape().value(), system.len());
+            let mut upper = UpperResult::new(system2.shape().value(), system2.len());
 
             let det = determinant_with_upper(&system2, freq, &mut upper);
 
@@ -142,8 +136,8 @@ mod test {
             StellarModel::from_gsm(model_file).unwrap()
         };
 
-        let system = Rotating1D::from_model(&model, 0, 0);
-        let determinant = MultipleShooting::new(&system, scheme);
+        let system = Rotating1D::new(0, 0);
+        let determinant = MultipleShooting::new(&model, system, scheme);
         let points = linspace(1.0, 25.0, 25);
 
         determinant
