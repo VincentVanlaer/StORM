@@ -1,6 +1,6 @@
 use nalgebra::{
     ComplexField, Const, DefaultAllocator, Dim, DimAdd, DimMul, DimSub, Matrix, OMatrix,
-    allocator::Allocator,
+    RawStorage, RawStorageMut, allocator::Allocator,
 };
 use num_traits::Zero;
 
@@ -373,13 +373,17 @@ where
                 });
             }
 
-            for i in (k + 1)..(n + n_inner) {
-                let m = unsafe { *bands.get_unchecked((k, i)) * pinv };
+            let mut ridx = (k + 1) * 2 * n;
+
+            for _ in (k + 1)..(n + n_inner) {
+                let m = *unsafe { bands.data.get_unchecked_linear(ridx + k) } * pinv;
                 for j in 0..(2 * n) {
                     // PERF: VFNMADD231PD
-                    *unsafe { bands.get_unchecked_mut((j, i)) } -=
+                    *unsafe { bands.data.get_unchecked_linear_mut(ridx + j) } -=
                         *unsafe { pivot_row.get_unchecked(j) } * m;
                 }
+
+                ridx += 2 * n;
             }
         }
 
