@@ -6,11 +6,12 @@ use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
 };
 use crate::linalg::storage::ArrayAllocator;
-use crate::model::gsm::StellarModel;
+use crate::model::interpolate::LinearInterpolator;
+use crate::model::{DimensionlessProperties, Model};
 use crate::solver::{DeterminantAllocs, UpperResult, determinant, determinant_with_upper};
 use crate::stepper::{Colloc2, Colloc4, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8};
 use crate::system::adiabatic::Rotating1D;
-use crate::system::discretized::{DiscretizedRotating1D, DiscretizedSystem};
+use crate::system::discretized::{DiscretizedSystem, DiscretizedSystemImpl};
 
 /// Supported difference schemes
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
@@ -38,7 +39,7 @@ pub struct MultipleShooting {
 impl MultipleShooting {
     /// Construct from a system, difference scheme and grid definition
     pub fn new(
-        model: &StellarModel,
+        model: &impl Model<ModelPoint = DimensionlessProperties>,
         system: Rotating1D,
         scheme: DifferenceSchemes,
     ) -> MultipleShooting {
@@ -90,7 +91,7 @@ impl MultipleShooting {
 }
 
 fn get_solvers_inner<T: ImplicitStepper + 'static>(
-    model: &StellarModel,
+    model: &impl Model<ModelPoint = DimensionlessProperties>,
     system: Rotating1D,
     stepper: impl Fn() -> T,
 ) -> MultipleShooting
@@ -99,8 +100,8 @@ where
         DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
     DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
-    let system1 = DiscretizedRotating1D::new(model, stepper(), system);
-    let system2 = DiscretizedRotating1D::new(model, stepper(), system);
+    let system1 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
+    let system2 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
 
     MultipleShooting {
         det: Box::new(move |freq: f64| determinant(&system1, freq)),

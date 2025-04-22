@@ -1,14 +1,15 @@
 use nalgebra::{
-    ComplexField, Const, DefaultAllocator, Dim, DimName, DimSub, Dyn, Matrix, StorageMut,
+    ComplexField, DefaultAllocator, Dim, DimName, DimSub, Dyn, Matrix, StorageMut,
+    allocator::Allocator,
 };
 
 use crate::{
-    linalg::storage::{ArrayAllocator, ArrayStorage, MatrixArray, UnsizedMatrixArray},
-    model::{DimensionlessProperties, Model},
+    linalg::storage::{ArrayAllocator, ArrayStorage, MatrixArray},
+    model::interpolate::InterpolatedModel,
     stepper::{ExplicitStepper, ImplicitStepper},
 };
 
-use super::{System, adiabatic::Rotating1D};
+use super::System;
 
 pub(crate) trait DiscretizedSystem<T: ComplexField> {
     type N: Dim + DimSub<Self::NInner>;
@@ -54,21 +55,32 @@ pub(crate) trait ExplicitDiscretizedSystem<T: ComplexField>: DiscretizedSystem<T
     );
 }
 
-pub(crate) struct DiscretizedRotating1D<T: ComplexField + Copy, Stepper, SArray> {
+pub(crate) struct DiscretizedSystemImpl<T: ComplexField + Copy, S: System<T>, Stepper, SArray> {
     stepper: Stepper,
-    system: Rotating1D,
-    matrices:
-        MatrixArray<T, <Rotating1D as System<T>>::N, <Rotating1D as System<T>>::N, Dyn, SArray>,
-    interpolated_points: Vec<<Rotating1D as System<T>>::ModelPoint>,
-    inner: <Rotating1D as System<T>>::ModelPoint,
-    outer: <Rotating1D as System<T>>::ModelPoint,
+    system: S,
+    matrices: MatrixArray<T, S::N, S::N, Dyn, SArray>,
+    interpolated_points: Vec<S::ModelPoint>,
+    inner: S::ModelPoint,
+    outer: S::ModelPoint,
     delta: Vec<f64>,
 }
 
-impl<T: ComplexField + Copy, Stepper: ImplicitStepper>
-    DiscretizedRotating1D<T, Stepper, UnsizedMatrixArray<T, Const<4>, Const<4>, Dyn>>
+impl<T: ComplexField + Copy, Stepper: ImplicitStepper, S: System<T>>
+    DiscretizedSystemImpl<
+        T,
+        S,
+        Stepper,
+        <DefaultAllocator as ArrayAllocator<S::N, S::N, Dyn>>::Buffer<T>,
+    >
+where
+    DefaultAllocator: ArrayAllocator<S::N, S::N, Dyn>,
+    S::ModelPoint: Copy,
 {
-    pub(crate) fn new(model: &impl Model, stepper: Stepper, system: Rotating1D) -> Self {
+    pub(crate) fn new(
+        model: &impl InterpolatedModel<ModelPoint = impl Into<S::ModelPoint>>,
+        stepper: Stepper,
+        system: S,
+    ) -> Self {
         let n = System::<T>::shape(&system);
         let point_locations = stepper.points();
         let steps = model.len() - 1;
@@ -89,12 +101,9 @@ impl<T: ComplexField + Copy, Stepper: ImplicitStepper>
         }
 
         for i in 0..steps {
-            let left = model.dimensionless_properties(i);
-            let right = model.dimensionless_properties(i + 1);
-
             for j in 0..point_locations.len() {
                 let idx = i * point_locations.len() + j;
-                let interpolated_point = interpolate_linear(left, right, point_locations[j]);
+                let interpolated_point = model.eval(i, point_locations[j]).into();
 
                 system.eval(interpolated_point, delta[i], &mut matrices.index_mut(idx));
 
@@ -108,57 +117,39 @@ impl<T: ComplexField + Copy, Stepper: ImplicitStepper>
             interpolated_points,
             matrices,
             delta,
-            inner: model.dimensionless_properties(0),
-            outer: model.dimensionless_properties(steps),
+            inner: model.eval_exact(0).into(),
+            outer: model.eval_exact(steps).into(),
         }
-    }
-}
-
-fn interpolate_linear(
-    point1: DimensionlessProperties,
-    point2: DimensionlessProperties,
-    x: f64,
-) -> DimensionlessProperties {
-    macro_rules! interp {
-        ($e: ident) => {
-            point1.$e + x * (point2.$e - point1.$e)
-        };
-    }
-
-    DimensionlessProperties {
-        v_gamma: interp!(v_gamma),
-        a_star: interp!(a_star),
-        u: interp!(u),
-        c1: interp!(c1),
-        rot: interp!(rot),
     }
 }
 
 impl<
     T: ComplexField + Copy,
+    S: System<T>,
     Stepper: ImplicitStepper,
-    SArray: ArrayStorage<T, Const<4>, Const<4>, Dyn>,
-> DiscretizedSystem<T> for DiscretizedRotating1D<T, Stepper, SArray>
+    SArray: ArrayStorage<T, S::N, S::N, Dyn>,
+> DiscretizedSystem<T> for DiscretizedSystemImpl<T, S, Stepper, SArray>
 where
-    DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, Stepper::Points>,
+    DefaultAllocator: ArrayAllocator<S::N, S::N, Stepper::Points> + Allocator<S::N, S::N>,
+    S::ModelPoint: Copy,
 {
-    type N = <Rotating1D as System<T>>::N;
-    type NInner = <Rotating1D as System<T>>::NInner;
+    type N = S::N;
+    type NInner = S::NInner;
 
     fn len(&self) -> usize {
         self.delta.len()
     }
 
     fn shape(&self) -> Self::N {
-        System::<T>::shape(&self.system)
+        self.system.shape()
     }
 
     fn shape_inner(&self) -> Self::NInner {
-        System::<T>::shape_inner(&self.system)
+        self.system.shape_inner()
     }
 
     fn shape_outer(&self) -> <Self::N as DimSub<Self::NInner>>::Output {
-        System::<T>::shape_outer(&self.system)
+        self.system.shape_outer()
     }
 
     fn inner_boundary(
@@ -190,12 +181,10 @@ where
         right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
     ) {
         let points_per_step = Stepper::Points::dim();
-        let mut matrix_array = MatrixArray::new_with(
-            System::<T>::shape(&self.system),
-            System::<T>::shape(&self.system),
-            Stepper::Points::name(),
-            || T::zero(),
-        );
+        let mut matrix_array =
+            MatrixArray::new_with(self.shape(), self.shape(), Stepper::Points::name(), || {
+                T::zero()
+            });
 
         for i in 0..points_per_step {
             matrix_array
@@ -216,11 +205,13 @@ where
 
 impl<
     T: ComplexField + Copy,
+    S: System<T>,
     Stepper: ExplicitStepper,
-    SArray: ArrayStorage<T, Const<4>, Const<4>, Dyn>,
-> ExplicitDiscretizedSystem<T> for DiscretizedRotating1D<T, Stepper, SArray>
+    SArray: ArrayStorage<T, S::N, S::N, Dyn>,
+> ExplicitDiscretizedSystem<T> for DiscretizedSystemImpl<T, S, Stepper, SArray>
 where
-    DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, Stepper::Points>,
+    DefaultAllocator: ArrayAllocator<S::N, S::N, Stepper::Points> + Allocator<S::N, S::N>,
+    S::ModelPoint: Copy,
 {
     fn fill_explicit(
         &self,
@@ -229,12 +220,10 @@ where
         left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
     ) {
         let points_per_step = Stepper::Points::dim();
-        let mut matrix_array = MatrixArray::new_with(
-            System::<T>::shape(&self.system),
-            System::<T>::shape(&self.system),
-            Stepper::Points::name(),
-            || T::zero(),
-        );
+        let mut matrix_array =
+            MatrixArray::new_with(self.shape(), self.shape(), Stepper::Points::name(), || {
+                T::zero()
+            });
 
         for i in 0..points_per_step {
             matrix_array

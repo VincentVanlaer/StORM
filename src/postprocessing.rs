@@ -119,7 +119,7 @@ impl Rotating1DPostprocessing {
                 u: _,
                 c1,
                 rot: _,
-            } = model.dimensionless_properties(i);
+            } = model.eval(i);
             let dphi = model.grav * model.m_coord[i] / model.r_coord[i].powi(2);
 
             xi_r[i] = y1[i] * model.r_coord[i].powi(ell_i32 - 1) / model.radius.powi(ell_i32 - 2);
@@ -266,8 +266,7 @@ impl Rotating1DPostprocessing {
                 let mut y2_alt = vec![0.; model.r_coord.len()].into_boxed_slice();
 
                 for i in 0..y2_alt.len() {
-                    y1_alt[i] = (1. - model.dimensionless_properties(i).u / 3.) * y1[i]
-                        + (y3[i] - y4[i]) / 3.;
+                    y1_alt[i] = (1. - model.eval(i).u / 3.) * y1[i] + (y3[i] - y4[i]) / 3.;
                     y2_alt[i] = y2[i] - y1[i];
                 }
 

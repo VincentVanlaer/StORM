@@ -144,6 +144,8 @@ impl StellarModel {
 }
 
 impl Model for StellarModel {
+    type ModelPoint = DimensionlessProperties;
+
     fn len(&self) -> usize {
         self.r_coord.len()
     }
@@ -152,7 +154,7 @@ impl Model for StellarModel {
         self.r_coord[idx] / self.radius
     }
 
-    fn dimensionless_properties(&self, idx: usize) -> DimensionlessProperties {
+    fn eval(&self, idx: usize) -> DimensionlessProperties {
         if idx == 0 {
             DimensionlessProperties {
                 v_gamma: 0.,

@@ -319,7 +319,7 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
             u: _,
             c1: _,
             rot: _,
-        } = model.dimensionless_properties(i);
+        } = model.eval(i);
 
         let k = 4. * PI * model.radius.powi(2) / model.m_coord[i]
             * model.rho[i]
@@ -332,7 +332,7 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
             u: _,
             c1: _,
             rot: _,
-        } = model.dimensionless_properties(i - 1);
+        } = model.eval(i - 1);
 
         let k_prev = 4. * PI * model.radius.powi(2) / model.m_coord[i - 1]
             * model.rho[i - 1]
@@ -370,7 +370,7 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
             u: _,
             c1: _,
             rot: _,
-        } = model.dimensionless_properties(i);
+        } = model.eval(i);
 
         let k = 4. * PI * model.radius.powi(2) / model.m_coord[i]
             * model.rho[i]
