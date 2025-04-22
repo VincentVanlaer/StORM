@@ -6,7 +6,7 @@ use itertools::Itertools;
 
 use crate::{
     gaunt::{q_kl1_h, q_kl1_hd},
-    model::{DimensionlessCoefficients, StellarModel},
+    model::{DimensionlessProperties, Model, gsm::StellarModel},
 };
 
 /// Result from the post processing of a solution to the 1D oscillation equations
@@ -113,12 +113,13 @@ impl Rotating1DPostprocessing {
             y3[i] = eigenvector[i * 4 + 2];
             y4[i] = eigenvector[i * 4 + 3];
 
-            let DimensionlessCoefficients {
+            let DimensionlessProperties {
                 v_gamma,
                 a_star,
                 u: _,
                 c1,
-            } = model.dimensionless_coefficients(i);
+                rot: _,
+            } = model.dimensionless_properties(i);
             let dphi = model.grav * model.m_coord[i] / model.r_coord[i].powi(2);
 
             xi_r[i] = y1[i] * model.r_coord[i].powi(ell_i32 - 1) / model.radius.powi(ell_i32 - 2);
@@ -265,7 +266,7 @@ impl Rotating1DPostprocessing {
                 let mut y2_alt = vec![0.; model.r_coord.len()].into_boxed_slice();
 
                 for i in 0..y2_alt.len() {
-                    y1_alt[i] = (1. - model.dimensionless_coefficients(i).u / 3.) * y1[i]
+                    y1_alt[i] = (1. - model.dimensionless_properties(i).u / 3.) * y1[i]
                         + (y3[i] - y4[i]) / 3.;
                     y2_alt[i] = y2[i] - y1[i];
                 }
@@ -373,7 +374,7 @@ mod tests {
     use crate::{
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, MultipleShooting},
-        model::StellarModel,
+        model::gsm::StellarModel,
         system::adiabatic::Rotating1D,
     };
 

@@ -10,7 +10,7 @@ use num_traits::Zero;
 use crate::{
     gaunt::{q_kl1_h, q_kl1_hd, q_kl2, q_kl2_h, q_kl2_hd},
     linalg::qz,
-    model::{DimensionlessCoefficients, StellarModel},
+    model::{DimensionlessProperties, Model, gsm::StellarModel},
     postprocessing::Rotating1DPostprocessing,
 };
 
@@ -313,24 +313,26 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
         let delta = model.r_coord[i] - model.r_coord[i - 1];
         let x_12 = 0.5 * (model.r_coord[i] + model.r_coord[i - 1]);
 
-        let DimensionlessCoefficients {
+        let DimensionlessProperties {
             v_gamma,
             a_star,
             u: _,
             c1: _,
-        } = model.dimensionless_coefficients(i);
+            rot: _,
+        } = model.dimensionless_properties(i);
 
         let k = 4. * PI * model.radius.powi(2) / model.m_coord[i]
             * model.rho[i]
             * model.r_coord[i]
             * (-a_star + v_gamma);
 
-        let DimensionlessCoefficients {
+        let DimensionlessProperties {
             v_gamma,
             a_star,
             u: _,
             c1: _,
-        } = model.dimensionless_coefficients(i - 1);
+            rot: _,
+        } = model.dimensionless_properties(i - 1);
 
         let k_prev = 4. * PI * model.radius.powi(2) / model.m_coord[i - 1]
             * model.rho[i - 1]
@@ -362,12 +364,13 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
     for i in 1..beta.len() {
         let dmda = 4. * PI * model.r_coord[i].powi(2) * model.rho[i] / model.m_coord[i];
 
-        let DimensionlessCoefficients {
+        let DimensionlessProperties {
             v_gamma,
             a_star,
             u: _,
             c1: _,
-        } = model.dimensionless_coefficients(i);
+            rot: _,
+        } = model.dimensionless_properties(i);
 
         let k = 4. * PI * model.radius.powi(2) / model.m_coord[i]
             * model.rho[i]

@@ -6,7 +6,7 @@ use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
 };
 use crate::linalg::storage::ArrayAllocator;
-use crate::model::StellarModel;
+use crate::model::gsm::StellarModel;
 use crate::solver::{DeterminantAllocs, UpperResult, determinant, determinant_with_upper};
 use crate::stepper::{Colloc2, Colloc4, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8};
 use crate::system::adiabatic::Rotating1D;
@@ -120,7 +120,7 @@ mod test {
 
     use itertools::Itertools;
 
-    use crate::{bracket::Precision, model::StellarModel, system::adiabatic::Rotating1D};
+    use crate::{bracket::Precision, model::gsm::StellarModel, system::adiabatic::Rotating1D};
 
     use super::{DifferenceSchemes, MultipleShooting};
 

@@ -4,14 +4,11 @@ use nalgebra::{
 
 use crate::{
     linalg::storage::{ArrayAllocator, ArrayStorage, MatrixArray, UnsizedMatrixArray},
-    model::StellarModel,
+    model::{DimensionlessProperties, Model},
     stepper::{ExplicitStepper, ImplicitStepper},
 };
 
-use super::{
-    System,
-    adiabatic::{ModelPoint, Rotating1D},
-};
+use super::{System, adiabatic::Rotating1D};
 
 pub(crate) trait DiscretizedSystem<T: ComplexField> {
     type N: Dim + DimSub<Self::NInner>;
@@ -71,10 +68,10 @@ pub(crate) struct DiscretizedRotating1D<T: ComplexField + Copy, Stepper, SArray>
 impl<T: ComplexField + Copy, Stepper: ImplicitStepper>
     DiscretizedRotating1D<T, Stepper, UnsizedMatrixArray<T, Const<4>, Const<4>, Dyn>>
 {
-    pub(crate) fn new(model: &StellarModel, stepper: Stepper, system: Rotating1D) -> Self {
+    pub(crate) fn new(model: &impl Model, stepper: Stepper, system: Rotating1D) -> Self {
         let n = System::<T>::shape(&system);
         let point_locations = stepper.points();
-        let steps = model.r_coord.len() - 1;
+        let steps = model.len() - 1;
         let points = point_locations.len() * steps;
 
         let mut matrices = MatrixArray::new_with(n, n, Dyn(points), || T::zero());
@@ -82,8 +79,8 @@ impl<T: ComplexField + Copy, Stepper: ImplicitStepper>
         let mut delta = Vec::with_capacity(steps);
 
         for i in 1..steps {
-            let left = (model.r_coord[i] / model.radius).ln();
-            let right = (model.r_coord[i + 1] / model.radius).ln();
+            let left = model.pos(i).ln();
+            let right = model.pos(i + 1).ln();
             delta.push(right - left);
 
             if i == 1 {
@@ -92,8 +89,8 @@ impl<T: ComplexField + Copy, Stepper: ImplicitStepper>
         }
 
         for i in 0..steps {
-            let left = model_point(model, i);
-            let right = model_point(model, i + 1);
+            let left = model.dimensionless_properties(i);
+            let right = model.dimensionless_properties(i + 1);
 
             for j in 0..point_locations.len() {
                 let idx = i * point_locations.len() + j;
@@ -111,32 +108,24 @@ impl<T: ComplexField + Copy, Stepper: ImplicitStepper>
             interpolated_points,
             matrices,
             delta,
-            inner: model_point(model, 0),
-            outer: model_point(model, steps),
+            inner: model.dimensionless_properties(0),
+            outer: model.dimensionless_properties(steps),
         }
     }
 }
 
-fn model_point(model: &StellarModel, point: usize) -> ModelPoint {
-    let coeffs = model.dimensionless_coefficients(point);
-
-    ModelPoint {
-        rot: model.rot[point],
-        v_gamma: coeffs.v_gamma,
-        a_star: coeffs.a_star,
-        u: coeffs.u,
-        c1: coeffs.c1,
-    }
-}
-
-fn interpolate_linear(point1: ModelPoint, point2: ModelPoint, x: f64) -> ModelPoint {
+fn interpolate_linear(
+    point1: DimensionlessProperties,
+    point2: DimensionlessProperties,
+    x: f64,
+) -> DimensionlessProperties {
     macro_rules! interp {
         ($e: ident) => {
             point1.$e + x * (point2.$e - point1.$e)
         };
     }
 
-    ModelPoint {
+    DimensionlessProperties {
         v_gamma: interp!(v_gamma),
         a_star: interp!(a_star),
         u: interp!(u),

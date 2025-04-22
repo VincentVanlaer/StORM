@@ -1,5 +1,7 @@
 use nalgebra::{ComplexField, Const, Matrix, StorageMut};
 
+use crate::model::DimensionlessProperties;
+
 use super::System;
 
 /// Spherically symmetric stellar oscillation equations with a full rotation term
@@ -23,7 +25,7 @@ impl Rotating1D {
 }
 
 impl<T: ComplexField + Copy> System<T> for Rotating1D {
-    type ModelPoint = ModelPoint;
+    type ModelPoint = DimensionlessProperties;
     type N = Const<4>;
     type NInner = Const<2>;
 
@@ -169,13 +171,4 @@ impl<T: ComplexField + Copy> System<T> for Rotating1D {
         *output.index_mut((1, 2)) = T::from_subset(&self.ell) + one;
         *output.index_mut((1, 3)) = one;
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ModelPoint {
-    pub v_gamma: f64,
-    pub a_star: f64,
-    pub u: f64,
-    pub c1: f64,
-    pub rot: f64,
 }

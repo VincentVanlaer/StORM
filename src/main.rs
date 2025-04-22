@@ -12,7 +12,7 @@ use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
-use storm::model::StellarModel;
+use storm::model::gsm::StellarModel;
 use storm::perturbed::{
     ModeCoupling, ModeToPerturb, PerturbedMetric, perturb_deformed, perturb_structure,
 };

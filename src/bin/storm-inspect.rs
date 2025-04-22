@@ -12,7 +12,7 @@ use storm::{
         Precision,
     },
     dynamic_interface::{DifferenceSchemes, MultipleShooting},
-    model::StellarModel,
+    model::gsm::StellarModel,
     system::adiabatic::Rotating1D,
 };
 
