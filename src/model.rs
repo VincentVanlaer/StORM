@@ -22,3 +22,5 @@ pub(crate) mod interpolate;
 
 /// GYRE stellar model support
 pub mod gsm;
+/// Polytrope support
+pub mod polytrope;
