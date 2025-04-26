@@ -1,7 +1,7 @@
 {
-  pkgs ? import <nixpkgs> { },
-  fenix ? (import ./nix/pins.nix { inherit pkgs; }).fenix,
-  gyre ? (import ./nix/pins.nix { inherit pkgs; }).gyre,
+  pkgs ? (import ./nix/pins.nix { }).pkgs,
+  fenix ? (import ./nix/pins.nix { }).fenix,
+  gyre ? (import ./nix/pins.nix { }).gyre,
 }:
 let
   rust-toolchain = fenix.combine [
@@ -16,6 +16,29 @@ let
     fenix.latest.miri
   ];
   package = (import ./default.nix { inherit rust-toolchain; });
+
+  rustPlatform =
+    pkgs.makeRustPlatform {
+      cargo = rust-toolchain;
+      rustc = rust-toolchain;
+    };
+
+  iai-callgrind-runner = pkgs.callPackage ./nix/iai-callgrind.nix { inherit rustPlatform; };
+  cargo-export = pkgs.callPackage ./nix/cargo-export.nix { inherit rustPlatform; };
+  bench = pkgs.writeScriptBin "bench" /* bash */ ''
+    cur=`jj st | grep "(@)" | cut -f 6 -d " "`
+    # baseline
+    jj edit $1
+    cargo export target/benchmarks -- bench --bench=wall-clock 2>/dev/null
+    cargo bench -q --bench=instruction-count 2>/dev/null 1>/dev/null
+
+    # actual
+    jj edit $2
+    cargo bench -q --bench=wall-clock -- compare -s 100 -d test-data/generated/benches/ --gnuplot target/benchmarks/wall_clock 2>/dev/null
+    cargo bench -q --bench=instruction-count 2>/dev/null
+
+    jj edit $cur
+  '';
 in
 
 package.overrideAttrs (attrs: {
@@ -37,6 +60,13 @@ package.overrideAttrs (attrs: {
       bacon
       nodePackages.browser-sync
       gyre
+      # Benchmark
+      valgrind
+      libclang
+      iai-callgrind-runner
+      cargo-export
+      gnuplot
+      bench
     ];
 
   shellHook = ''

@@ -49,7 +49,7 @@ fn solve_lane_emden(step: f64, n: f64) -> (Box<[f64]>, Box<[f64]>, Box<[f64]>) {
     (xis.into(), thetas.into(), phis.into())
 }
 
-pub(crate) struct Polytrope {
+pub struct Polytrope {
     v_gamma: Box<[f64]>,
     u: Box<[f64]>,
     c1: Box<[f64]>,
@@ -58,7 +58,7 @@ pub(crate) struct Polytrope {
 }
 
 impl Polytrope {
-    pub(crate) fn new(n: f64, gamma1: f64, step: f64) -> Self {
+    pub fn new(n: f64, gamma1: f64, step: f64) -> Self {
         assert!(n < 5.);
         assert!(n >= 0.);
 
