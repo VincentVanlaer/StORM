@@ -173,6 +173,7 @@ where
         self.system.outer_boundary(frequency, self.outer, output)
     }
 
+    #[inline(always)]
     fn fill(
         &self,
         step: usize,
@@ -213,6 +214,7 @@ where
     DefaultAllocator: ArrayAllocator<S::N, S::N, Stepper::Points> + Allocator<S::N, S::N>,
     S::ModelPoint: Copy,
 {
+    #[inline(always)]
     fn fill_explicit(
         &self,
         step: usize,

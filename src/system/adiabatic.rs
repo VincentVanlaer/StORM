@@ -79,6 +79,7 @@ impl<T: ComplexField + Copy> System<T> for Rotating1D {
         *output.index_mut((3, 3)) = delta * (-u + two - ell);
     }
 
+    #[inline(always)]
     fn add_frequency(
         &self,
         freq: T,
