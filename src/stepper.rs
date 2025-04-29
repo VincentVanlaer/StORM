@@ -54,7 +54,8 @@ impl<S: ExplicitStepper> ImplicitStepper for S {
     ) where
         DefaultAllocator: Allocator<N, N>,
     {
-        right.fill_with_identity();
+        right.fill(T::from_subset(&0.));
+        right.fill_diagonal(T::from_subset(&-1.));
 
         self.apply(left, values)
     }
@@ -84,7 +85,7 @@ impl<S: ImplicitStepper> ExplicitStepper for ImplicitWrapper<S> {
 
         self.wrapped.apply(&mut l, &mut r, values);
 
-        left.copy_from(&(r.try_inverse().unwrap() * l));
+        left.copy_from(&(-r.try_inverse().unwrap() * l));
     }
 }
 

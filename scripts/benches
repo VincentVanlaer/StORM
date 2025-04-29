@@ -26,7 +26,8 @@ for DIFF_SCHEME in $DIFF_SCHEMES_STORM; do
     cat >test-data/generated/$RUN_NAME/input <<EOF
 input test-data/test-model-tams.GSM
 scan 0 0 1 25 25 --difference-scheme $DIFF_SCHEME
-output --properties=frequency test-data/generated/$RUN_NAME/summary.hdf5
+post-process
+output --properties=degree,radial-order,frequency test-data/generated/$RUN_NAME/summary.hdf5
 EOF
     hyperfine --export-json=test-data/generated/$RUN_NAME.json -- \
       "./target/release/storm  test-data/generated/$RUN_NAME/input"
