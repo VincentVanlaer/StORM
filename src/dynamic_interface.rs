@@ -6,10 +6,10 @@ use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
 };
 use crate::linalg::storage::ArrayAllocator;
-use crate::model::interpolate::LinearInterpolator;
-use crate::model::{DimensionlessProperties, Model};
+use crate::model::DimensionlessProperties;
+use crate::model::interpolate::InterpolatingModel;
 use crate::solver::{
-    self, DeterminantAllocs, UpperResult, determinant, determinant_explicit, determinant_with_upper,
+    DeterminantAllocs, UpperResult, determinant, determinant_explicit, determinant_with_upper,
 };
 use crate::stepper::{
     Colloc2, Colloc4, ExplicitStepper, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8,
@@ -43,7 +43,7 @@ pub struct ErasedSolver {
 impl ErasedSolver {
     /// Construct from a system, difference scheme and grid definition
     pub fn new(
-        model: &impl Model<ModelPoint = DimensionlessProperties>,
+        model: &impl InterpolatingModel<ModelPoint = DimensionlessProperties>,
         system: Rotating1D,
         scheme: DifferenceSchemes,
         solver_grid: Option<&[f64]>,
@@ -108,7 +108,7 @@ impl ErasedSolver {
 }
 
 fn get_solvers_inner<T: ImplicitStepper + 'static>(
-    model: &impl Model<ModelPoint = DimensionlessProperties>,
+    model: &impl InterpolatingModel<ModelPoint = DimensionlessProperties>,
     system: Rotating1D,
     stepper: impl Fn() -> T,
     solver_grid: Option<&[f64]>,
@@ -118,18 +118,8 @@ where
         DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
     DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
-    let system1 = DiscretizedSystemImpl::new(
-        &LinearInterpolator::new(model),
-        stepper(),
-        system,
-        solver_grid,
-    );
-    let system2 = DiscretizedSystemImpl::new(
-        &LinearInterpolator::new(model),
-        stepper(),
-        system,
-        solver_grid,
-    );
+    let system1 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
+    let system2 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
 
     ErasedSolver {
         det: Box::new(move |freq: f64| determinant(&system1, freq)),
@@ -144,7 +134,7 @@ where
 }
 
 fn get_solvers_inner_explicit<T: ExplicitStepper + 'static>(
-    model: &impl Model<ModelPoint = DimensionlessProperties>,
+    model: &impl InterpolatingModel<ModelPoint = DimensionlessProperties>,
     system: Rotating1D,
     stepper: impl Fn() -> T,
     solver_grid: Option<&[f64]>,
@@ -154,18 +144,8 @@ where
         DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
     DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
-    let system1 = DiscretizedSystemImpl::new(
-        &LinearInterpolator::new(model),
-        stepper(),
-        system,
-        solver_grid,
-    );
-    let system2 = DiscretizedSystemImpl::new(
-        &LinearInterpolator::new(model),
-        stepper(),
-        system,
-        solver_grid,
-    );
+    let system1 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
+    let system2 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
 
     ErasedSolver {
         det: Box::new(move |freq: f64| determinant_explicit(&system1, freq)),
@@ -185,7 +165,11 @@ mod test {
 
     use itertools::Itertools;
 
-    use crate::{bracket::Precision, model::gsm::StellarModel, system::adiabatic::Rotating1D};
+    use crate::{
+        bracket::Precision,
+        model::{gsm::StellarModel, interpolate::LinearInterpolator},
+        system::adiabatic::Rotating1D,
+    };
 
     use super::{DifferenceSchemes, ErasedSolver};
 
@@ -202,7 +186,7 @@ mod test {
         };
 
         let system = Rotating1D::new(0, 0);
-        let determinant = ErasedSolver::new(&model, system, scheme, None);
+        let determinant = ErasedSolver::new(&LinearInterpolator::new(&model), system, scheme, None);
         let points = linspace(1.0, 25.0, 25);
 
         determinant

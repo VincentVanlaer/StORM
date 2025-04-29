@@ -114,7 +114,7 @@ where
 
         for i in 0..steps {
             for j in 0..point_locations.len() {
-                let interpolated_point = if let Some(_solving_grid) = &solving_grid {
+                let interpolated_point = if let Some(solving_grid) = &solving_grid {
                     let pos = solving_grid[i] + point_locations[j];
 
                     while model.pos(lower_idx + 1) <= pos {

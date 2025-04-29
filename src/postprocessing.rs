@@ -373,7 +373,7 @@ mod tests {
     use crate::{
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, ErasedSolver},
-        model::gsm::StellarModel,
+        model::{gsm::StellarModel, interpolate::LinearInterpolator},
         system::adiabatic::Rotating1D,
     };
 
@@ -395,7 +395,12 @@ mod tests {
         };
 
         let system = Rotating1D::new(ell, m);
-        let determinant = ErasedSolver::new(&model, system, DifferenceSchemes::Colloc2, None);
+        let determinant = ErasedSolver::new(
+            &LinearInterpolator::new(&model),
+            system,
+            DifferenceSchemes::Colloc2,
+            None,
+        );
         let points = linspace(lower, upper, steps);
 
         determinant

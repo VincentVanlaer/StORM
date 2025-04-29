@@ -1,6 +1,6 @@
 use storm::{
     dynamic_interface::{DifferenceSchemes, ErasedSolver},
-    model::polytrope::Polytrope,
+    model::{interpolate::LinearInterpolator, polytrope::Polytrope},
     system::adiabatic::Rotating1D,
 };
 use tango_bench::{IntoBenchmarks, benchmark_fn, tango_benchmarks, tango_main};
@@ -8,7 +8,12 @@ use tango_bench::{IntoBenchmarks, benchmark_fn, tango_benchmarks, tango_main};
 pub fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
     let poly = Polytrope::new(3., 5. / 3., 0.01);
 
-    ErasedSolver::new(&poly, Rotating1D::new(0, 0), scheme, None)
+    ErasedSolver::new(
+        &LinearInterpolator::new(&poly),
+        Rotating1D::new(0, 0),
+        scheme,
+        None,
+    )
 }
 
 pub fn run_freq(shooting: &ErasedSolver) -> f64 {

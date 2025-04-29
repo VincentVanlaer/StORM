@@ -1,6 +1,6 @@
 //! Loading and modifying stellar models
 
-pub(crate) trait Model {
+pub trait Model {
     type ModelPoint;
 
     fn len(&self) -> usize;
@@ -10,7 +10,7 @@ pub(crate) trait Model {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct DimensionlessProperties {
+pub struct DimensionlessProperties {
     pub v_gamma: f64,
     pub a_star: f64,
     pub u: f64,
@@ -18,7 +18,7 @@ pub(crate) struct DimensionlessProperties {
     pub rot: f64,
 }
 
-pub(crate) mod interpolate;
+pub mod interpolate;
 
 /// GYRE stellar model support
 pub mod gsm;

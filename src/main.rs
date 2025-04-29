@@ -2,7 +2,6 @@
 use clap::Parser;
 use color_eyre::Result;
 use color_eyre::eyre::{Context, ContextCompat, OptionExt, Report, eyre};
-use core::f64;
 use hdf5::H5Type;
 use itertools::Itertools;
 use nalgebra::ComplexField;
@@ -13,6 +12,7 @@ use std::process::ExitCode;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::gsm::StellarModel;
+use storm::model::interpolate::LinearInterpolator;
 use storm::perturbed::{
     ModeCoupling, ModeToPerturb, PerturbedMetric, perturb_deformed, perturb_structure,
 };
@@ -608,7 +608,12 @@ impl StormState {
         let lower = frequency_units.convert_to_natural(lower, input);
 
         let system = Rotating1D::new(ell, m);
-        let determinant = ErasedSolver::new(input, system, difference_scheme, None);
+        let determinant = ErasedSolver::new(
+            &LinearInterpolator::new(input),
+            system,
+            difference_scheme,
+            None,
+        );
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
         } else {

@@ -10,12 +10,12 @@ pub(crate) trait InterpolatingModel {
     fn eval_exact(&self, idx: usize) -> Self::ModelPoint;
 }
 
-pub(crate) struct LinearInterpolator<'model, M> {
+pub struct LinearInterpolator<'model, M> {
     model: &'model M,
 }
 
 impl<'model, M: Model> LinearInterpolator<'model, M> {
-    pub(crate) fn new(model: &'model M) -> Self {
+    pub fn new(model: &'model M) -> Self {
         LinearInterpolator { model }
     }
 }
