@@ -80,10 +80,16 @@ where
         model: &impl InterpolatingModel<ModelPoint = impl Into<S::ModelPoint>>,
         stepper: Stepper,
         system: S,
+        solving_grid: Option<&[f64]>,
     ) -> Self {
         let n = System::<T>::shape(&system);
         let point_locations = stepper.points();
-        let steps = model.len() - 1;
+        let steps = if let Some(solving_grid) = &solving_grid {
+            solving_grid.len() - 1
+        } else {
+            model.len() - 1
+        };
+
         let points = point_locations.len() * steps;
 
         let mut matrices = MatrixArray::new_with(n, n, Dyn(points), || T::zero());
@@ -91,8 +97,12 @@ where
         let mut delta = Vec::with_capacity(steps);
 
         for i in 1..steps {
-            let left = model.pos(i).ln();
-            let right = model.pos(i + 1).ln();
+            let (left, right) = if let Some(solving_grid) = &solving_grid {
+                (solving_grid[i].ln(), solving_grid[i + 1].ln())
+            } else {
+                (model.pos(i).ln(), model.pos(i + 1).ln())
+            };
+
             delta.push(right - left);
 
             if i == 1 {
@@ -100,10 +110,26 @@ where
             }
         }
 
+        let mut lower_idx = 0;
+
         for i in 0..steps {
             for j in 0..point_locations.len() {
+                let interpolated_point = if let Some(_solving_grid) = &solving_grid {
+                    let pos = solving_grid[i] + point_locations[j];
+
+                    while model.pos(lower_idx + 1) <= pos {
+                        lower_idx += 1;
+                    }
+
+                    let rel_pos = (pos - model.pos(lower_idx))
+                        / (model.pos(lower_idx + 1) - model.pos(lower_idx));
+
+                    model.eval(lower_idx, rel_pos).into()
+                } else {
+                    model.eval(i, point_locations[j]).into()
+                };
+
                 let idx = i * point_locations.len() + j;
-                let interpolated_point = model.eval(i, point_locations[j]).into();
 
                 system.eval(interpolated_point, delta[i], &mut matrices.index_mut(idx));
 

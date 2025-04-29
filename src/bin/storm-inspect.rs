@@ -34,7 +34,7 @@ fn main() -> Result<()> {
     let model = StellarModel::from_gsm("test-data/test-model-tams.GSM")?;
     let system = Rotating1D::new(0, 0);
     let searcher = &InverseQuadratic {};
-    let determinant = ErasedSolver::new(&model, system, difference_scheme);
+    let determinant = ErasedSolver::new(&model, system, difference_scheme, None);
 
     let dets: Vec<_> = linspace(lower, upper, steps)
         .map(|x| Point {

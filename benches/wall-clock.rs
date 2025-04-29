@@ -8,7 +8,7 @@ use tango_bench::{IntoBenchmarks, benchmark_fn, tango_benchmarks, tango_main};
 pub fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
     let poly = Polytrope::new(3., 5. / 3., 0.01);
 
-    ErasedSolver::new(&poly, Rotating1D::new(0, 0), scheme)
+    ErasedSolver::new(&poly, Rotating1D::new(0, 0), scheme, None)
 }
 
 pub fn run_freq(shooting: &ErasedSolver) -> f64 {

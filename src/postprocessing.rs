@@ -395,7 +395,7 @@ mod tests {
         };
 
         let system = Rotating1D::new(ell, m);
-        let determinant = ErasedSolver::new(&model, system, DifferenceSchemes::Colloc2);
+        let determinant = ErasedSolver::new(&model, system, DifferenceSchemes::Colloc2, None);
         let points = linspace(lower, upper, steps);
 
         determinant

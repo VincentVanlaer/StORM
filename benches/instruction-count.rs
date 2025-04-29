@@ -9,7 +9,7 @@ use storm::{
 fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
     let poly = Polytrope::new(3., 5. / 3., 0.01);
 
-    ErasedSolver::new(&poly, Rotating1D::new(0, 0), scheme)
+    ErasedSolver::new(&poly, Rotating1D::new(0, 0), scheme, None)
 }
 
 fn run_freq(shooting: ErasedSolver) -> f64 {

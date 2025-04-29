@@ -9,7 +9,7 @@ use crate::linalg::storage::ArrayAllocator;
 use crate::model::interpolate::LinearInterpolator;
 use crate::model::{DimensionlessProperties, Model};
 use crate::solver::{
-    DeterminantAllocs, UpperResult, determinant, determinant_explicit, determinant_with_upper,
+    self, DeterminantAllocs, UpperResult, determinant, determinant_explicit, determinant_with_upper,
 };
 use crate::stepper::{
     Colloc2, Colloc4, ExplicitStepper, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8,
@@ -46,14 +46,27 @@ impl ErasedSolver {
         model: &impl Model<ModelPoint = DimensionlessProperties>,
         system: Rotating1D,
         scheme: DifferenceSchemes,
+        solver_grid: Option<&[f64]>,
     ) -> ErasedSolver {
         match scheme {
-            DifferenceSchemes::Colloc2 => get_solvers_inner(model, system, || Colloc2 {}),
-            DifferenceSchemes::Colloc4 => get_solvers_inner(model, system, || Colloc4 {}),
-            DifferenceSchemes::Magnus2 => get_solvers_inner_explicit(model, system, || Magnus2 {}),
-            DifferenceSchemes::Magnus4 => get_solvers_inner_explicit(model, system, || Magnus4 {}),
-            DifferenceSchemes::Magnus6 => get_solvers_inner_explicit(model, system, || Magnus6 {}),
-            DifferenceSchemes::Magnus8 => get_solvers_inner_explicit(model, system, || Magnus8 {}),
+            DifferenceSchemes::Colloc2 => {
+                get_solvers_inner(model, system, || Colloc2 {}, solver_grid)
+            }
+            DifferenceSchemes::Colloc4 => {
+                get_solvers_inner(model, system, || Colloc4 {}, solver_grid)
+            }
+            DifferenceSchemes::Magnus2 => {
+                get_solvers_inner_explicit(model, system, || Magnus2 {}, solver_grid)
+            }
+            DifferenceSchemes::Magnus4 => {
+                get_solvers_inner_explicit(model, system, || Magnus4 {}, solver_grid)
+            }
+            DifferenceSchemes::Magnus6 => {
+                get_solvers_inner_explicit(model, system, || Magnus6 {}, solver_grid)
+            }
+            DifferenceSchemes::Magnus8 => {
+                get_solvers_inner_explicit(model, system, || Magnus8 {}, solver_grid)
+            }
         }
     }
 
@@ -98,14 +111,25 @@ fn get_solvers_inner<T: ImplicitStepper + 'static>(
     model: &impl Model<ModelPoint = DimensionlessProperties>,
     system: Rotating1D,
     stepper: impl Fn() -> T,
+    solver_grid: Option<&[f64]>,
 ) -> ErasedSolver
 where
     DefaultAllocator:
         DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
     DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
-    let system1 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
-    let system2 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
+    let system1 = DiscretizedSystemImpl::new(
+        &LinearInterpolator::new(model),
+        stepper(),
+        system,
+        solver_grid,
+    );
+    let system2 = DiscretizedSystemImpl::new(
+        &LinearInterpolator::new(model),
+        stepper(),
+        system,
+        solver_grid,
+    );
 
     ErasedSolver {
         det: Box::new(move |freq: f64| determinant(&system1, freq)),
@@ -123,14 +147,25 @@ fn get_solvers_inner_explicit<T: ExplicitStepper + 'static>(
     model: &impl Model<ModelPoint = DimensionlessProperties>,
     system: Rotating1D,
     stepper: impl Fn() -> T,
+    solver_grid: Option<&[f64]>,
 ) -> ErasedSolver
 where
     DefaultAllocator:
         DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
     DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
-    let system1 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
-    let system2 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
+    let system1 = DiscretizedSystemImpl::new(
+        &LinearInterpolator::new(model),
+        stepper(),
+        system,
+        solver_grid,
+    );
+    let system2 = DiscretizedSystemImpl::new(
+        &LinearInterpolator::new(model),
+        stepper(),
+        system,
+        solver_grid,
+    );
 
     ErasedSolver {
         det: Box::new(move |freq: f64| determinant_explicit(&system1, freq)),
@@ -167,7 +202,7 @@ mod test {
         };
 
         let system = Rotating1D::new(0, 0);
-        let determinant = ErasedSolver::new(&model, system, scheme);
+        let determinant = ErasedSolver::new(&model, system, scheme, None);
         let points = linspace(1.0, 25.0, 25);
 
         determinant

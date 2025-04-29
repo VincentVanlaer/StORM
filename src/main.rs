@@ -608,7 +608,7 @@ impl StormState {
         let lower = frequency_units.convert_to_natural(lower, input);
 
         let system = Rotating1D::new(ell, m);
-        let determinant = ErasedSolver::new(input, system, difference_scheme);
+        let determinant = ErasedSolver::new(input, system, difference_scheme, None);
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
         } else {
