@@ -2,7 +2,6 @@ use nalgebra::{
     ComplexField, Const, DefaultAllocator, Dim, DimAdd, DimMul, DimSub, Matrix, OMatrix,
     RawStorage, RawStorageMut, allocator::Allocator,
 };
-use num_traits::Zero;
 
 use crate::system::discretized::DiscretizedSystem;
 
@@ -156,6 +155,110 @@ pub(crate) trait DeterminantAllocs<N: Dim + DimSub<NInner> + DimMul<Const<2>> + 
         + Allocator<<N as DimMul<Const<2>>>::Output, <N as DimAdd<NInner>>::Output>
         + Allocator<<N as DimMul<Const<2>>>::Output, Const<1>>;
 
+macro_rules! sweep {
+    ($bands: ident, $upper: ident, $n_step: ident, $rows: expr, $cols: expr, $idx: ident, $pivot: ident, $pivot_row: ident) => {
+        let pinv = T::one() / $pivot;
+
+        for i in ($idx + 1)..$cols {
+            $upper.set($n_step, $idx, i - $idx, unsafe {
+                *$pivot_row.get_unchecked(i) * pinv
+            });
+        }
+
+        let mut ridx = ($idx + 1) * $bands.shape().0;
+
+        for _ in ($idx + 1)..$rows {
+            let m = *unsafe { $bands.data.get_unchecked_linear(ridx + $idx) } * pinv;
+            for j in 0..$cols {
+                // PERF: VFNMADD231PD
+                *unsafe { $bands.data.get_unchecked_linear_mut(ridx + j) } -=
+                    *unsafe { $pivot_row.get_unchecked(j) } * m;
+            }
+
+            ridx += $bands.shape().0;
+        }
+    };
+}
+
+macro_rules! column_pivot {
+    ($bands: ident, $upper: ident, $det: ident, $rows: expr, $cols: expr, $idx: ident) => {{
+        let mut max_idx = $idx;
+        let mut max_val: T::RealField = unsafe { $bands.get_unchecked(($idx, $idx)) }.abs();
+
+        for i in ($idx + 1)..$cols {
+            if unsafe { $bands.get_unchecked((i, $idx)) }.abs() > max_val {
+                max_idx = i;
+                max_val = $bands.index((i, $idx)).abs();
+            }
+        }
+
+        let pivot = unsafe { *$bands.get_unchecked((max_idx, $idx)) };
+        let mut pivot_row =
+            Matrix::from_element_generic($bands.shape_generic().0, Const::<1>, T::zero());
+
+        if max_idx != $idx {
+            $upper.column_pivot(max_idx, $idx);
+            for i in $idx..$rows {
+                unsafe {
+                    let c1 = *$bands.get_unchecked((max_idx, i));
+                    let c2 = *$bands.get_unchecked(($idx, i));
+
+                    *$bands.get_unchecked_mut((max_idx, i)) = c2;
+                    *$bands.get_unchecked_mut(($idx, i)) = c1;
+                }
+            }
+            $det *= -T::one();
+        }
+
+        for i in 0..$cols {
+            unsafe {
+                *pivot_row.get_unchecked_mut(i) = *$bands.get_unchecked((i, $idx));
+            }
+        }
+
+        (pivot, pivot_row)
+    }};
+}
+macro_rules! row_pivot {
+    ($bands: ident, $det: ident, $rows: expr, $cols: expr, $idx: ident) => {{
+        let mut max_idx = $idx;
+        let mut max_val: T::RealField = unsafe { $bands.get_unchecked(($idx, $idx)) }.abs();
+
+        for i in ($idx + 1)..$rows {
+            if unsafe { $bands.get_unchecked(($idx, i)) }.abs() > max_val {
+                max_idx = i;
+                max_val = $bands.index(($idx, i)).abs();
+            }
+        }
+
+        // PERF: This needs to be loaded first before we rewrite and construct pivot_row. While
+        // it is possible to read the pivot element from pivot_row, the compiler will then
+        // spill pivot_row to the stack, so it can actually mov the data with the offset k,
+        // which it can't do while everything is in registers.
+        let pivot = unsafe { *$bands.get_unchecked(($idx, max_idx)) };
+        let mut pivot_row =
+            Matrix::from_element_generic($bands.shape_generic().0, Const::<1>, T::zero());
+
+        if max_idx != $idx {
+            for i in 0..$cols {
+                unsafe {
+                    *pivot_row.get_unchecked_mut(i) = *$bands.get_unchecked((i, max_idx));
+                    *$bands.get_unchecked_mut((i, max_idx)) = *$bands.get_unchecked((i, $idx));
+                }
+            }
+            $det *= -T::one();
+        } else {
+            for i in 0..$cols {
+                unsafe {
+                    *pivot_row.get_unchecked_mut(i) = *$bands.get_unchecked((i, $idx));
+                }
+            }
+        }
+
+        (pivot, pivot_row)
+    }};
+}
+
 fn determinant_inner<
     T: ComplexField + Copy,
     System: DiscretizedSystem<T, N: DimMul<Const<2>> + DimAdd<System::NInner>>,
@@ -214,69 +317,11 @@ where
         }
 
         for k in 0..n {
-            let pivot;
-
-            if k < n_inner {
-                let mut max_idx = k;
-                let mut max_val: T::RealField = unsafe { bands.get_unchecked((k, k)) }.abs();
-
-                for i in (k + 1)..n {
-                    if unsafe { bands.get_unchecked((i, k)) }.abs() > max_val {
-                        max_idx = i;
-                        max_val = bands.index((i, k)).abs();
-                    }
-                }
-
-                pivot = unsafe { *bands.get_unchecked((max_idx, k)) };
-
-                if max_idx != k {
-                    upper.column_pivot(max_idx, k);
-                    for i in k..(n + n_inner) {
-                        unsafe {
-                            let c1 = *bands.get_unchecked((max_idx, i));
-                            let c2 = *bands.get_unchecked((k, i));
-
-                            *bands.get_unchecked_mut((max_idx, i)) = c2;
-                            *bands.get_unchecked_mut((k, i)) = c1;
-                        }
-                    }
-                    det *= -T::one();
-                }
+            let (pivot, pivot_row) = if k < n_inner {
+                column_pivot!(bands, upper, det, n + n_inner, 2 * n, k)
             } else {
-                let mut max_idx = k;
-                let mut max_val: T::RealField = unsafe { bands.get_unchecked((k, k)) }.abs();
-
-                for i in (k + 1)..(n + n_inner) {
-                    if unsafe { bands.get_unchecked((k, i)) }.abs() > max_val {
-                        max_idx = i;
-                        max_val = bands.index((k, i)).abs();
-                    }
-                }
-
-                pivot = unsafe { *bands.get_unchecked((k, max_idx)) };
-
-                if max_idx != k {
-                    for i in 0..(2 * n) {
-                        unsafe {
-                            let r1 = *bands.get_unchecked((i, max_idx));
-                            let r2 = *bands.get_unchecked((i, k));
-
-                            *bands.get_unchecked_mut((i, max_idx)) = r2;
-                            *bands.get_unchecked_mut((i, k)) = r1;
-                        }
-                    }
-                    det *= -T::one();
-                }
-            }
-
-            let mut pivot_row =
-                Matrix::from_element_generic(system.shape().mul(Const::<2>), Const::<1>, T::zero());
-
-            for i in 0..(2 * n) {
-                unsafe {
-                    *pivot_row.get_unchecked_mut(i) = *bands.get_unchecked((i, k));
-                }
-            }
+                row_pivot!(bands, det, n + n_inner, 2 * n, k)
+            };
 
             det *= pivot;
 
@@ -285,22 +330,16 @@ where
                 "det = {det}, pivot = {pivot}, n = {n_step}"
             );
 
-            let pinv = T::one() / pivot;
-
-            for i in (k + 1)..(2 * n) {
-                upper.set(n_step, k, i - k, unsafe {
-                    *pivot_row.get_unchecked(i) * pinv
-                });
-            }
-
-            for i in (k + 1)..(n + n_inner) {
-                let m = unsafe { *bands.get_unchecked((k, i)) * pinv };
-                for j in 0..(2 * n) {
-                    // PERF: VFNMADD231PD
-                    *unsafe { bands.get_unchecked_mut((j, i)) } -=
-                        *unsafe { pivot_row.get_unchecked(j) } * m;
-                }
-            }
+            sweep!(
+                bands,
+                upper,
+                n_step,
+                n + n_inner,
+                2 * n,
+                k,
+                pivot,
+                pivot_row
+            );
         }
 
         for i in 0..n_inner {
@@ -324,39 +363,7 @@ where
         }
 
         for k in 0..n {
-            let mut max_idx = k;
-            let mut max_val: T::RealField = unsafe { bands.get_unchecked((k, k)) }.abs();
-
-            for i in (k + 1)..(n + n_inner) {
-                if unsafe { bands.get_unchecked((k, i)) }.abs() > max_val {
-                    max_idx = i;
-                    max_val = bands.index((k, i)).abs();
-                }
-            }
-
-            // PERF: This needs to be loaded first before we rewrite and construct pivot_row. While
-            // it is possible to read the pivot element from pivot_row, the compiler will then
-            // spill pivot_row to the stack, so it can actually mov the data with the offset k,
-            // which it can't do while everything is in registers.
-            let pivot = unsafe { *bands.get_unchecked((k, max_idx)) };
-            let mut pivot_row =
-                Matrix::from_element_generic(system.shape().mul(Const::<2>), Const::<1>, T::zero());
-
-            if max_idx != k {
-                for i in 0..(2 * n) {
-                    unsafe {
-                        *pivot_row.get_unchecked_mut(i) = *bands.get_unchecked((i, max_idx));
-                        *bands.get_unchecked_mut((i, max_idx)) = *bands.get_unchecked((i, k));
-                    }
-                }
-                det *= -T::one();
-            } else {
-                for i in 0..(2 * n) {
-                    unsafe {
-                        *pivot_row.get_unchecked_mut(i) = *bands.get_unchecked((i, k));
-                    }
-                }
-            }
+            let (pivot, pivot_row) = row_pivot!(bands, det, n + n_inner, 2 * n, k);
 
             det *= pivot;
 
@@ -365,26 +372,16 @@ where
                 "det = {det}, pivot = {pivot}, n = {n_step}"
             );
 
-            let pinv = T::one() / pivot;
-
-            for i in (k + 1)..(2 * n) {
-                upper.set(n_step, k, i - k, unsafe {
-                    *pivot_row.get_unchecked(i) * pinv
-                });
-            }
-
-            let mut ridx = (k + 1) * 2 * n;
-
-            for _ in (k + 1)..(n + n_inner) {
-                let m = *unsafe { bands.data.get_unchecked_linear(ridx + k) } * pinv;
-                for j in 0..(2 * n) {
-                    // PERF: VFNMADD231PD
-                    *unsafe { bands.data.get_unchecked_linear_mut(ridx + j) } -=
-                        *unsafe { pivot_row.get_unchecked(j) } * m;
-                }
-
-                ridx += 2 * n;
-            }
+            sweep!(
+                bands,
+                upper,
+                n_step,
+                n + n_inner,
+                2 * n,
+                k,
+                pivot,
+                pivot_row
+            );
         }
 
         for i in 0..n_inner {
@@ -405,42 +402,16 @@ where
     }
 
     for k in 0..(n - 1) {
-        let mut max_idx = 0;
-        let mut max_val: T::RealField = T::RealField::zero();
-
-        for i in k..n {
-            if bands.index((k, i)).abs() > max_val {
-                max_idx = i;
-                max_val = bands.index((k, i)).abs();
-            }
-        }
-
-        if max_idx != k {
-            bands.swap_columns(max_idx, k);
-            det *= -T::one();
-        }
-
-        let pivot = *bands.index((k, k));
-
-        for j in 0..n {
-            *bands.index_mut((j, k)) /= pivot;
-        }
-
-        for i in (k + 1)..n {
-            upper.set(n_step, k, i - k, *bands.index((i, k)));
-        }
-
-        debug_assert!(pivot.is_finite(), "det = {det}, pivot = {pivot}");
+        let (pivot, pivot_row) = row_pivot!(bands, det, n, n, k);
 
         det *= pivot;
 
-        for i in (k + 1)..n {
-            let m = *bands.index((k, i));
-            for j in 0..n {
-                let res = *bands.index((j, k));
-                *bands.index_mut((j, i)) -= res * m;
-            }
-        }
+        debug_assert!(
+            pivot.is_finite() && det.is_finite(),
+            "det = {det}, pivot = {pivot}, n = {n_step}"
+        );
+
+        sweep!(bands, upper, n_step, n, n, k, pivot, pivot_row);
     }
 
     det * *bands.index((n - 1, n - 1))
