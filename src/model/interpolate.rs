@@ -1,6 +1,6 @@
 use super::{DimensionlessProperties, Model};
 
-pub(crate) trait InterpolatedModel {
+pub(crate) trait InterpolatingModel {
     type ModelPoint;
 
     fn len(&self) -> usize;
@@ -20,7 +20,7 @@ impl<'model, M: Model> LinearInterpolator<'model, M> {
     }
 }
 
-impl<M: Model<ModelPoint = DimensionlessProperties>> InterpolatedModel
+impl<M: Model<ModelPoint = DimensionlessProperties>> InterpolatingModel
     for LinearInterpolator<'_, M>
 {
     type ModelPoint = M::ModelPoint;

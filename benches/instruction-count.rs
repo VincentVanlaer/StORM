@@ -1,22 +1,22 @@
 use iai_callgrind::{library_benchmark, library_benchmark_group, main};
 use std::hint::black_box;
 use storm::{
-    dynamic_interface::{DifferenceSchemes, MultipleShooting},
+    dynamic_interface::{DifferenceSchemes, ErasedSolver},
     model::polytrope::Polytrope,
     system::adiabatic::Rotating1D,
 };
 
-fn polytrope(scheme: DifferenceSchemes) -> MultipleShooting {
+fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
     let poly = Polytrope::new(3., 5. / 3., 0.01);
 
-    MultipleShooting::new(&poly, Rotating1D::new(0, 0), scheme)
+    ErasedSolver::new(&poly, Rotating1D::new(0, 0), scheme)
 }
 
-fn run_freq(shooting: MultipleShooting) -> f64 {
+fn run_freq(shooting: ErasedSolver) -> f64 {
     shooting.det(10.)
 }
 
-fn run_upper(shooting: MultipleShooting) -> Vec<f64> {
+fn run_upper(shooting: ErasedSolver) -> Vec<f64> {
     shooting.eigenvector(10.)
 }
 
@@ -27,7 +27,7 @@ fn run_upper(shooting: MultipleShooting) -> Vec<f64> {
 #[bench::magnus4(args = (DifferenceSchemes::Magnus4), setup=polytrope)]
 #[bench::magnus6(args = (DifferenceSchemes::Magnus6), setup=polytrope)]
 #[bench::magnus8(args = (DifferenceSchemes::Magnus8), setup=polytrope)]
-fn bench_polytrope(shooting: MultipleShooting) -> f64 {
+fn bench_polytrope(shooting: ErasedSolver) -> f64 {
     black_box(run_freq(shooting))
 }
 
@@ -38,7 +38,7 @@ fn bench_polytrope(shooting: MultipleShooting) -> f64 {
 #[bench::magnus4(args = (DifferenceSchemes::Magnus4), setup=polytrope)]
 #[bench::magnus6(args = (DifferenceSchemes::Magnus6), setup=polytrope)]
 #[bench::magnus8(args = (DifferenceSchemes::Magnus8), setup=polytrope)]
-fn bench_polytrope_eigen(shooting: MultipleShooting) -> Vec<f64> {
+fn bench_polytrope_eigen(shooting: ErasedSolver) -> Vec<f64> {
     black_box(run_upper(shooting))
 }
 

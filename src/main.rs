@@ -11,7 +11,7 @@ use nshare::AsNdarray2;
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use storm::bracket::{BracketResult, Precision};
-use storm::dynamic_interface::{DifferenceSchemes, MultipleShooting};
+use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::gsm::StellarModel;
 use storm::perturbed::{
     ModeCoupling, ModeToPerturb, PerturbedMetric, perturb_deformed, perturb_structure,
@@ -608,7 +608,7 @@ impl StormState {
         let lower = frequency_units.convert_to_natural(lower, input);
 
         let system = Rotating1D::new(ell, m);
-        let determinant = MultipleShooting::new(input, system, difference_scheme);
+        let determinant = ErasedSolver::new(input, system, difference_scheme);
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
         } else {

@@ -1,21 +1,21 @@
 use storm::{
-    dynamic_interface::{DifferenceSchemes, MultipleShooting},
+    dynamic_interface::{DifferenceSchemes, ErasedSolver},
     model::polytrope::Polytrope,
     system::adiabatic::Rotating1D,
 };
 use tango_bench::{IntoBenchmarks, benchmark_fn, tango_benchmarks, tango_main};
 
-pub fn polytrope(scheme: DifferenceSchemes) -> MultipleShooting {
+pub fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
     let poly = Polytrope::new(3., 5. / 3., 0.01);
 
-    MultipleShooting::new(&poly, Rotating1D::new(0, 0), scheme)
+    ErasedSolver::new(&poly, Rotating1D::new(0, 0), scheme)
 }
 
-pub fn run_freq(shooting: &MultipleShooting) -> f64 {
+pub fn run_freq(shooting: &ErasedSolver) -> f64 {
     shooting.det(10.)
 }
 
-pub fn run_upper(shooting: &MultipleShooting) -> Vec<f64> {
+pub fn run_upper(shooting: &ErasedSolver) -> Vec<f64> {
     shooting.eigenvector(10.)
 }
 

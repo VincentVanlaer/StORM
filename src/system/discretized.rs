@@ -5,7 +5,7 @@ use nalgebra::{
 
 use crate::{
     linalg::storage::{ArrayAllocator, ArrayStorage, MatrixArray},
-    model::interpolate::InterpolatedModel,
+    model::interpolate::InterpolatingModel,
     stepper::{ExplicitStepper, ImplicitStepper},
 };
 
@@ -77,7 +77,7 @@ where
     S::ModelPoint: Copy,
 {
     pub(crate) fn new(
-        model: &impl InterpolatedModel<ModelPoint = impl Into<S::ModelPoint>>,
+        model: &impl InterpolatingModel<ModelPoint = impl Into<S::ModelPoint>>,
         stepper: Stepper,
         system: S,
     ) -> Self {

@@ -31,18 +31,18 @@ pub enum DifferenceSchemes {
 }
 
 /// Type erased interface for computing the determinant and the eigenvector of a problem
-pub struct MultipleShooting {
+pub struct ErasedSolver {
     det: Box<dyn Fn(f64) -> f64>,
     eigenvector: Box<dyn Fn(f64) -> (f64, Vec<f64>)>,
 }
 
-impl MultipleShooting {
+impl ErasedSolver {
     /// Construct from a system, difference scheme and grid definition
     pub fn new(
         model: &impl Model<ModelPoint = DimensionlessProperties>,
         system: Rotating1D,
         scheme: DifferenceSchemes,
-    ) -> MultipleShooting {
+    ) -> ErasedSolver {
         match scheme {
             DifferenceSchemes::Colloc2 => get_solvers_inner(model, system, || Colloc2 {}),
             DifferenceSchemes::Colloc4 => get_solvers_inner(model, system, || Colloc4 {}),
@@ -61,7 +61,7 @@ impl MultipleShooting {
     /// Compute the eigenvectors for a certain frequency.
     ///
     /// This assumes that freq are close to a solution. This is less efficient than
-    /// [MultipleShooting::det], so only use this after bracketing has completed.
+    /// [ErasedSolver::det], so only use this after bracketing has completed.
     pub fn eigenvector(&self, freq: f64) -> Vec<f64> {
         (self.eigenvector)(freq).1
     }
@@ -94,7 +94,7 @@ fn get_solvers_inner<T: ImplicitStepper + 'static>(
     model: &impl Model<ModelPoint = DimensionlessProperties>,
     system: Rotating1D,
     stepper: impl Fn() -> T,
-) -> MultipleShooting
+) -> ErasedSolver
 where
     DefaultAllocator:
         DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
@@ -103,7 +103,7 @@ where
     let system1 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
     let system2 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
 
-    MultipleShooting {
+    ErasedSolver {
         det: Box::new(move |freq: f64| determinant(&system1, freq)),
         eigenvector: Box::new(move |freq: f64| {
             let mut upper = UpperResult::new(system2.shape().value(), system2.len());
@@ -123,7 +123,7 @@ mod test {
 
     use crate::{bracket::Precision, model::gsm::StellarModel, system::adiabatic::Rotating1D};
 
-    use super::{DifferenceSchemes, MultipleShooting};
+    use super::{DifferenceSchemes, ErasedSolver};
 
     fn linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
         (0..n).map(move |x| lower + (upper - lower) * (x as f64) / ((n - 1) as f64))
@@ -138,7 +138,7 @@ mod test {
         };
 
         let system = Rotating1D::new(0, 0);
-        let determinant = MultipleShooting::new(&model, system, scheme);
+        let determinant = ErasedSolver::new(&model, system, scheme);
         let points = linspace(1.0, 25.0, 25);
 
         determinant
