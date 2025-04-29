@@ -414,8 +414,8 @@ where
 
         let (mantissa, mut exponent, _) = norm.integer_decode();
 
-        exponent += i16::try_from(mantissa.next_power_of_two().leading_zeros())
-            .expect("max 64 leading zeroes");
+        exponent +=
+            i16::try_from(mantissa.next_power_of_two().ilog2()).expect("max 64 leading zeroes");
 
         if exponent > 0 {
             *self *= T::from_subset(&f64::powi(2., (-exponent).into()));
@@ -481,14 +481,38 @@ where
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::{Const, Dyn};
+    use nalgebra::{Const, Dyn, OMatrix};
 
-    use super::OMatrixArray;
+    use super::{Exp, OMatrixArray};
 
     #[test]
     fn test_unsized_matrix_array() {
         let matrix_array = OMatrixArray::new_with(Const::<4> {}, Const::<4> {}, Dyn(600), || 1.);
 
         assert_eq!(matrix_array.index(10)[(2, 2)], 1.);
+    }
+
+    #[test]
+    fn test_matrix_exponential() {
+        let mut mat = OMatrix::<_, Const<3>, Const<3>>::from_row_slice(&[
+            21., 17., 6., -5., -1., -6., 4., 4., 16.,
+        ]);
+
+        mat.exp();
+
+        assert_eq!(
+            mat,
+            OMatrix::<_, Const<3>, Const<3>>::from_column_slice(&[
+                28879845.54211301,
+                -19993735.021605186,
+                35544442.08203147,
+                28879790.94396299,
+                -19993680.42345516,
+                35544442.08203148,
+                4443027.961178895,
+                -4443027.961178911,
+                8886110.520507863
+            ])
+        );
     }
 }
