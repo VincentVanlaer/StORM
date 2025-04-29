@@ -8,8 +8,12 @@ use crate::bracket::{
 use crate::linalg::storage::ArrayAllocator;
 use crate::model::interpolate::LinearInterpolator;
 use crate::model::{DimensionlessProperties, Model};
-use crate::solver::{DeterminantAllocs, UpperResult, determinant, determinant_with_upper};
-use crate::stepper::{Colloc2, Colloc4, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8};
+use crate::solver::{
+    DeterminantAllocs, UpperResult, determinant, determinant_explicit, determinant_with_upper,
+};
+use crate::stepper::{
+    Colloc2, Colloc4, ExplicitStepper, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8,
+};
 use crate::system::adiabatic::Rotating1D;
 use crate::system::discretized::{DiscretizedSystem, DiscretizedSystemImpl};
 
@@ -46,10 +50,10 @@ impl ErasedSolver {
         match scheme {
             DifferenceSchemes::Colloc2 => get_solvers_inner(model, system, || Colloc2 {}),
             DifferenceSchemes::Colloc4 => get_solvers_inner(model, system, || Colloc4 {}),
-            DifferenceSchemes::Magnus2 => get_solvers_inner(model, system, || Magnus2 {}),
-            DifferenceSchemes::Magnus4 => get_solvers_inner(model, system, || Magnus4 {}),
-            DifferenceSchemes::Magnus6 => get_solvers_inner(model, system, || Magnus6 {}),
-            DifferenceSchemes::Magnus8 => get_solvers_inner(model, system, || Magnus8 {}),
+            DifferenceSchemes::Magnus2 => get_solvers_inner_explicit(model, system, || Magnus2 {}),
+            DifferenceSchemes::Magnus4 => get_solvers_inner_explicit(model, system, || Magnus4 {}),
+            DifferenceSchemes::Magnus6 => get_solvers_inner_explicit(model, system, || Magnus6 {}),
+            DifferenceSchemes::Magnus8 => get_solvers_inner_explicit(model, system, || Magnus8 {}),
         }
     }
 
@@ -105,6 +109,31 @@ where
 
     ErasedSolver {
         det: Box::new(move |freq: f64| determinant(&system1, freq)),
+        eigenvector: Box::new(move |freq: f64| {
+            let mut upper = UpperResult::new(system2.shape().value(), system2.len());
+
+            let det = determinant_with_upper(&system2, freq, &mut upper);
+
+            (det, upper.eigenvectors())
+        }),
+    }
+}
+
+fn get_solvers_inner_explicit<T: ExplicitStepper + 'static>(
+    model: &impl Model<ModelPoint = DimensionlessProperties>,
+    system: Rotating1D,
+    stepper: impl Fn() -> T,
+) -> ErasedSolver
+where
+    DefaultAllocator:
+        DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
+    DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
+{
+    let system1 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
+    let system2 = DiscretizedSystemImpl::new(&LinearInterpolator::new(model), stepper(), system);
+
+    ErasedSolver {
+        det: Box::new(move |freq: f64| determinant_explicit(&system1, freq)),
         eigenvector: Box::new(move |freq: f64| {
             let mut upper = UpperResult::new(system2.shape().value(), system2.len());
 
@@ -215,22 +244,22 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047713704245694,
-                4.266743680981153,
+                3.3047713704245685,
+                4.266743680981154,
                 5.171702299941156,
-                6.112905983585802,
-                7.202738950833407,
-                8.382723977190482,
+                6.112905983585803,
+                7.202738950833405,
+                8.38272397719048,
                 9.59265226357175,
-                10.775260427749851,
-                11.919989125372588,
-                13.05302506479156,
-                14.21040239052509,
-                15.393646992355478,
-                16.587566699774317,
+                10.775260427749853,
+                11.919989125372584,
+                13.053025064791559,
+                14.210402390525093,
+                15.393646992355476,
+                16.58756669977432,
                 17.785225703318673,
-                18.986943176671076,
-                20.196748539158158,
+                18.98694317667108,
+                20.19674853915816,
                 21.413709426356597,
                 22.635043899316315,
                 23.85999187918837
@@ -244,25 +273,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047593916481066,
-                4.266719192746617,
+                3.304759391648108,
+                4.26671919274662,
                 5.171684715567709,
-                6.112886899795954,
-                7.202717477992444,
+                6.112886899795952,
+                7.202717477992449,
                 8.382699985122144,
-                9.592628963845494,
+                9.592628963845488,
                 10.775237838963534,
                 11.919966056603885,
                 13.052996592400572,
-                14.21036912946466,
+                14.210369129464656,
                 15.393610052143487,
                 16.587528274555247,
                 17.785182638743187,
-                18.986892112467753,
-                20.196692379988278,
-                21.41364353540086,
-                22.634973769188907,
-                23.85991349447958
+                18.98689211246775,
+                20.196692379988274,
+                21.413643535400855,
+                22.634973769188903,
+                23.859913494479585
             ]
         );
     }
@@ -273,25 +302,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047593946264087,
+                3.3047593946264073,
                 4.26671919874191,
-                5.171684719753799,
-                6.112886903881922,
+                5.1716847197538005,
+                6.1128869038819245,
                 7.202717482211952,
-                8.382699988994167,
-                9.592628967346549,
-                10.775237841907021,
-                11.919966058823988,
+                8.38269998899417,
+                9.592628967346545,
+                10.775237841907025,
+                11.919966058823984,
                 13.052996593538865,
-                14.210369129178005,
+                14.210369129178003,
                 15.393610050060138,
-                16.58752827032286,
+                16.587528270322867,
                 17.78518263130526,
                 18.986892100317895,
-                20.196692362436366,
+                20.19669236243637,
                 21.413643510617305,
                 22.634973736981383,
-                23.859913452528318
+                23.859913452528314
             ]
         );
     }
@@ -302,25 +331,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047593946234786,
+                3.3047593946234777,
                 4.26671919873601,
-                5.171684719749656,
-                6.112886903877848,
-                7.2027174822077225,
+                5.171684719749659,
+                6.112886903877847,
+                7.202717482207721,
                 8.382699988990208,
-                9.59262896734293,
-                10.775237841903936,
+                9.592628967342927,
+                10.775237841903934,
                 11.919966058821533,
                 13.052996593537092,
-                14.210369129177167,
-                15.393610050060659,
+                14.210369129177169,
+                15.393610050060662,
                 16.587528270325205,
                 17.785182631309826,
                 18.98689210032505,
-                20.196692362446704,
-                21.413643510631335,
-                22.63497373700006,
-                23.859913452552167
+                20.196692362446697,
+                21.41364351063134,
+                22.634973737000056,
+                23.85991345255217
             ]
         );
     }
