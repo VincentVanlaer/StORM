@@ -63,6 +63,7 @@ pub(crate) struct DiscretizedSystemImpl<T: ComplexField + Copy, S: System<T>, St
     inner: S::ModelPoint,
     outer: S::ModelPoint,
     delta: Vec<f64>,
+    points: Vec<f64>,
 }
 
 impl<T: ComplexField + Copy, Stepper: ImplicitStepper, S: System<T>>
@@ -95,28 +96,31 @@ where
         let mut matrices = MatrixArray::new_with(n, n, Dyn(points), || T::zero());
         let mut interpolated_points = Vec::with_capacity(points);
         let mut delta = Vec::with_capacity(steps);
+        let mut xs = Vec::with_capacity(points);
 
-        for i in 1..steps {
+        for i in 0..steps {
             let (left, right) = if let Some(solving_grid) = &solving_grid {
-                (solving_grid[i].ln(), solving_grid[i + 1].ln())
+                (solving_grid[i], solving_grid[i + 1])
             } else {
-                (model.pos(i).ln(), model.pos(i + 1).ln())
+                (model.pos(i), model.pos(i + 1))
             };
 
             delta.push(right - left);
-
-            if i == 1 {
-                delta.push(right - left);
-            }
         }
 
         let mut lower_idx = 0;
 
         for i in 0..steps {
             for j in 0..point_locations.len() {
-                let interpolated_point = if let Some(solving_grid) = &solving_grid {
-                    let pos = solving_grid[i] + point_locations[j];
+                let pos = if let Some(solving_grid) = &solving_grid {
+                    solving_grid[i]
+                } else {
+                    model.pos(i)
+                } + (point_locations[j] * delta[i]);
 
+                xs.push(pos);
+
+                let interpolated_point = if let Some(_solving_grid) = &solving_grid {
                     while model.pos(lower_idx + 1) <= pos {
                         lower_idx += 1;
                     }
@@ -131,7 +135,11 @@ where
 
                 let idx = i * point_locations.len() + j;
 
-                system.eval(interpolated_point, delta[i], &mut matrices.index_mut(idx));
+                system.eval(
+                    interpolated_point,
+                    delta[i] / pos,
+                    &mut matrices.index_mut(idx),
+                );
 
                 interpolated_points.push(interpolated_point);
             }
@@ -144,7 +152,8 @@ where
             matrices,
             delta,
             inner: model.eval_exact(0).into(),
-            outer: model.eval_exact(steps).into(),
+            outer: model.eval_exact(model.len() - 1).into(),
+            points: xs,
         }
     }
 }
@@ -221,7 +230,7 @@ where
             self.system.add_frequency(
                 frequency,
                 self.interpolated_points[step * points_per_step + i],
-                self.delta[step],
+                self.delta[step] / self.points[step * points_per_step + i],
                 &mut matrix_array.index_mut(i),
             );
         }
@@ -261,7 +270,7 @@ where
             self.system.add_frequency(
                 frequency,
                 self.interpolated_points[step * points_per_step + i],
-                self.delta[step],
+                self.delta[step] / self.points[step * points_per_step + i],
                 &mut matrix_array.index_mut(i),
             );
         }
