@@ -93,7 +93,7 @@ const C4_4: f64 = 0.861_136_311_594_052_6 / 2.;
 // 2. Fill in f'(x, y) = A(x)y
 // 3. In general, it seems that the equations can always be transformed to
 //
-//    kᵢ = Aᵢ(y₀ + ∑ⱼcᵢⱼkⱼ) => -Aᵢ(y₀ + y₁) / 2 = Aᵢ(kᵢ + ∑ⱼ(cᵢⱼ - bⱼ/ 2) kⱼ)
+//    kᵢ = Aᵢ(y₀ + ∑ⱼcᵢⱼkⱼ) => -Aᵢ(y₀ + y₁) / 2 = kᵢ + Aᵢ∑ⱼ(cᵢⱼ - bⱼ/ 2) k
 //      where cᵢᵢ - bᵢ/ 2 = 0
 //
 //    NOTE that all kᵢ are vectors with the same dimensions as A(x), and Aᵢ≡ hA(xᵢ)
@@ -185,6 +185,65 @@ impl ImplicitStepper for Colloc4 {
         let k1 = &(a1 + a1 * k2 * c1);
 
         let jump = (k1 + k2) * one_fourth;
+
+        assign_matrix(left, &jump + eye);
+        assign_matrix(right, &jump - eye);
+    }
+}
+
+pub(crate) struct Colloc6 {}
+
+macro_rules! sc {
+    ($e: expr) => {
+        T::from_subset(&$e)
+    };
+}
+
+impl ImplicitStepper for Colloc6 {
+    type Points = Const<3>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5 + C3_1, 0.5 + C3_2, 0.5 + C3_3].into()
+    }
+
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        right: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        let d12 = -2. / 3. * C3_1;
+        let d13 = -1. / 3. * C3_1;
+        let d21 = 5. / 12. * C3_1;
+        let d23 = -5. / 12. * C3_1;
+        let d31 = 1. / 3. * C3_1;
+        let d32 = 2. / 3. * C3_1;
+
+        // Collocation points
+        let a1 = &values.index(0);
+        let a2 = &values.index(1);
+        let a3 = &values.index(2);
+
+        let a2a1 = &(a2 * a1);
+        let a3a1 = &(a3 * a1);
+        let eye = &(Matrix::identity_generic(a1.shape_generic().0, a1.shape_generic().1));
+
+        let inv1 = &(eye - a2a1 * sc!(d12 * d21)).try_inverse().unwrap();
+
+        let o2 = inv1 * (a2 - a2a1 * sc!(d21));
+        let l2 = inv1 * (a2 * sc!(d23) - a2a1 * sc!(d13 * d21));
+
+        let f3 = a3 * sc!(d32) - a3a1 * sc!(d12 * d31);
+        let o3 = a3 - a3a1 * sc!(d31) - &f3 * &o2;
+        let l3 = eye - a3a1 * sc!(d13 * d31) - &f3 * &l2;
+
+        let k3 = l3.try_inverse().unwrap() * o3;
+        let k2 = o2 - l2 * &k3;
+        let k1 = a1 * (eye - &k2 * sc!(d12) - &k3 * sc!(d13));
+
+        let jump = k1 * sc!(5. / 36.) + k2 * sc!(2. / 9.) + k3 * sc!(5. / 36.);
 
         assign_matrix(left, &jump + eye);
         assign_matrix(right, &jump - eye);

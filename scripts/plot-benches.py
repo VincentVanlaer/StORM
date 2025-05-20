@@ -88,7 +88,7 @@ plt.savefig("test-data/generated/gyre-performance.pdf")
 
 plt.figure()
 
-ref = freqs.pop("COLLOC_GL6_BAND")
+ref = freqs["COLLOC_GL6_BAND"]
 
 for i, (k, v) in enumerate(freqs.items()):
     if len(ref) != len(v):
