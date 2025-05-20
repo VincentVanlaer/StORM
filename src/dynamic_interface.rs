@@ -12,7 +12,8 @@ use crate::solver::{
     DeterminantAllocs, UpperResult, determinant, determinant_explicit, determinant_with_upper,
 };
 use crate::stepper::{
-    Colloc2, Colloc4, Colloc6, ExplicitStepper, ImplicitStepper, Magnus2, Magnus4, Magnus6, Magnus8,
+    Colloc2, Colloc4, Colloc6, Colloc8, ExplicitStepper, ImplicitStepper, Magnus2, Magnus4,
+    Magnus6, Magnus8,
 };
 use crate::system::adiabatic::Rotating1D;
 use crate::system::discretized::{DiscretizedSystem, DiscretizedSystemImpl};
@@ -26,6 +27,8 @@ pub enum DifferenceSchemes {
     Colloc4,
     /// Sixth-order collocation method
     Colloc6,
+    /// Eight-order collocation method
+    Colloc8,
     /// Second-order magnus method
     Magnus2,
     /// Fourth-order magnus method
@@ -71,6 +74,9 @@ impl ErasedSolver {
             }
             DifferenceSchemes::Colloc6 => {
                 get_solvers_inner(model, system, || Colloc6 {}, solver_grid)
+            }
+            DifferenceSchemes::Colloc8 => {
+                get_solvers_inner(model, system, || Colloc8 {}, solver_grid)
             }
         }
     }
@@ -287,6 +293,35 @@ mod test {
                 21.413725738741416,
                 22.635064868154704,
                 23.86001416975952
+            ]
+        );
+    }
+
+    #[test]
+    fn test_frequencies_colloc8() {
+        let frequencies = compute_frequencies_radial(DifferenceSchemes::Colloc8);
+        assert_eq!(
+            frequencies,
+            [
+                3.3047720151599753,
+                4.266745962856291,
+                5.171704819103482,
+                6.1129083500372925,
+                7.202742116537371,
+                8.382726336874333,
+                9.59265759846707,
+                10.77526842787068,
+                11.919998897285893,
+                13.053033512334292,
+                14.210411212010365,
+                15.393657589873284,
+                16.587581423128256,
+                17.785241946812558,
+                18.986958386021772,
+                20.196766221583868,
+                21.413725738737106,
+                22.635064868149517,
+                23.860014169753267
             ]
         );
     }

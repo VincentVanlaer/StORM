@@ -250,6 +250,86 @@ impl ImplicitStepper for Colloc6 {
     }
 }
 
+pub(crate) struct Colloc8 {}
+
+const D4_12: f64 = 1.89640468800635328970119143171e-1;
+const D4_13: f64 = 1.5040882602623181114167713212e-1;
+const D4_14: f64 = 9.05188609701591475001769691551e-2;
+
+const D4_21: f64 = -1.01154406215504607307419557782e-1;
+const D4_23: f64 = 1.90916717318107430880885119114e-1;
+const D4_24: f64 = 8.02282106898253088278673182198e-2;
+
+const D4_31: f64 = -8.02282106898253088278673182198e-2;
+const D4_32: f64 = -1.90916717318107430880885119114e-1;
+const D4_34: f64 = 1.01154406215504607307419557782e-1;
+
+const D4_41: f64 = -9.05188609701591475001769691551e-2;
+const D4_42: f64 = -1.5040882602623181114167713212e-1;
+const D4_43: f64 = -1.89640468800635328970119143171e-1;
+
+impl ImplicitStepper for Colloc8 {
+    type Points = Const<4>;
+
+    fn points(&self) -> Vec<f64> {
+        [0.5 + C4_1, 0.5 + C4_2, 0.5 + C4_3, 0.5 + C4_4].into()
+    }
+
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        right: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        // Collocation points
+        let a1 = &values.index(0);
+        let a2 = &values.index(1);
+        let a3 = &values.index(2);
+        let a4 = &values.index(3);
+
+        let a2a1 = &(a2 * a1);
+        let a3a1 = &(a3 * a1);
+        let a4a1 = &(a4 * a1);
+        let eye = &(Matrix::identity_generic(a1.shape_generic().0, a1.shape_generic().1));
+
+        let u12 = a1 * sc!(D4_12);
+        let u13 = a1 * sc!(D4_13);
+        let u14 = a1 * sc!(D4_14);
+
+        let d2 = eye - a2a1 * sc!(D4_21 * D4_12);
+        let inv2 = &d2.try_inverse().unwrap();
+
+        let u23 = inv2 * (a2 * sc!(D4_23) - a2a1 * sc!(D4_21 * D4_13));
+        let u24 = inv2 * (a2 * sc!(D4_24) - a2a1 * sc!(D4_21 * D4_14));
+        let r2 = inv2 * (a2 - a2a1 * sc!(D4_21));
+
+        let l32 = a3 * sc!(D4_32) - a3a1 * sc!(D4_31 * D4_12);
+        let d3 = eye - a3a1 * sc!(D4_31 * D4_13) - &l32 * &u23;
+        let inv3 = &d3.try_inverse().unwrap();
+
+        let u34 = inv3 * (a3 * sc!(D4_34) - a3a1 * sc!(D4_31 * D4_14) - &l32 * &u24);
+        let r3 = inv3 * (a3 - a3a1 * sc!(D4_31) - &l32 * &r2);
+
+        let l42 = a4 * sc!(D4_42) - a4a1 * sc!(D4_41 * D4_12);
+        let l43 = a4 * sc!(D4_43) - a4a1 * sc!(D4_41 * D4_13) - &l42 * &u23;
+        let d4 = eye - a4a1 * sc!(D4_41 * D4_14) - &l42 * &u24 - &l43 * &u34;
+        let inv4 = &d4.try_inverse().unwrap();
+
+        let r4 = inv4 * (a4 - a4a1 * sc!(D4_41) - l42 * &r2 - l43 * &r3);
+
+        let k4 = r4;
+        let k3 = r3 - u34 * &k4;
+        let k2 = r2 - u24 * &k4 - u23 * &k3;
+        let k1 = a1 - u14 * &k4 - u13 * &k3 - u12 * &k2;
+
+        let jump = k1 * sc!(W1 / 2.) + k2 * sc!(W2 / 2.) + k3 * sc!(W2 / 2.) + k4 * sc!(W1 / 2.);
+        assign_matrix(left, &jump + eye);
+        assign_matrix(right, &jump - eye);
+    }
+}
+
 pub(crate) struct Magnus2 {}
 
 impl ExplicitStepper for Magnus2 {

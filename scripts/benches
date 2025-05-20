@@ -19,7 +19,7 @@ MATRIX_TYPES="BAND"
 
 cargo build --release
 
-DIFF_SCHEMES_STORM="colloc2 colloc4 colloc6 magnus2 magnus4 magnus6 magnus8"
+DIFF_SCHEMES_STORM="colloc2 colloc4 colloc6 colloc8 magnus2 magnus4 magnus6 magnus8"
 for DIFF_SCHEME in $DIFF_SCHEMES_STORM; do
     RUN_NAME="${DIFF_SCHEME}_storm"
     mkdir -p test-data/generated/$RUN_NAME
