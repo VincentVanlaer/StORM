@@ -16,6 +16,13 @@ pub(crate) trait ImplicitStepper {
         values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
     ) where
         DefaultAllocator: Allocator<N, N>;
+
+    fn as_explicit(self) -> impl ExplicitStepper<Points = Self::Points>
+    where
+        Self: Sized,
+    {
+        ImplicitWrapper { wrapped: self }
+    }
 }
 
 pub(crate) trait ExplicitStepper {
@@ -50,6 +57,34 @@ impl<S: ExplicitStepper> ImplicitStepper for S {
         right.fill_with_identity();
 
         self.apply(left, values)
+    }
+}
+
+struct ImplicitWrapper<T> {
+    wrapped: T,
+}
+
+impl<S: ImplicitStepper> ExplicitStepper for ImplicitWrapper<S> {
+    type Points = S::Points;
+
+    fn points(&self) -> Vec<f64> {
+        self.wrapped.points()
+    }
+
+    #[inline(always)]
+    fn apply<T: ComplexField, N: Dim>(
+        &self,
+        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
+        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
+    ) where
+        DefaultAllocator: Allocator<N, N>,
+    {
+        let mut r = Matrix::zeros_generic(left.shape_generic().0, left.shape_generic().1);
+        let mut l = Matrix::zeros_generic(left.shape_generic().0, left.shape_generic().1);
+
+        self.wrapped.apply(&mut l, &mut r, values);
+
+        left.copy_from(&(r.try_inverse().unwrap() * l));
     }
 }
 
