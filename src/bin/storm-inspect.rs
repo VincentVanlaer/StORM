@@ -1,7 +1,3 @@
-#![feature(never_type)]
-#![feature(generic_const_exprs)]
-#![expect(incomplete_features)]
-
 use std::cell::Cell;
 
 use color_eyre::Result;
