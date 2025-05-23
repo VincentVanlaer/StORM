@@ -7,6 +7,7 @@ edition = "2024"
 
 [profile.release]
 debug = true
+lto = "thin"
 
 [profile.native]
 inherits = "release"
