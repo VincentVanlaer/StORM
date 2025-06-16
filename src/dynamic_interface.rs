@@ -1,6 +1,9 @@
 //! Main interface for computing the determinant for a trial frequency
 
-use nalgebra::{Const, DefaultAllocator, Dim, Dyn};
+use std::convert::Infallible;
+
+use nalgebra::allocator::Allocator;
+use nalgebra::{Const, DefaultAllocator, Dim, DimAdd, DimMul, DimSub, Dyn};
 
 use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
@@ -8,9 +11,7 @@ use crate::bracket::{
 use crate::linalg::storage::ArrayAllocator;
 use crate::model::DimensionlessProperties;
 use crate::model::interpolate::InterpolatingModel;
-use crate::solver::{
-    DeterminantAllocs, UpperResult, determinant, determinant_explicit, determinant_with_upper,
-};
+use crate::solver::{UpperResult, determinant, determinant_explicit, determinant_with_upper};
 use crate::stepper::{
     Colloc2, Colloc4, Colloc6, Colloc8, ExplicitStepper, ImplicitStepper, Magnus2, Magnus4,
     Magnus6, Magnus8,
@@ -109,11 +110,11 @@ impl ErasedSolver {
                     .optimize(
                         point1,
                         point2,
-                        |point| Ok::<_, !>(self.det(point)),
+                        |point| Ok::<_, Infallible>(self.det(point)),
                         precision,
                         None,
                     )
-                    .into_ok()
+                    .unwrap()
             })
     }
 }
@@ -125,9 +126,13 @@ fn get_solvers_inner<T: ImplicitStepper + 'static>(
     solver_grid: Option<&[f64]>,
 ) -> ErasedSolver
 where
-    DefaultAllocator:
-        DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
-    DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
+    DefaultAllocator: Allocator<Const<4>, Const<4>>
+        + Allocator<Const<2>, Const<4>>
+        + Allocator<<Const<4> as DimSub<Const<2>>>::Output, Const<4>>
+        + Allocator<<Const<4> as DimMul<Const<2>>>::Output, <Const<4> as DimAdd<Const<2>>>::Output>
+        + Allocator<<Const<4> as DimMul<Const<2>>>::Output, Const<1>>
+        + ArrayAllocator<Const<4>, Const<4>, Dyn>
+        + ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
     let system1 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
     let system2 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
@@ -151,9 +156,13 @@ fn get_solvers_inner_explicit<T: ExplicitStepper + 'static>(
     solver_grid: Option<&[f64]>,
 ) -> ErasedSolver
 where
-    DefaultAllocator:
-        DeterminantAllocs<Const<4>, Const<2>> + ArrayAllocator<Const<4>, Const<4>, Dyn>,
-    DefaultAllocator: ArrayAllocator<Const<4>, Const<4>, T::Points>,
+    DefaultAllocator: Allocator<Const<4>, Const<4>>
+        + Allocator<Const<2>, Const<4>>
+        + Allocator<<Const<4> as DimSub<Const<2>>>::Output, Const<4>>
+        + Allocator<<Const<4> as DimMul<Const<2>>>::Output, <Const<4> as DimAdd<Const<2>>>::Output>
+        + Allocator<<Const<4> as DimMul<Const<2>>>::Output, Const<1>>
+        + ArrayAllocator<Const<4>, Const<4>, Dyn>
+        + ArrayAllocator<Const<4>, Const<4>, T::Points>,
 {
     let system1 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
     let system2 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);

@@ -5,15 +5,14 @@
 }:
 let
   rust-toolchain = fenix.combine [
-    fenix.latest.cargo
-    fenix.latest.clippy
-    fenix.latest.rustc
-    fenix.latest.rustfmt
-    fenix.latest.rust-analyzer
-    fenix.latest.rust-src
-    fenix.latest.rust-std
-    fenix.targets.x86_64-unknown-linux-musl.latest.rust-std
-    fenix.latest.miri
+    fenix.stable.cargo
+    fenix.stable.clippy
+    fenix.stable.rustc
+    fenix.stable.rustfmt
+    fenix.stable.rust-analyzer
+    fenix.stable.rust-src
+    fenix.stable.rust-std
+    fenix.targets.x86_64-unknown-linux-musl.stable.rust-std
   ];
   package = (import ./default.nix { inherit rust-toolchain; });
 

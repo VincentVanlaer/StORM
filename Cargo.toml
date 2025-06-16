@@ -1,5 +1,3 @@
-cargo-features = ["profile-rustflags"]
-
 [package]
 name = "storm"
 version = "0.1.0"
@@ -8,9 +6,6 @@ edition = "2024"
 [profile.release]
 debug = true
 lto = "thin"
-
-[profile.native]
-inherits = "release"
 
 [profile.test]
 opt-level = 2
@@ -39,7 +34,7 @@ shlex = "1.3.0"
 rustyline = { version = "15.0.0", default-features = false }
 iai-callgrind = "0.14.0"
 tango-bench = "0.6.0"
-# hdf5-metno-sys = { version = "*", features = ["static"] }
+hdf5-metno-sys = { version = "*", features = ["static"] }
 
 [[bench]]
 name = "instruction-count"

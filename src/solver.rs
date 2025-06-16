@@ -20,7 +20,13 @@ pub(crate) fn determinant<
     frequency: T,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<System::N, System::NInner>,
+    DefaultAllocator: Allocator<System::N, System::N>
+        + Allocator<System::NInner, System::N>
+        + Allocator<<System::N as DimSub<System::NInner>>::Output, System::N>
+        + Allocator<
+            <System::N as DimMul<Const<2>>>::Output,
+            <System::N as DimAdd<System::NInner>>::Output,
+        > + Allocator<<System::N as DimMul<Const<2>>>::Output, Const<1>>,
 {
     determinant_inner(system, frequency, &mut ())
 }
@@ -34,7 +40,13 @@ pub(crate) fn determinant_with_upper<
     upper: &mut UpperResult<T>,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<System::N, System::NInner>,
+    DefaultAllocator: Allocator<System::N, System::N>
+        + Allocator<System::NInner, System::N>
+        + Allocator<<System::N as DimSub<System::NInner>>::Output, System::N>
+        + Allocator<
+            <System::N as DimMul<Const<2>>>::Output,
+            <System::N as DimAdd<System::NInner>>::Output,
+        > + Allocator<<System::N as DimMul<Const<2>>>::Output, Const<1>>,
 {
     assert_eq!(upper.n, system.shape().value());
     assert_eq!(upper.n_systems, system.len());
@@ -147,13 +159,6 @@ impl<T> SetUpperResult<T> for () {
     fn set(&mut self, _point: usize, _k: usize, _i: usize, _val: T) {}
     fn column_pivot(&mut self, _c1: usize, _c2: usize) {}
 }
-
-pub(crate) trait DeterminantAllocs<N: Dim + DimSub<NInner> + DimMul<Const<2>> + DimAdd<NInner>, NInner: Dim> =
-    Allocator<N, N>
-        + Allocator<NInner, N>
-        + Allocator<<N as DimSub<NInner>>::Output, N>
-        + Allocator<<N as DimMul<Const<2>>>::Output, <N as DimAdd<NInner>>::Output>
-        + Allocator<<N as DimMul<Const<2>>>::Output, Const<1>>;
 
 macro_rules! sweep {
     ($bands: ident, $upper: ident, $n_step: ident, $rows: expr, $cols: expr, $idx: ident, $pivot: ident, $pivot_row: ident) => {
@@ -272,7 +277,13 @@ fn determinant_inner<
     upper: &mut impl SetUpperResult<T>,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<System::N, System::NInner>,
+    DefaultAllocator: Allocator<System::N, System::N>
+        + Allocator<System::NInner, System::N>
+        + Allocator<<System::N as DimSub<System::NInner>>::Output, System::N>
+        + Allocator<
+            <System::N as DimMul<Const<2>>>::Output,
+            <System::N as DimAdd<System::NInner>>::Output,
+        > + Allocator<<System::N as DimMul<Const<2>>>::Output, Const<1>>,
 {
     let outer_boundary = {
         let mut outer_boundary = OMatrix::zeros_generic(system.shape_outer(), system.shape());
@@ -429,7 +440,13 @@ pub(crate) fn determinant_explicit<
     frequency: T,
 ) -> T
 where
-    DefaultAllocator: DeterminantAllocs<System::N, System::NInner>,
+    DefaultAllocator: Allocator<System::N, System::N>
+        + Allocator<System::NInner, System::N>
+        + Allocator<<System::N as DimSub<System::NInner>>::Output, System::N>
+        + Allocator<
+            <System::N as DimMul<Const<2>>>::Output,
+            <System::N as DimAdd<System::NInner>>::Output,
+        > + Allocator<<System::N as DimMul<Const<2>>>::Output, Const<1>>,
 {
     let outer_boundary = {
         let mut outer_boundary = OMatrix::zeros_generic(system.shape_outer(), system.shape());

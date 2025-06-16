@@ -32,10 +32,6 @@
 //! #     (0..n).map(move |x| lower + (upper - lower) * (x as f64) / ((n - 1) as f64))
 //! # }
 //! ```
-#![feature(iter_map_windows)]
-#![feature(never_type)]
-#![feature(unwrap_infallible)]
-#![feature(trait_alias)]
 #![allow(clippy::needless_range_loop)] // Makes math code less readable
 #![allow(clippy::too_many_arguments)] // Bit silly
 #![warn(missing_docs)]

@@ -1,5 +1,0 @@
-[build]
-rustflags = ["-Z", "linker-features=-lld"]
-
-[profile.native]
-rustflags = ["-Z", "linker-features=-lld", "-Ctarget-cpu=x86-64-v3"]

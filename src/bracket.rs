@@ -1,4 +1,5 @@
 //! Root finding using bracketing methods
+use itertools::Itertools;
 use std::{num::NonZeroU64, ops::ControlFlow};
 
 /// Result of optimizing a root finding bracket
@@ -236,13 +237,14 @@ impl<T: Iterator<Item = Point>> FilterSignSwap for T {
     type Out = (Point, Point);
 
     fn filter_sign_swap(self) -> impl Iterator<Item = (Point, Point)> {
-        self.map_windows(|&[pair1, pair2]| {
-            if pair1.f.signum() != pair2.f.signum() {
-                Some((pair1, pair2))
-            } else {
-                None
-            }
-        })
-        .flatten()
+        self.tuple_windows()
+            .map(|(pair1, pair2)| {
+                if pair1.f.signum() != pair2.f.signum() {
+                    Some((pair1, pair2))
+                } else {
+                    None
+                }
+            })
+            .flatten()
     }
 }
