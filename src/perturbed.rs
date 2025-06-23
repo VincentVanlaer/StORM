@@ -10,7 +10,7 @@ use num_traits::Zero;
 use crate::{
     gaunt::{q_kl1_h, q_kl1_hd, q_kl2, q_kl2_h, q_kl2_hd},
     linalg::qz,
-    model::{DimensionlessProperties, Model, gsm::StellarModel},
+    model::DiscreteModel,
     postprocessing::Rotating1DPostprocessing,
 };
 
@@ -54,7 +54,10 @@ pub struct ModeCoupling {
 /// The rotation used to compute the modes should match the rotation frequency in the perturbed
 /// metric. Similarly, the azimuthal order should also match the way the modes are computed
 pub fn perturb_deformed(
-    model: &StellarModel,
+    DiscreteModel {
+        dimensionless: model,
+        ..
+    }: &DiscreteModel,
     modes: &[ModeToPerturb],
     m: i64,
     PerturbedMetric {
@@ -67,13 +70,12 @@ pub fn perturb_deformed(
     let trapezoid = {
         let mut trapezoid = vec![0.; model.r_coord.len()];
 
-        trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]) / model.radius;
-        trapezoid[model.r_coord.len() - 1] = 0.5
-            * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2])
-            / model.radius;
+        trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]);
+        trapezoid[model.r_coord.len() - 1] =
+            0.5 * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2]);
 
         for i in 1..(model.r_coord.len() - 1) {
-            trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]) / model.radius;
+            trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]);
         }
 
         trapezoid
@@ -202,12 +204,12 @@ pub fn perturb_deformed(
                             * r.post_processing.xi_h[rc]
                             * threeepsilonadepsilon[rc]
                             / model.r_coord[rc]
-                        - model.grav * model.m_coord[rc] / model.r_coord[rc].powi(2)
+                        - model.m_coord[rc] / model.r_coord[rc].powi(2)
                             * rr
                             * model.rho[rc]
                             * q_kl2
                             * dthreeepsilonadepsilon[rc]
-                        - model.grav * model.m_coord[rc] / model.r_coord[rc].powi(2)
+                        - model.m_coord[rc] / model.r_coord[rc].powi(2)
                             * rh
                             * model.rho[rc]
                             * q_kl2_hrd
@@ -304,7 +306,13 @@ pub struct PerturbedMetric {
 }
 
 /// Deform the stellar structure of a model for a give rotation frequency
-pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
+pub fn perturb_structure(
+    DiscreteModel {
+        dimensionless: model,
+        ..
+    }: &DiscreteModel,
+    rot: f64,
+) -> PerturbedMetric {
     let mut y = vec![Vector2::new(0., 0.); model.r_coord.len()];
 
     y[1] = Vector2::new(1., 2.);
@@ -313,37 +321,21 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
         let delta = model.r_coord[i] - model.r_coord[i - 1];
         let x_12 = 0.5 * (model.r_coord[i] + model.r_coord[i - 1]);
 
-        let DimensionlessProperties {
-            v_gamma,
-            a_star,
-            u: _,
-            c1: _,
-            rot: _,
-        } = model.eval(i);
-
-        let k = 4. * PI * model.radius.powi(2) / model.m_coord[i]
+        let k = 4. * PI / model.m_coord[i]
             * model.rho[i]
             * model.r_coord[i]
-            * (-a_star + v_gamma);
+            * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
 
-        let DimensionlessProperties {
-            v_gamma,
-            a_star,
-            u: _,
-            c1: _,
-            rot: _,
-        } = model.eval(i - 1);
-
-        let k_prev = 4. * PI * model.radius.powi(2) / model.m_coord[i - 1]
+        let k_prev = 4. * PI / model.m_coord[i - 1]
             * model.rho[i - 1]
             * model.r_coord[i - 1]
-            * (-a_star + v_gamma);
+            * (-model.a_star[i - 1] + model.v[i - 1] / model.gamma1[i - 1]);
 
         let a = 0.5 * delta / x_12
             * Matrix2::new(
                 -1.,
                 1.,
-                6. + 0.5 * (model.r_coord[i] / model.radius).powi(2) * (k + k_prev),
+                6. + 0.5 * model.r_coord[i].powi(2) * (k + k_prev),
                 -2.,
             );
         let diag = Matrix2::from_diagonal_element(1.);
@@ -364,27 +356,14 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
     for i in 1..beta.len() {
         let dmda = 4. * PI * model.r_coord[i].powi(2) * model.rho[i] / model.m_coord[i];
 
-        let DimensionlessProperties {
-            v_gamma,
-            a_star,
-            u: _,
-            c1: _,
-            rot: _,
-        } = model.eval(i);
-
-        let k = 4. * PI * model.radius.powi(2) / model.m_coord[i]
+        let k = 4. * PI / model.m_coord[i]
             * model.rho[i]
             * model.r_coord[i]
-            * (-a_star + v_gamma);
-        let ddpsi = ((6. + (model.r_coord[i] / model.radius).powi(2) * k) * y[i].x - 2. * y[i].y)
-            / model.r_coord[i]
-            / model.radius;
+            * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
+        let ddpsi = ((6. + model.r_coord[i].powi(2) * k) * y[i].x - 2. * y[i].y) / model.r_coord[i];
 
-        beta[i] = 2. * model.r_coord[i] / model.radius * model.mass / model.m_coord[i]
-            * a2
-            * y[i].x
-            * (model.r_coord[i] / model.radius)
-            * rot.powi(2);
+        beta[i] =
+            2. * model.r_coord[i] / model.m_coord[i] * a2 * y[i].x * model.r_coord[i] * rot.powi(2);
         dbeta[i] = beta[i] / model.r_coord[i] - beta[i] * dmda
             + beta[i] / (y[i].x * model.r_coord[i]) * y[i].y;
         ddbeta[i] = -2. * beta[i] / model.r_coord[i] * dmda
@@ -393,7 +372,7 @@ pub fn perturb_structure(model: &StellarModel, rot: f64) -> PerturbedMetric {
             + 2. * beta[i] * dmda.powi(2)
             + beta[i] / (y[i].x * model.r_coord[i]) * ddpsi
             - beta[i] / model.m_coord[i] * 8. * PI * model.r_coord[i] * model.rho[i]
-            - beta[i] * dmda / model.r_coord[i] * (-a_star + v_gamma);
+            - beta[i] * dmda / model.r_coord[i] * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
     }
 
     PerturbedMetric {

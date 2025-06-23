@@ -11,8 +11,8 @@ use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
-use storm::model::gsm::StellarModel;
 use storm::model::interpolate::LinearInterpolator;
+use storm::model::{DimensionedProperties, DiscreteModel};
 use storm::perturbed::{
     ModeCoupling, ModeToPerturb, PerturbedMetric, perturb_deformed, perturb_structure,
 };
@@ -475,20 +475,32 @@ impl From<Vec<ModelPropertyFlags>> for ModelProperties {
 }
 
 impl FrequencyUnits {
-    fn scale_factor(&self, model: &StellarModel) -> f64 {
+    fn scale_factor(&self, model: &Option<DimensionedProperties>) -> Result<f64> {
         match self {
-            FrequencyUnits::Dynamical => 1.,
-            FrequencyUnits::Hertz => model.freq_scale() / 2. / std::f64::consts::PI,
-            FrequencyUnits::CyclesPerDay => model.freq_scale() * 86400. / 2. / std::f64::consts::PI,
+            FrequencyUnits::Dynamical => Ok(1.),
+            FrequencyUnits::Hertz => model
+                .map(|model| model.freq_scale() / 2. / std::f64::consts::PI)
+                .ok_or(eyre!(
+                    "Input model is dimensionless, only dynamical frequency is supported"
+                )),
+            FrequencyUnits::CyclesPerDay => model
+                .map(|model| model.freq_scale() * 86400. / 2. / std::f64::consts::PI)
+                .ok_or(eyre!(
+                    "Input model is dimensionless, only dynamical frequency is supported"
+                )),
         }
     }
 
-    fn convert_to_natural(&self, freq: f64, model: &StellarModel) -> f64 {
-        freq / self.scale_factor(model)
+    fn convert_to_natural(&self, freq: f64, model: &Option<DimensionedProperties>) -> Result<f64> {
+        self.scale_factor(model).map(|s| freq / s)
     }
 
-    fn convert_from_natural(&self, freq: f64, model: &StellarModel) -> f64 {
-        self.scale_factor(model) * freq
+    fn convert_from_natural(
+        &self,
+        freq: f64,
+        model: &Option<DimensionedProperties>,
+    ) -> Result<f64> {
+        self.scale_factor(model).map(|s| freq * s)
     }
 }
 
@@ -550,7 +562,7 @@ impl StormCommands {
 
 #[derive(Default)]
 struct StormState {
-    input: Option<StellarModel>,
+    input: Option<DiscreteModel>,
     solutions: Vec<Solution>,
     perturbed_structure: Option<PerturbedMetric>,
     postprocessing: Option<Vec<Rotating1DPostprocessing>>,
@@ -559,9 +571,12 @@ struct StormState {
 
 impl StormState {
     fn input(&mut self, file: &str) -> Result<(), Report> {
-        let file = StellarModel::from_gsm(file).wrap_err(eyre!("Failed to load model"))?;
+        let file = DiscreteModel::from_gsm(file).wrap_err(eyre!("Failed to load model"))?;
 
-        eprintln!("Loaded model with {} points", file.r_coord.len());
+        eprintln!(
+            "Loaded model with {} points",
+            file.dimensionless.r_coord.len()
+        );
 
         self.input = Some(file);
 
@@ -590,8 +605,9 @@ impl StormState {
         )?;
 
         input
+            .dimensionless
             .rot
-            .fill(frequency_units.convert_to_natural(value, input));
+            .fill(frequency_units.convert_to_natural(value, &input.scale)?);
 
         Ok(())
     }
@@ -613,15 +629,15 @@ impl StormState {
             .as_mut()
             .ok_or_eyre("Input was not set. Please run `input` before running a scan.")?;
 
-        let upper = frequency_units.convert_to_natural(upper, input);
-        let lower = frequency_units.convert_to_natural(lower, input);
+        let upper = frequency_units.convert_to_natural(upper, &input.scale)?;
+        let lower = frequency_units.convert_to_natural(lower, &input.scale)?;
 
         let system = Rotating1D::new(ell, m);
         let determinant = ErasedSolver::new(
             &LinearInterpolator::new(input),
             system,
             difference_scheme,
-            None,
+            &input.dimensionless.r_coord,
         );
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
@@ -652,7 +668,7 @@ impl StormState {
             .as_mut()
             .ok_or_eyre("Input was not set. Please run `input` before running deform.")?;
 
-        let rotation = frequency_units.convert_to_natural(rotation, input);
+        let rotation = frequency_units.convert_to_natural(rotation, &input.scale)?;
 
         self.perturbed_structure = Some(perturb_structure(input, rotation));
 
@@ -761,17 +777,23 @@ impl StormState {
         }
 
         if profiles.radial_coordinate {
-            dataset!(output, "radial-coordinate", &input.r_coord)?;
+            dataset!(output, "radial-coordinate", &input.dimensionless.r_coord)?;
         }
 
         let model_group = output.create_group("model")?;
 
         if model_properties.dynamical_frequency {
-            attr!(
-                model_group,
-                "dynamical-frequency",
-                aview0(&input.freq_scale())
-            )?;
+            if let Some(scale) = input.scale {
+                attr!(
+                    model_group,
+                    "dynamical-frequency",
+                    aview0(&scale.freq_scale())
+                )?;
+            } else {
+                eprintln!(
+                    "Dynamical frequency was requested as output, but input model is dimensionless"
+                );
+            }
         }
 
         if let Some(ref perturbed_structure) = self.perturbed_structure {
@@ -792,7 +814,8 @@ impl StormState {
             }
 
             if model_properties.deformation_rotation_frequency {
-                let rot = frequency_units.convert_from_natural(perturbed_structure.rot, input);
+                let rot =
+                    frequency_units.convert_from_natural(perturbed_structure.rot, &input.scale)?;
                 attr!(model_group, "deformation-rotation-frequency", aview0(&rot))?;
             }
         }
@@ -807,7 +830,7 @@ impl StormState {
         for (i, solution) in self.solutions.iter().enumerate() {
             let group = solution_group.create_group(format!("{i}").as_str())?;
 
-            freq.push(frequency_units.convert_from_natural(solution.bracket.root, input));
+            freq.push(frequency_units.convert_from_natural(solution.bracket.root, &input.scale)?);
             ell.push(solution.ell);
             m.push(solution.m);
 
@@ -894,11 +917,14 @@ impl StormState {
                 let freqs = &mode_coupling
                     .freqs
                     .iter()
-                    .map(|x| H5Complex {
-                        re: frequency_units.convert_from_natural(x.real(), input),
-                        im: frequency_units.convert_from_natural(x.imaginary(), input),
+                    .map(|x| -> Result<H5Complex> {
+                        Ok(H5Complex {
+                            re: frequency_units.convert_from_natural(x.real(), &input.scale)?,
+                            im: frequency_units
+                                .convert_from_natural(x.imaginary(), &input.scale)?,
+                        })
                     })
-                    .collect_vec();
+                    .collect::<Result<Vec<H5Complex>>>()?;
 
                 dataset!(group, "frequency", &freqs)?;
             }

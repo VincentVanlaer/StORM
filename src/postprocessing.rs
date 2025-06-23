@@ -6,7 +6,7 @@ use itertools::Itertools;
 
 use crate::{
     gaunt::{q_kl1_h, q_kl1_hd},
-    model::{DimensionlessProperties, Model, gsm::StellarModel},
+    model::DiscreteModel,
 };
 
 /// Result from the post processing of a solution to the 1D oscillation equations
@@ -57,7 +57,10 @@ impl Rotating1DPostprocessing {
         eigenvector: &[f64],
         ell: u64,
         m: i64,
-        model: &StellarModel,
+        DiscreteModel {
+            dimensionless: model,
+            ..
+        }: &DiscreteModel,
     ) -> Rotating1DPostprocessing {
         assert!(eigenvector.len().is_multiple_of(4));
         assert_eq!(model.r_coord[0], 0.);
@@ -76,8 +79,6 @@ impl Rotating1DPostprocessing {
         let mut rho_prime = vec![0.; model.r_coord.len()].into_boxed_slice();
         let mut chi = vec![0.; model.r_coord.len()].into_boxed_slice();
 
-        let freq_scale = model.freq_scale();
-
         let lambda = (ell * (ell + 1)) as f64;
         let lambda_n1 = (ell * (ell.saturating_sub(1))) as f64;
         let lambda_p1 = ((ell + 2) * (ell + 1)) as f64;
@@ -95,13 +96,12 @@ impl Rotating1DPostprocessing {
         let trapezoid = {
             let mut trapezoid = vec![0.; model.r_coord.len()];
 
-            trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]) / model.radius;
+            trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]);
             trapezoid[model.r_coord.len() - 1] = 0.5
-                * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2])
-                / model.radius;
+                * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2]);
 
             for i in 1..(model.r_coord.len() - 1) {
-                trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]) / model.radius;
+                trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]);
             }
 
             trapezoid
@@ -113,24 +113,14 @@ impl Rotating1DPostprocessing {
             y3[i] = eigenvector[i * 4 + 2];
             y4[i] = eigenvector[i * 4 + 3];
 
-            let DimensionlessProperties {
-                v_gamma,
-                a_star,
-                u: _,
-                c1,
-                rot: _,
-            } = model.eval(i);
-            let dphi = model.grav * model.m_coord[i] / model.r_coord[i].powi(2);
+            let dphi = model.m_coord[i] / model.r_coord[i].powi(2);
 
-            xi_r[i] = y1[i] * model.r_coord[i].powi(ell_i32 - 1) / model.radius.powi(ell_i32 - 2);
-            p_prime[i] = y2[i] * model.rho[i] * dphi * model.r_coord[i].powi(ell_i32 - 1)
-                / model.radius.powi(ell_i32 - 2);
-            psi_prime[i] =
-                y3[i] * dphi * model.r_coord[i].powi(ell_i32 - 1) / model.radius.powi(ell_i32 - 2);
-            dpsi_prime[i] =
-                y4[i] * dphi * model.r_coord[i].powi(ell_i32 - 2) / model.radius.powi(ell_i32 - 2);
+            xi_r[i] = y1[i] * model.r_coord[i].powi(ell_i32 - 1);
+            p_prime[i] = y2[i] * model.rho[i] * dphi * model.r_coord[i].powi(ell_i32 - 1);
+            psi_prime[i] = y3[i] * dphi * model.r_coord[i].powi(ell_i32 - 1);
+            dpsi_prime[i] = y4[i] * dphi * model.r_coord[i].powi(ell_i32 - 2);
 
-            let rsigma = (freq - mf * model.rot[i]) * freq_scale;
+            let rsigma = freq - mf * model.rot[i];
             let omega_rsq;
             let rel_rot;
 
@@ -139,7 +129,7 @@ impl Rotating1DPostprocessing {
                 omega_rsq = (lambda * (freq - rot) + 2. * rot) * (freq - rot);
                 rel_rot = 2. * rot / (lambda * (freq - rot) + 2. * rot);
 
-                let f = 2. * rot * freq_scale / (ell * (ell + 1)) as f64;
+                let f = 2. * rot / (ell * (ell + 1)) as f64;
                 xi_h[i] = 1. / (rsigma * model.rho[i] * (rsigma + f))
                     * ((p_prime[i] + model.rho[i] * psi_prime[i]) / model.r_coord[i]
                         - f * rsigma * model.rho[i] * xi_r[i]);
@@ -149,16 +139,15 @@ impl Rotating1DPostprocessing {
                 xi_h[i] = 0.;
             }
 
-            let xdy1 = (v_gamma - 1. - ell as f64 - lambda * rel_rot) * y1[i]
-                + (-v_gamma + lambda.powi(2) / (omega_rsq * c1)) * y2[i]
-                + lambda.powi(2) / (omega_rsq * c1) * y3[i];
-            chi[i] = (ell + 1) as f64 * model.r_coord[i].powi(ell_i32 - 2)
-                / model.radius.powi(ell_i32 - 2)
-                * (y1[i] + xdy1)
+            let xdy1 = (model.v[i] / model.gamma1[i] - 1. - ell as f64 - lambda * rel_rot) * y1[i]
+                + (-model.v[i] / model.gamma1[i] + lambda.powi(2) / (omega_rsq * model.c1[i]))
+                    * y2[i]
+                + lambda.powi(2) / (omega_rsq * model.c1[i]) * y3[i];
+            chi[i] = (ell + 1) as f64 * model.r_coord[i].powi(ell_i32 - 2) * (y1[i] + xdy1)
                 - lambda / model.r_coord[i] * xi_h[i];
             rho_prime[i] = model.rho[i]
                 * (p_prime[i] / (model.gamma1[i] * model.p[i])
-                    + a_star * xi_r[i] / model.r_coord[i]);
+                    + model.a_star[i] * xi_r[i] / model.r_coord[i]);
 
             if m.unsigned_abs() == ell || ell == 1 {
                 xi_tn[i] = 0.;
@@ -193,25 +182,23 @@ impl Rotating1DPostprocessing {
             dpsi_prime[0] = 0.;
             xi_h[0] = 0.;
         } else {
-            let ddphi0 = 4. / 3. * std::f64::consts::PI * model.rho[0] * model.grav;
-            xi_r[0] = y1[0] * model.radius;
-            dpsi_prime[0] = y4[0] * ddphi0 * model.radius;
+            let ddphi0 = 4. / 3. * std::f64::consts::PI * model.rho[0];
+            xi_r[0] = y1[0];
+            dpsi_prime[0] = y4[0] * ddphi0;
 
-            let rsigma = (freq - mf * model.rot[0]) * freq_scale;
+            let rsigma = freq - mf * model.rot[0];
             let f = if ell != 0 {
-                2. * mf * model.rot[0] * freq_scale / (ell * (ell + 1)) as f64
+                2. * mf * model.rot[0] / (ell * (ell + 1)) as f64
             } else {
                 0.
             };
 
-            xi_h[0] = 1. / (rsigma * (rsigma + f))
-                * ((y2[0] + y3[0]) * ddphi0 * model.radius - f * xi_r[0]);
+            xi_h[0] = 1. / (rsigma * (rsigma + f)) * ((y2[0] + y3[0]) * ddphi0 - f * xi_r[0]);
         }
 
         if ell == 0 {
-            p_prime[0] =
-                y2[0] * model.rho[0].powi(2) * model.radius.powi(2) * model.grav * 4. / 3. * PI;
-            psi_prime[0] = y3[0] * model.rho[0] * model.radius.powi(2) * model.grav * 4. / 3. * PI;
+            p_prime[0] = y2[0] * model.rho[0].powi(2) * 4. / 3. * PI;
+            psi_prime[0] = y3[0] * model.rho[0] * 4. / 3. * PI;
             rho_prime[0] = model.rho[0] * p_prime[0] / (model.gamma1[0] * model.p[0]);
             chi[0] = -rho_prime[0] / model.rho[0];
         } else {
@@ -266,7 +253,7 @@ impl Rotating1DPostprocessing {
                 let mut y2_alt = vec![0.; model.r_coord.len()].into_boxed_slice();
 
                 for i in 0..y2_alt.len() {
-                    y1_alt[i] = (1. - model.eval(i).u / 3.) * y1[i] + (y3[i] - y4[i]) / 3.;
+                    y1_alt[i] = (1. - model.u[i] / 3.) * y1[i] + (y3[i] - y4[i]) / 3.;
                     y2_alt[i] = y2[i] - y1[i];
                 }
 
@@ -373,7 +360,7 @@ mod tests {
     use crate::{
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, ErasedSolver},
-        model::{gsm::StellarModel, interpolate::LinearInterpolator},
+        model::{DiscreteModel, interpolate::LinearInterpolator},
         system::adiabatic::Rotating1D,
     };
 
@@ -391,7 +378,7 @@ mod tests {
             let main_dir: PathBuf = std::env::var("CARGO_MANIFEST_DIR").unwrap().into();
             let model_file = main_dir.join(model);
 
-            StellarModel::from_gsm(model_file).unwrap()
+            DiscreteModel::from_gsm(model_file).unwrap()
         };
 
         let system = Rotating1D::new(ell, m);
@@ -399,7 +386,7 @@ mod tests {
             &LinearInterpolator::new(&model),
             system,
             DifferenceSchemes::Colloc2,
-            None,
+            &model.dimensionless.r_coord,
         );
         let points = linspace(lower, upper, steps);
 

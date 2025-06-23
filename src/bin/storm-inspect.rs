@@ -8,7 +8,7 @@ use storm::{
         Precision,
     },
     dynamic_interface::{DifferenceSchemes, ErasedSolver},
-    model::{gsm::StellarModel, interpolate::LinearInterpolator},
+    model::{DiscreteModel, interpolate::LinearInterpolator},
     system::adiabatic::Rotating1D,
 };
 
@@ -27,14 +27,14 @@ fn main() -> Result<()> {
     let steps: usize = 25;
     let difference_scheme = DifferenceSchemes::Colloc2;
 
-    let model = StellarModel::from_gsm("test-data/test-model-tams.GSM")?;
+    let model = DiscreteModel::from_gsm("test-data/test-model-tams.GSM")?;
     let system = Rotating1D::new(0, 0);
     let searcher = &InverseQuadratic {};
     let determinant = ErasedSolver::new(
         &LinearInterpolator::new(&model),
         system,
         difference_scheme,
-        None,
+        &model.dimensionless.r_coord,
     );
 
     let dets: Vec<_> = linspace(lower, upper, steps)

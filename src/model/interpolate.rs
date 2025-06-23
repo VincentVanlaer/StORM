@@ -1,58 +1,96 @@
-use super::{DimensionlessProperties, Model};
+use super::{ContinuousModel, DimensionlessProperties, DiscreteModel};
 
-pub(crate) trait InterpolatingModel {
-    type ModelPoint;
-
-    fn len(&self) -> usize;
-    fn pos(&self, idx: usize) -> f64;
-
-    fn eval(&self, idx: usize, pos: f64) -> Self::ModelPoint;
-    fn eval_exact(&self, idx: usize) -> Self::ModelPoint;
+/// Linear interpolator for a [DiscreteModel]
+pub struct LinearInterpolator<'model> {
+    model: &'model DiscreteModel,
 }
 
-pub struct LinearInterpolator<'model, M> {
-    model: &'model M,
-}
-
-impl<'model, M: Model> LinearInterpolator<'model, M> {
-    pub fn new(model: &'model M) -> Self {
+impl<'model> LinearInterpolator<'model> {
+    /// Construct a new interpolator from a model
+    pub fn new(model: &'model DiscreteModel) -> Self {
         LinearInterpolator { model }
     }
 }
 
-impl<M: Model<ModelPoint = DimensionlessProperties>> InterpolatingModel
-    for LinearInterpolator<'_, M>
-{
-    type ModelPoint = M::ModelPoint;
+impl ContinuousModel for LinearInterpolator<'_> {
+    fn eval(&self, grid: &[f64]) -> DiscreteModel {
+        let mut old_grid_iter = self.model.dimensionless.r_coord.iter().enumerate();
+        let mut new_grid_iter = grid.iter().enumerate();
 
-    fn len(&self) -> usize {
-        self.model.len()
-    }
+        let mut model = DiscreteModel {
+            dimensionless: DimensionlessProperties {
+                r_coord: vec![0.; grid.len()].into(),
+                m_coord: vec![0.; grid.len()].into(),
+                rho: vec![0.; grid.len()].into(),
+                p: vec![0.; grid.len()].into(),
+                v: vec![0.; grid.len()].into(),
+                u: vec![0.; grid.len()].into(),
+                gamma1: vec![0.; grid.len()].into(),
+                a_star: vec![0.; grid.len()].into(),
+                c1: vec![0.; grid.len()].into(),
+                rot: vec![0.; grid.len()].into(),
+            },
+            scale: self.model.scale,
+        };
 
-    fn pos(&self, idx: usize) -> f64 {
-        self.model.pos(idx)
-    }
+        let mut prev = (0, &self.model.dimensionless.r_coord[0]);
+        let mut next = (0, &self.model.dimensionless.r_coord[0]);
+        let mut current_new_grid_point = new_grid_iter.next().unwrap();
 
-    fn eval(&self, idx: usize, pos: f64) -> Self::ModelPoint {
-        let lower = self.model.eval(idx);
-        let upper = self.model.eval(idx + 1);
+        loop {
+            if next.1 == current_new_grid_point.1 {
+                macro_rules! cp {
+                    ($($e: ident),+) => {
+                        $(model.dimensionless.$e[current_new_grid_point.0] = self.model.dimensionless.$e[next.0];)*
+                    };
+                }
 
-        macro_rules! interp {
-            ($e: ident) => {
-                lower.$e + pos * (upper.$e - lower.$e)
+                cp!(r_coord, m_coord, rho, p, v, u, gamma1, a_star, c1, rot);
+
+                if let Some(c) = new_grid_iter.next() {
+                    current_new_grid_point = c;
+                    continue;
+                } else {
+                    break;
+                };
+            } else if next.1 > current_new_grid_point.1 {
+                macro_rules! interp {
+                    ($($e: ident),+) => {
+                        let m = &self.model.dimensionless;
+                        let pos = (current_new_grid_point.1 - prev.1) / (next.1 - prev.1);
+                        $(model.dimensionless.$e[current_new_grid_point.0] =
+                            m.$e[prev.0] +
+                            pos * (m.$e[next.0] - m.$e[prev.0]);)*
+                    };
+                }
+
+                model.dimensionless.r_coord[current_new_grid_point.0] = *current_new_grid_point.1;
+                interp!(m_coord, rho, p, v, u, gamma1, a_star, c1, rot);
+
+                if let Some(c) = new_grid_iter.next() {
+                    current_new_grid_point = c;
+                    continue;
+                } else {
+                    break;
+                };
+            }
+
+            prev = next;
+            if let Some(n) = old_grid_iter.next() {
+                next = n;
+            } else {
+                break;
             };
         }
 
-        DimensionlessProperties {
-            v_gamma: interp!(v_gamma),
-            a_star: interp!(a_star),
-            u: interp!(u),
-            c1: interp!(c1),
-            rot: interp!(rot),
-        }
+        model
     }
 
-    fn eval_exact(&self, idx: usize) -> Self::ModelPoint {
-        self.model.eval(idx)
+    fn inner(&self) -> f64 {
+        self.model.dimensionless.r_coord[0]
+    }
+
+    fn outer(&self) -> f64 {
+        *self.model.dimensionless.r_coord.last().unwrap()
     }
 }

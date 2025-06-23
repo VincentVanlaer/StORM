@@ -1,6 +1,6 @@
 use nalgebra::{ComplexField, Const, Matrix, StorageMut};
 
-use crate::model::DimensionlessProperties;
+use crate::model::DiscreteModel;
 
 use super::System;
 
@@ -24,8 +24,42 @@ impl Rotating1D {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+/// Structure coefficients needed for adiabatic calculations
+pub struct AdiabaticStructureCoefficients {
+    /// Logarithmic derivative of the mass coordinate
+    pub u: f64,
+    /// Negative pressure derivative divided by first adiabatic exponent
+    pub v_gamma: f64,
+    /// Difference of v_gamma and the density logarithmic derivative
+    pub a_star: f64,
+    /// Inverse average inner density, scaled by overal average density
+    pub c1: f64,
+    /// Rotation rate as fraction of critical
+    pub rot: f64,
+}
+
+impl From<&DiscreteModel> for Vec<AdiabaticStructureCoefficients> {
+    fn from(
+        DiscreteModel {
+            dimensionless: model,
+            ..
+        }: &DiscreteModel,
+    ) -> Vec<AdiabaticStructureCoefficients> {
+        (0..model.r_coord.len())
+            .map(|index| AdiabaticStructureCoefficients {
+                u: model.u[index],
+                v_gamma: model.v[index] / model.gamma1[index],
+                a_star: model.a_star[index],
+                c1: model.c1[index],
+                rot: model.rot[index],
+            })
+            .collect()
+    }
+}
+
 impl<T: ComplexField + Copy> System<T> for Rotating1D {
-    type ModelPoint = DimensionlessProperties;
+    type ModelPoint = AdiabaticStructureCoefficients;
     type N = Const<4>;
     type NInner = Const<2>;
 

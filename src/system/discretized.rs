@@ -5,7 +5,7 @@ use nalgebra::{
 
 use crate::{
     linalg::storage::{ArrayAllocator, ArrayStorage, MatrixArray},
-    model::interpolate::InterpolatingModel,
+    model::{ContinuousModel, DiscreteModel},
     stepper::{ExplicitStepper, ImplicitStepper},
 };
 
@@ -76,72 +76,37 @@ impl<T: ComplexField + Copy, Stepper: ImplicitStepper, S: System<T>>
 where
     DefaultAllocator: ArrayAllocator<S::N, S::N, Dyn>,
     S::ModelPoint: Copy,
+    Vec<S::ModelPoint>: for<'a> From<&'a DiscreteModel>,
 {
     pub(crate) fn new(
-        model: &impl InterpolatingModel<ModelPoint = impl Into<S::ModelPoint>>,
+        model: &impl ContinuousModel,
         stepper: Stepper,
         system: S,
-        solving_grid: Option<&[f64]>,
+        solving_grid: &[f64],
     ) -> Self {
         let n = System::<T>::shape(&system);
         let point_locations = stepper.points();
-        let steps = if let Some(solving_grid) = &solving_grid {
-            solving_grid.len() - 1
-        } else {
-            model.len() - 1
-        };
+        let steps = solving_grid.len() - 1;
 
         let points = point_locations.len() * steps;
 
         let mut matrices = MatrixArray::new_with(n, n, Dyn(points), || T::zero());
-        let mut interpolated_points = Vec::with_capacity(points);
-        let mut delta = Vec::with_capacity(steps);
-        let mut xs = Vec::with_capacity(points);
-
-        for i in 0..steps {
-            let (left, right) = if let Some(solving_grid) = &solving_grid {
-                (solving_grid[i], solving_grid[i + 1])
-            } else {
-                (model.pos(i), model.pos(i + 1))
-            };
-
-            delta.push(right - left);
-        }
-
-        let mut lower_idx = 0;
+        let delta: Vec<_> = solving_grid.windows(2).map(|a| a[1] - a[0]).collect();
+        let xs: Vec<_> = solving_grid
+            .iter()
+            .zip(delta.iter())
+            .flat_map(|(&x, &delta)| point_locations.iter().map(move |&p| x + p * delta))
+            .collect();
+        let interpolated_points: Vec<S::ModelPoint> = (&model.eval(&xs)).into();
 
         for i in 0..steps {
             for j in 0..point_locations.len() {
-                let pos = if let Some(solving_grid) = &solving_grid {
-                    solving_grid[i]
-                } else {
-                    model.pos(i)
-                } + (point_locations[j] * delta[i]);
-
-                xs.push(pos);
-
-                let interpolated_point = if let Some(_solving_grid) = &solving_grid {
-                    while model.pos(lower_idx + 1) <= pos {
-                        lower_idx += 1;
-                    }
-
-                    let rel_pos = (pos - model.pos(lower_idx))
-                        / (model.pos(lower_idx + 1) - model.pos(lower_idx));
-
-                    model.eval(lower_idx, rel_pos).into()
-                } else {
-                    model.eval(i, point_locations[j]).into()
-                };
-
-                let idx = i * point_locations.len() + j;
-
+                let index = i * point_locations.len() + j;
                 system.eval(
-                    interpolated_point,
-                    delta[i] / pos,
-                    &mut matrices.index_mut(idx),
+                    interpolated_points[index],
+                    delta[i] / xs[index],
+                    &mut matrices.index_mut(index),
                 );
-
-                interpolated_points.push(interpolated_point);
             }
         }
 
@@ -151,8 +116,8 @@ where
             interpolated_points,
             matrices,
             delta,
-            inner: model.eval_exact(0).into(),
-            outer: model.eval_exact(model.len() - 1).into(),
+            inner: Into::<Vec<S::ModelPoint>>::into(&model.eval(&[model.inner()]))[0],
+            outer: Into::<Vec<S::ModelPoint>>::into(&model.eval(&[model.outer()]))[0],
             points: xs,
         }
     }
