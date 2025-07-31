@@ -3,7 +3,7 @@
   rustPlatform,
 }:
 rustPlatform.buildRustPackage rec {
-  pname = "iai-callgrind-runner";
+  pname = "cargo-export";
   version = "0.3";
 
   src = fetchFromGitHub {
@@ -15,6 +15,6 @@ rustPlatform.buildRustPackage rec {
 
   doCheck = false;
 
-  cargoHash = "sha256-6TLAjYeSrBFnCnVa8NykAt4fRs5g6c9vwbjKDz802mU=";
+  cargoHash = "sha256-UwLxijc60U/s0SJlBCByl1ruiw8MqskZ7Sgxyo56xIM=";
 }
 

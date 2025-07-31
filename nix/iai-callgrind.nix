@@ -16,5 +16,5 @@ rustPlatform.buildRustPackage rec {
   buildAndTestSubdir = "iai-callgrind-runner";
   doCheck = false;
 
-  cargoHash = "sha256-eILSPs/dOO0GKukgbFctuMfZEE2wYgRctbP/afTzL0o=";
+  cargoHash = "sha256-gMpMQ2XUizSXbk/uva2+m61RHkg+x2rx9PYvcmwBVlI=";
 }
