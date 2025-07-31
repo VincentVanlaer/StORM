@@ -65,6 +65,12 @@ fn main() -> ExitCode {
             println!("[storm] > {}", command);
         }
 
+        // Inline comments are handled by clap. If there is only a comment on the line, then clap
+        // will show the help text (as there is no command), which is not wat we want.
+        if command.starts_with("#") {
+            continue;
+        }
+
         let command = match parse_command(&command) {
             Ok(x) => x,
             Err(error) => {
