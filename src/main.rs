@@ -233,6 +233,8 @@ enum StormCommands {
         #[arg(long)]
         keep_data: bool,
     },
+    #[command(hide(true))]
+    GenerateMarkdown,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -541,6 +543,7 @@ impl StormCommands {
                 model_properties.into(),
                 keep_data,
             ),
+            Self::GenerateMarkdown => Ok(clap_markdown::print_help_markdown::<StormCommands>()),
         }
     }
 }
