@@ -172,7 +172,7 @@ enum StormCommands {
         #[arg(long, default_value = "1e-8")]
         precision: f64,
         /// Difference scheme
-        #[arg(long, default_value = "magnus2")]
+        #[arg(long, default_value = "colloc4")]
         difference_scheme: DifferenceSchemes,
         /// Units of lower and upper
         #[arg(long, default_value = "dynamical")]

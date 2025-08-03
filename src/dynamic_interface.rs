@@ -31,12 +31,28 @@ pub enum DifferenceSchemes {
     /// Eight-order collocation method
     Colloc8,
     /// Second-order magnus method
+    #[deprecated(
+        note = "magnus methods do not converge properly, use the collocation methods instead"
+    )]
+    #[clap(hide = true)]
     Magnus2,
     /// Fourth-order magnus method
+    #[deprecated(
+        note = "magnus methods do not converge properly, use the collocation methods instead"
+    )]
+    #[clap(hide = true)]
     Magnus4,
     /// Sixth-order magnus method
+    #[deprecated(
+        note = "magnus methods do not converge properly, use the collocation methods instead"
+    )]
+    #[clap(hide = true)]
     Magnus6,
     /// Eight-order magnus method
+    #[deprecated(
+        note = "magnus methods do not converge properly, use the collocation methods instead"
+    )]
+    #[clap(hide = true)]
     Magnus8,
 }
 
@@ -54,6 +70,7 @@ impl ErasedSolver {
         scheme: DifferenceSchemes,
         solver_grid: Option<&[f64]>,
     ) -> ErasedSolver {
+        #[allow(deprecated)]
         match scheme {
             DifferenceSchemes::Colloc2 => {
                 get_solvers_inner_explicit(model, system, || Colloc2 {}.as_explicit(), solver_grid)
@@ -337,6 +354,7 @@ mod test {
 
     #[test]
     fn test_frequencies_magnus2() {
+        #[allow(deprecated)]
         let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus2);
         assert_eq!(
             frequencies,
@@ -366,6 +384,7 @@ mod test {
 
     #[test]
     fn test_frequencies_magnus4() {
+        #[allow(deprecated)]
         let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus4);
         assert_eq!(
             frequencies,
@@ -395,6 +414,7 @@ mod test {
 
     #[test]
     fn test_frequencies_magnus6() {
+        #[allow(deprecated)]
         let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus6);
         assert_eq!(
             frequencies,
@@ -424,6 +444,7 @@ mod test {
 
     #[test]
     fn test_frequencies_magnus8() {
+        #[allow(deprecated)]
         let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus8);
         assert_eq!(
             frequencies,
