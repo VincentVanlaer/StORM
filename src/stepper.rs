@@ -89,25 +89,6 @@ impl<S: ImplicitStepper> ExplicitStepper for ImplicitWrapper<S> {
     }
 }
 
-pub(crate) struct Euler {}
-
-impl ExplicitStepper for Euler {
-    type Points = Const<1>;
-
-    fn points(&self) -> Vec<f64> {
-        [0.].into()
-    }
-
-    #[inline(always)]
-    fn apply<T: ComplexField, N: Dim>(
-        &self,
-        left: &mut Matrix<T, N, N, impl StorageMut<T, N, N>>,
-        values: &MatrixArray<T, N, N, Self::Points, impl ArrayStorage<T, N, N, Self::Points>>,
-    ) {
-        left.copy_from(&values.index(0));
-    }
-}
-
 // Collocation points
 
 // Actual value is 0.288675134594812882254
