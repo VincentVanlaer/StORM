@@ -12,7 +12,7 @@ use std::process::ExitCode;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::interpolate::LinearInterpolator;
-use storm::model::{DimensionedProperties, DiscreteModel};
+use storm::model::{ContinuousModel, DimensionedProperties, DiscreteModel};
 use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
 use storm::postprocessing::Rotating1DPostprocessing;
 use storm::system::adiabatic::Rotating1D;
@@ -129,6 +129,9 @@ enum StormCommands {
     Input {
         /// Location of the stellar model. The stellar model should be an HDF5 GYRE model file.
         file: String,
+        /// How many times should each datapoint of the input model be subdivided.
+        #[arg(long, default_value = "1")]
+        resample: usize,
     },
     /// Replace the rotation profile of a model
     SetRotationOverlay {
@@ -508,7 +511,7 @@ impl FrequencyUnits {
 impl StormCommands {
     fn run_command(self, state: &mut StormState) -> Result<(), Report> {
         match self {
-            Self::Input { file } => state.input(&file),
+            Self::Input { file, resample } => state.input(&file, resample),
             Self::SetRotationOverlay { file } => state.set_rotation_overlay(&file),
             Self::SetRotationConstant {
                 value,
@@ -565,13 +568,14 @@ impl StormCommands {
 #[derive(Default)]
 struct StormState {
     input: Option<DiscreteModel>,
+    scale: usize,
     solutions: Vec<Solution>,
     postprocessing: Option<Vec<Rotating1DPostprocessing>>,
     perturbed_frequencies: Vec<ModeCoupling>,
 }
 
 impl StormState {
-    fn input(&mut self, file: &str) -> Result<(), Report> {
+    fn input(&mut self, file: &str, resample: usize) -> Result<(), Report> {
         if !self.solutions.is_empty() {
             return Err(eyre!(
                 "Changing input models with already computed solutions is not supported. Either first write out the results with the `output` command or remove all results using `clear`."
@@ -586,6 +590,7 @@ impl StormState {
         );
 
         self.input = Some(file);
+        self.scale = resample;
 
         Ok(())
     }
@@ -640,11 +645,19 @@ impl StormState {
         let lower = frequency_units.convert_to_natural(lower, &input.scale)?;
 
         let system = Rotating1D::new(ell, m);
+        let grid = input
+            .dimensionless
+            .r_coord
+            .windows(2)
+            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
+            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
+            .collect_vec();
+
         let determinant = ErasedSolver::new(
             &LinearInterpolator::new(input),
             system,
             difference_scheme,
-            &input.dimensionless.r_coord,
+            &grid,
         );
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
@@ -687,6 +700,14 @@ impl StormState {
             "Input was not set. Please run `input` and `scan` before running `post-process`.",
         )?;
 
+        let grid = input
+            .dimensionless
+            .r_coord
+            .windows(2)
+            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
+            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
+            .collect_vec();
+
         self.postprocessing = Some(
             self.solutions
                 .iter()
@@ -696,7 +717,7 @@ impl StormState {
                         &sol.eigenvector,
                         sol.ell,
                         sol.m,
-                        input,
+                        &LinearInterpolator::new(&input).eval(&grid),
                     ))
                 })
                 .try_collect()?,
@@ -709,6 +730,16 @@ impl StormState {
         let input = self.input.as_mut().ok_or_eyre(
             "Input was not set. Please run `input`, `deform`, and `scan` before running `perturb-deformed`.",
         )?;
+
+        let grid = input
+            .dimensionless
+            .r_coord
+            .windows(2)
+            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
+            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
+            .collect_vec();
+
+        let input = &LinearInterpolator::new(&input).eval(&grid);
 
         let perturbed_structure = input.metric.as_ref().wrap_err(
             "Deformed structure was not computed. Please run `deform` before `perturb-deformed`",
@@ -758,6 +789,16 @@ impl StormState {
         let input = self.input.as_mut().ok_or_eyre(
             "Input was not set. Please run `input`, `scan`, and potentially `post-process` before running `output`.",
         )?;
+
+        let grid = input
+            .dimensionless
+            .r_coord
+            .windows(2)
+            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
+            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
+            .collect_vec();
+
+        let input = &LinearInterpolator::new(&input).eval(&grid);
 
         if (model_properties.needs_deformation() || properties.needs_deformation())
             && (input.metric.is_none() || self.perturbed_frequencies.is_empty())
