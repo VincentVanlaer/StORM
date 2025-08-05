@@ -12,6 +12,7 @@ use std::process::ExitCode;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::interpolate::LinearInterpolator;
+use storm::model::polytrope::construct_polytrope;
 use storm::model::{ContinuousModel, DimensionedProperties, DiscreteModel};
 use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
 use storm::postprocessing::Rotating1DPostprocessing;
@@ -129,6 +130,19 @@ enum StormCommands {
     Input {
         /// Location of the stellar model. The stellar model should be an HDF5 GYRE model file.
         file: String,
+        /// How many times should each datapoint of the input model be subdivided.
+        #[arg(long, default_value = "1")]
+        resample: usize,
+    },
+    /// Load a polytrope model
+    InputPoly {
+        /// Polytropic index
+        index: f64,
+        /// Step size in intergation of the polytrope model
+        dx: f64,
+        /// First adiabatic exponent
+        #[arg(long, default_value = "1.66666666666666")]
+        gamma1: f64,
         /// How many times should each datapoint of the input model be subdivided.
         #[arg(long, default_value = "1")]
         resample: usize,
@@ -512,6 +526,12 @@ impl StormCommands {
     fn run_command(self, state: &mut StormState) -> Result<(), Report> {
         match self {
             Self::Input { file, resample } => state.input(&file, resample),
+            Self::InputPoly {
+                index,
+                dx,
+                gamma1,
+                resample,
+            } => state.input_poly(index, dx, gamma1, resample),
             Self::SetRotationOverlay { file } => state.set_rotation_overlay(&file),
             Self::SetRotationConstant {
                 value,
@@ -590,6 +610,38 @@ impl StormState {
         );
 
         self.input = Some(file);
+        self.scale = resample;
+
+        Ok(())
+    }
+
+    fn input_poly(
+        &mut self,
+        index: f64,
+        dx: f64,
+        gamma1: f64,
+        resample: usize,
+    ) -> Result<(), Report> {
+        if !self.solutions.is_empty() {
+            return Err(eyre!(
+                "Changing input models with already computed solutions is not supported. Either first write out the results with the `output` command or remove all results using `clear`."
+            ));
+        }
+
+        if index < 0. || index >= 5. {
+            return Err(eyre!(
+                "Invalid polytrope index {index}. The polytrope index n should be smaller than 5 and positive."
+            ));
+        }
+
+        let model = construct_polytrope(index, gamma1, dx);
+
+        eprintln!(
+            "Loaded model with {} points",
+            model.dimensionless.r_coord.len()
+        );
+
+        self.input = Some(model);
         self.scale = resample;
 
         Ok(())
