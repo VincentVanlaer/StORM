@@ -64,7 +64,7 @@ pub struct ErasedSolver {
 impl ErasedSolver {
     /// Construct from a system, difference scheme and grid definition
     pub fn new(
-        model: &impl ContinuousModel,
+        model: &(impl ContinuousModel + ?Sized),
         system: Rotating1D,
         scheme: DifferenceSchemes,
         solver_grid: &[f64],
@@ -136,7 +136,7 @@ impl ErasedSolver {
 }
 
 fn get_solvers_inner<T: ImplicitStepper + 'static>(
-    model: &impl ContinuousModel,
+    model: &(impl ContinuousModel + ?Sized),
     system: Rotating1D,
     stepper: impl Fn() -> T,
     solver_grid: &[f64],
@@ -166,7 +166,7 @@ where
 }
 
 fn get_solvers_inner_explicit<T: ExplicitStepper + 'static>(
-    model: &impl ContinuousModel,
+    model: &(impl ContinuousModel + ?Sized),
     system: Rotating1D,
     stepper: impl Fn() -> T,
     solver_grid: &[f64],
@@ -203,7 +203,7 @@ mod test {
 
     use crate::{
         bracket::Precision,
-        model::{DiscreteModel, interpolate::LinearInterpolator},
+        model::{DiscreteModel, interpolate::LinearInterpolator, polytrope::Polytrope0},
         system::adiabatic::Rotating1D,
     };
 
@@ -474,5 +474,24 @@ mod test {
                 23.860015963562734
             ]
         );
+    }
+
+    #[test]
+    fn test_polytrope() {
+        let model = Polytrope0 { gamma1: 5. / 3. };
+
+        let solver = ErasedSolver::new(
+            &model,
+            Rotating1D::new(0, 0),
+            DifferenceSchemes::Colloc6,
+            &linspace(0., 1., 10000).collect_vec(),
+        );
+
+        let results = solver
+            .scan_and_optimize([3., 4.].into_iter(), Precision::ULP(1.try_into().unwrap()))
+            .collect_vec();
+
+        assert_eq!(results.len(), 1);
+        assert!(dbg!(results[0].root / model.exact(0, 1) - 1.) < 1e-13);
     }
 }

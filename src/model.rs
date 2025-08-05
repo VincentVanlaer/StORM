@@ -21,6 +21,47 @@ pub trait ContinuousModel {
     fn outer(&self) -> f64;
     /// Evaluate the model at discrete points given by frational radius
     fn eval(&self, grid: &[f64]) -> DiscreteModel;
+    /// Forward the dimensions, these do not need to be interpolated
+    fn dimensions(&self) -> Option<DimensionedProperties>;
+}
+
+impl ContinuousModel for Box<dyn ContinuousModel + '_> {
+    fn inner(&self) -> f64 {
+        self.as_ref().inner()
+    }
+
+    fn outer(&self) -> f64 {
+        self.as_ref().outer()
+    }
+
+    fn eval(&self, grid: &[f64]) -> DiscreteModel {
+        self.as_ref().eval(grid)
+    }
+
+    fn dimensions(&self) -> Option<DimensionedProperties> {
+        self.as_ref().dimensions()
+    }
+}
+
+// The goal of this implementation is to allow unifications of discrete models with continuous model
+// with an additional layer of indirection (dyn* would be nice in this case). This effectively
+// prevents &mut self and self members
+impl ContinuousModel for &Box<dyn ContinuousModel + '_> {
+    fn inner(&self) -> f64 {
+        self.as_ref().inner()
+    }
+
+    fn outer(&self) -> f64 {
+        self.as_ref().outer()
+    }
+
+    fn eval(&self, grid: &[f64]) -> DiscreteModel {
+        self.as_ref().eval(grid)
+    }
+
+    fn dimensions(&self) -> Option<DimensionedProperties> {
+        self.as_ref().dimensions()
+    }
 }
 
 /// Stellar model used as input for the calculations. All properties are dimensionless. For

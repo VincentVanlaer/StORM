@@ -9,10 +9,11 @@ use ndarray::aview0;
 use nshare::AsNdarray2;
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
+use std::usize;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::interpolate::LinearInterpolator;
-use storm::model::polytrope::construct_polytrope;
+use storm::model::polytrope::{Polytrope0, construct_polytrope};
 use storm::model::{ContinuousModel, DimensionedProperties, DiscreteModel};
 use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
 use storm::postprocessing::Rotating1DPostprocessing;
@@ -146,6 +147,15 @@ enum StormCommands {
         /// How many times should each datapoint of the input model be subdivided.
         #[arg(long, default_value = "1")]
         resample: usize,
+    },
+    /// Load the analytical index-zero polytrope. This is primarily used for convergence testing
+    /// and has some restrictions (no rotation).
+    InputPoly0 {
+        /// Number of sample points
+        npoints: usize,
+        /// First adiabatic exponent
+        #[arg(long, default_value = "1.66666666666666")]
+        gamma1: f64,
     },
     /// Replace the rotation profile of a model
     SetRotationOverlay {
@@ -532,6 +542,7 @@ impl StormCommands {
                 gamma1,
                 resample,
             } => state.input_poly(index, dx, gamma1, resample),
+            Self::InputPoly0 { gamma1, npoints } => state.input_poly0(gamma1, npoints),
             Self::SetRotationOverlay { file } => state.set_rotation_overlay(&file),
             Self::SetRotationConstant {
                 value,
@@ -587,11 +598,43 @@ impl StormCommands {
 
 #[derive(Default)]
 struct StormState {
-    input: Option<DiscreteModel>,
-    scale: usize,
+    input: Option<Model>,
     solutions: Vec<Solution>,
     postprocessing: Option<Vec<Rotating1DPostprocessing>>,
     perturbed_frequencies: Vec<ModeCoupling>,
+}
+
+enum Model {
+    Discrete(DiscreteModel, usize),
+    Continuous(Box<dyn ContinuousModel>, usize),
+}
+
+impl Model {
+    fn grid(&self) -> Box<[f64]> {
+        match self {
+            Model::Discrete(model, scale) => model
+                .dimensionless
+                .r_coord
+                .windows(2)
+                .flat_map(|a| linspace(a[0], a[1], scale + 1).take(*scale))
+                .chain([*model.dimensionless.r_coord.last().unwrap()].into_iter())
+                .collect_vec()
+                .into(),
+            Model::Continuous(model, scale) => {
+                let lower = model.inner();
+                let upper = model.outer();
+
+                linspace(lower, upper, *scale).collect_vec().into()
+            }
+        }
+    }
+
+    fn as_continuous(&self) -> Box<dyn ContinuousModel + '_> {
+        match self {
+            Model::Discrete(discrete_model, _) => Box::new(LinearInterpolator::new(discrete_model)),
+            Model::Continuous(continuous_model, _) => Box::new(continuous_model),
+        }
+    }
 }
 
 impl StormState {
@@ -609,8 +652,7 @@ impl StormState {
             file.dimensionless.r_coord.len()
         );
 
-        self.input = Some(file);
-        self.scale = resample;
+        self.input = Some(Model::Discrete(file, resample));
 
         Ok(())
     }
@@ -641,8 +683,19 @@ impl StormState {
             model.dimensionless.r_coord.len()
         );
 
-        self.input = Some(model);
-        self.scale = resample;
+        self.input = Some(Model::Discrete(model, resample));
+
+        Ok(())
+    }
+
+    fn input_poly0(&mut self, gamma1: f64, npoints: usize) -> Result<(), Report> {
+        if !self.solutions.is_empty() {
+            return Err(eyre!(
+                "Changing input models with already computed solutions is not supported. Either first write out the results with the `output` command or remove all results using `clear`."
+            ));
+        }
+
+        self.input = Some(Model::Continuous(Box::new(Polytrope0 { gamma1 }), npoints));
 
         Ok(())
     }
@@ -652,7 +705,13 @@ impl StormState {
             "Input was not set. Please run `input` before setting the rotation profile.",
         )?;
 
-        input
+        let Model::Discrete(model, _) = input else {
+            return Err(eyre!(
+                "Setting the rotation profile for analytical polytropes is not supported"
+            ));
+        };
+
+        model
             .overlay_rot(file)
             .wrap_err(eyre!("Failed to set rotation profile"))?;
 
@@ -668,10 +727,16 @@ impl StormState {
             "Input was not set. Please run `input` before setting the rotation profile.",
         )?;
 
-        input
+        let Model::Discrete(model, _) = input else {
+            return Err(eyre!(
+                "Setting the rotation profile for analytical polytropes is not supported"
+            ));
+        };
+
+        model
             .dimensionless
             .rot
-            .fill(frequency_units.convert_to_natural(value, &input.scale)?);
+            .fill(frequency_units.convert_to_natural(value, &model.scale)?);
 
         Ok(())
     }
@@ -693,24 +758,12 @@ impl StormState {
             .as_mut()
             .ok_or_eyre("Input was not set. Please run `input` before running a scan.")?;
 
-        let upper = frequency_units.convert_to_natural(upper, &input.scale)?;
-        let lower = frequency_units.convert_to_natural(lower, &input.scale)?;
-
         let system = Rotating1D::new(ell, m);
-        let grid = input
-            .dimensionless
-            .r_coord
-            .windows(2)
-            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
-            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
-            .collect_vec();
+        let model = input.as_continuous();
+        let upper = frequency_units.convert_to_natural(upper, &model.dimensions())?;
+        let lower = frequency_units.convert_to_natural(lower, &model.dimensions())?;
 
-        let determinant = ErasedSolver::new(
-            &LinearInterpolator::new(input),
-            system,
-            difference_scheme,
-            &grid,
-        );
+        let determinant = ErasedSolver::new(&model, system, difference_scheme, &input.grid());
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
         } else {
@@ -740,9 +793,14 @@ impl StormState {
             .as_mut()
             .ok_or_eyre("Input was not set. Please run `input` before running deform.")?;
 
-        let rotation = frequency_units.convert_to_natural(rotation, &input.scale)?;
+        let Model::Discrete(model, _) = input else {
+            return Err(eyre!(
+                "Setting the rotation profile for analytical polytropes is not supported"
+            ));
+        };
+        let rotation = frequency_units.convert_to_natural(rotation, &model.scale)?;
 
-        input.metric = Some(perturb_structure(input, rotation));
+        model.metric = Some(perturb_structure(model, rotation));
 
         Ok(())
     }
@@ -751,14 +809,6 @@ impl StormState {
         let input = self.input.as_mut().ok_or_eyre(
             "Input was not set. Please run `input` and `scan` before running `post-process`.",
         )?;
-
-        let grid = input
-            .dimensionless
-            .r_coord
-            .windows(2)
-            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
-            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
-            .collect_vec();
 
         self.postprocessing = Some(
             self.solutions
@@ -769,7 +819,7 @@ impl StormState {
                         &sol.eigenvector,
                         sol.ell,
                         sol.m,
-                        &LinearInterpolator::new(&input).eval(&grid),
+                        &input.as_continuous().eval(&input.grid()),
                     ))
                 })
                 .try_collect()?,
@@ -783,15 +833,7 @@ impl StormState {
             "Input was not set. Please run `input`, `deform`, and `scan` before running `perturb-deformed`.",
         )?;
 
-        let grid = input
-            .dimensionless
-            .r_coord
-            .windows(2)
-            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
-            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
-            .collect_vec();
-
-        let input = &LinearInterpolator::new(&input).eval(&grid);
+        let input = input.as_continuous().eval(&input.grid());
 
         let perturbed_structure = input.metric.as_ref().wrap_err(
             "Deformed structure was not computed. Please run `deform` before `perturb-deformed`",
@@ -808,7 +850,7 @@ impl StormState {
         }
 
         self.perturbed_frequencies.push(perturb_deformed(
-            input,
+            &input,
             self.solutions
                 .iter()
                 .zip(postprocessing.iter())
@@ -842,15 +884,7 @@ impl StormState {
             "Input was not set. Please run `input`, `scan`, and potentially `post-process` before running `output`.",
         )?;
 
-        let grid = input
-            .dimensionless
-            .r_coord
-            .windows(2)
-            .flat_map(|a| linspace(a[0], a[1], self.scale + 1).take(self.scale))
-            .chain([*input.dimensionless.r_coord.last().unwrap()].into_iter())
-            .collect_vec();
-
-        let input = &LinearInterpolator::new(&input).eval(&grid);
+        let input = input.as_continuous().eval(&input.grid());
 
         if (model_properties.needs_deformation() || properties.needs_deformation())
             && (input.metric.is_none() || self.perturbed_frequencies.is_empty())

@@ -79,7 +79,7 @@ where
     Vec<S::ModelPoint>: for<'a> From<&'a DiscreteModel>,
 {
     pub(crate) fn new(
-        model: &impl ContinuousModel,
+        model: &(impl ContinuousModel + ?Sized),
         stepper: Stepper,
         system: S,
         solving_grid: &[f64],

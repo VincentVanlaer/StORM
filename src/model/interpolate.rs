@@ -1,4 +1,6 @@
-use super::{ContinuousModel, DimensionlessProperties, DiscreteModel, PerturbedMetric};
+use super::{
+    ContinuousModel, DimensionedProperties, DimensionlessProperties, DiscreteModel, PerturbedMetric,
+};
 
 /// Linear interpolator for a [DiscreteModel]
 pub struct LinearInterpolator<'model> {
@@ -123,5 +125,9 @@ impl ContinuousModel for LinearInterpolator<'_> {
 
     fn outer(&self) -> f64 {
         *self.model.dimensionless.r_coord.last().unwrap()
+    }
+
+    fn dimensions(&self) -> Option<DimensionedProperties> {
+        self.model.scale
     }
 }

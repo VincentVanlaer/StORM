@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 
 use itertools::Itertools;
 
-use super::{DimensionlessProperties, DiscreteModel};
+use super::{ContinuousModel, DimensionedProperties, DimensionlessProperties, DiscreteModel};
 
 fn eval_lane_emden(xi: f64, phi: f64, theta: f64, n: f64) -> (f64, f64) {
     if xi == 0. {
@@ -140,5 +140,88 @@ pub fn construct_polytrope(n: f64, gamma1: f64, step: f64) -> DiscreteModel {
         },
         scale: None,
         metric: None,
+    }
+}
+
+/// Index-zero (constant density sphere) analytical polytrope
+pub struct Polytrope0 {
+    /// First adiabatic exponent
+    pub gamma1: f64,
+}
+
+impl Polytrope0 {
+    const MAX_X: f64 =
+        2.449489742783178098197284074705891391965947480656670128432692567250960377457315;
+
+    /// Compute the exact solutions for this polytrope model. See [Pekeris 1938](https://ui.adsabs.harvard.edu/abs/1938ApJ....88..189P)
+    pub fn exact(&self, ell: u64, radial_order: i64) -> f64 {
+        let n = ell as f64;
+        let k = 2. * radial_order as f64;
+
+        let d = -2. + self.gamma1 / 4. * (k * (k + 5. + 2. * n) + 6. + 4. * n);
+        let beta = d + (d * d + n * (n + 1.)).sqrt();
+
+        beta.sqrt()
+    }
+}
+
+impl ContinuousModel for Polytrope0 {
+    fn inner(&self) -> f64 {
+        0.
+    }
+
+    fn outer(&self) -> f64 {
+        1.
+    }
+
+    fn eval(&self, grid: &[f64]) -> DiscreteModel {
+        let xi = grid.iter().map(|g| g * Self::MAX_X).collect_vec();
+        let theta = xi.iter().map(|x| 1. - x.powi(2) / 6.).collect_vec();
+        let phi = xi.iter().map(|x| x.powi(3) / 3.).collect_vec();
+
+        let mut v = xi
+            .iter()
+            .zip(theta.iter())
+            .zip(phi.iter())
+            .map(|((&xi, &theta), &phi)| phi / (xi * theta))
+            .collect_vec();
+
+        v[0] = 0.;
+
+        let mut a_star = xi
+            .iter()
+            .zip(theta.iter())
+            .zip(phi.iter())
+            .map(|((&xi, &theta), &phi)| -phi / (xi * theta * self.gamma1))
+            .collect_vec();
+
+        a_star[0] = 0.;
+
+        let phi_max = Self::MAX_X.powi(3) / 3.;
+
+        let rho = vec![3. / (4. * PI); xi.len()];
+        let m_coord = phi.iter().map(|r| r / phi_max).collect_vec();
+        let p = vec![f64::INFINITY; xi.len()];
+
+        DiscreteModel {
+            dimensionless: DimensionlessProperties {
+                r_coord: grid.to_owned().into_boxed_slice(),
+                m_coord: m_coord.into(),
+                rho: rho.into(),
+                p: p.into(),
+                v: v.into(),
+                u: vec![3.; xi.len()].into(),
+                gamma1: vec![self.gamma1; xi.len()].into(),
+                a_star: a_star.into(),
+                c1: vec![1.; xi.len()].into(),
+                rot: vec![0.; xi.len()].into(),
+            },
+            scale: None,
+            metric: None,
+        }
+    }
+
+    fn dimensions(&self) -> Option<DimensionedProperties> {
+        None
     }
 }
