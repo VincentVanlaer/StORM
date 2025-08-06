@@ -102,8 +102,8 @@ fn ensure_maximal_bracket(
     assert!(upper > lower);
     assert!(upper.is_finite());
     assert!(lower.is_finite());
-    assert!(upper > 0.);
-    assert!(lower > 0.);
+    assert!(upper >= 0.);
+    assert!(lower >= 0.);
 
     let requested_ulp_precision: u64 = requested_ulp_precision.into();
 

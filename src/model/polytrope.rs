@@ -2,6 +2,8 @@ use std::f64::consts::PI;
 
 use itertools::Itertools;
 
+use crate::bracket::{BracketOptimizer, InverseQuadratic, Point, Precision};
+
 use super::{ContinuousModel, DimensionedProperties, DimensionlessProperties, DiscreteModel};
 
 fn eval_lane_emden(xi: f64, phi: f64, theta: f64, n: f64) -> (f64, f64) {
@@ -35,18 +37,48 @@ fn solve_lane_emden(step: f64, n: f64) -> (Box<[f64]>, Box<[f64]>, Box<[f64]>) {
     let mut phi = 0.;
     let mut nsteps = 0;
 
-    thetas.push(theta);
-    phis.push(phi);
-    xis.push(0.);
-
     while theta > 0. {
-        (phi, theta) = rk4((nsteps as f64) * step, phi, theta, n, step);
-        nsteps += 1;
-
         thetas.push(theta);
         phis.push(phi);
         xis.push((nsteps as f64) * step);
+
+        (phi, theta) = rk4((nsteps as f64) * step, phi, theta, n, step);
+        nsteps += 1;
     }
+
+    let bracket_result = (InverseQuadratic {})
+        .optimize(
+            Point {
+                x: 0.,
+                f: *thetas.last().unwrap(),
+            },
+            Point { x: step, f: theta },
+            |val| -> Result<f64, ()> {
+                Ok(rk4(
+                    ((nsteps - 1) as f64) * step,
+                    *phis.last().unwrap(),
+                    *thetas.last().unwrap(),
+                    n,
+                    val,
+                )
+                .1)
+            },
+            Precision::ULP(1.try_into().unwrap()),
+            None,
+        )
+        .unwrap();
+
+    (phi, theta) = rk4(
+        ((nsteps - 1) as f64) * step,
+        *phis.last().unwrap(),
+        *thetas.last().unwrap(),
+        n,
+        bracket_result.lower.x,
+    );
+
+    thetas.push(theta);
+    phis.push(phi);
+    xis.push(((nsteps - 1) as f64) * step + bracket_result.root);
 
     (xis.into(), thetas.into(), phis.into())
 }
@@ -60,6 +92,13 @@ pub fn construct_polytrope(n: f64, gamma1: f64, step: f64) -> DiscreteModel {
     assert!(n >= 0.);
 
     let (xi, theta, phi) = solve_lane_emden(step, n);
+
+    let max_phi: f64 = *phi.last().unwrap();
+    let max_xi: f64 = *xi.last().unwrap();
+
+    let xi = &xi[..xi.len() - 1];
+    let phi = &phi[..phi.len() - 1];
+    let theta = &theta[..theta.len() - 1];
 
     let mut u = xi
         .iter()
@@ -79,9 +118,6 @@ pub fn construct_polytrope(n: f64, gamma1: f64, step: f64) -> DiscreteModel {
 
     v[0] = 0.;
 
-    let max_phi: f64 = phi.iter().fold(0., |a, &b| a.max(b));
-    let max_xi: f64 = xi.iter().fold(0., |a, &b| a.max(b));
-
     let mut c1 = xi
         .iter()
         .zip(phi.iter())
@@ -94,35 +130,20 @@ pub fn construct_polytrope(n: f64, gamma1: f64, step: f64) -> DiscreteModel {
         .iter()
         .zip(theta.iter())
         .zip(phi.iter())
-        .map(|((&xi, &theta), &phi)| ((n + 1.) / gamma1 - n) * phi / (xi * theta))
+        .map(|((&xi, &theta), &phi)| -((n + 1.) / gamma1 - n) * phi / (xi * theta))
         .collect_vec();
 
     a_star[0] = 0.;
 
     let x = xi.iter().map(|xi| xi / max_xi).collect_vec();
+    let m_coord = phi.iter().map(|r| r / max_phi).collect_vec();
 
-    let mut rho = theta.iter().map(|&theta| theta.powf(n)).collect_vec();
-    rho[0] = 1.;
-
-    let dm = rho
+    let rho = theta
         .iter()
-        .zip(xi.iter())
-        .tuple_windows()
-        .map(|((r1, x1), (r2, x2))| (r2 + r1) * 0.5 * (x2 - x1) / max_xi)
+        .map(|r| r.powf(n) * max_xi.powi(3) / (max_phi * 4. * PI))
         .collect_vec();
 
-    let m_coord = [0.]
-        .into_iter()
-        .chain(dm.iter().scan(0., |sum, x| {
-            *sum += x;
-            Some(*sum)
-        }))
-        .collect_vec();
-    let total_m = m_coord.last().unwrap();
-    let k = 4. * PI * rho[0].powf(1. / n - 1.) / (n + 1.) / xi.last().unwrap().powi(2);
-
-    let rho = rho.iter().map(|r| r / total_m).collect_vec();
-    let m_coord = m_coord.iter().map(|r| r / total_m).collect_vec();
+    let k = 4. * PI / (rho[0].powf(1. / n - 1.) * (n + 1.) * max_xi.powi(2));
     let p = rho.iter().map(|r| r.powf(1. + 1. / n) * k).collect_vec();
 
     DiscreteModel {
