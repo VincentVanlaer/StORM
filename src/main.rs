@@ -233,6 +233,9 @@ enum StormCommands {
         #[arg(long)]
         keep_data: bool,
     },
+    /// Remove all computations thus far. Needed to load a new input model after doing computations
+    /// without saving results.
+    Clear,
     #[command(hide(true))]
     GenerateMarkdown,
 }
@@ -555,6 +558,7 @@ impl StormCommands {
                 model_properties.into(),
                 keep_data,
             ),
+            Self::Clear => state.clear(),
             Self::GenerateMarkdown => Ok(clap_markdown::print_help_markdown::<StormCommands>()),
         }
     }
@@ -571,6 +575,12 @@ struct StormState {
 
 impl StormState {
     fn input(&mut self, file: &str) -> Result<(), Report> {
+        if !self.solutions.is_empty() {
+            return Err(eyre!(
+                "Changing input models with already computed solutions is not supported. Either first write out the results with the `output` command or remove all results using `clear`."
+            ));
+        }
+
         let file = DiscreteModel::from_gsm(file).wrap_err(eyre!("Failed to load model"))?;
 
         eprintln!(
@@ -969,6 +979,16 @@ impl StormState {
             self.perturbed_structure = None;
             self.perturbed_frequencies.clear();
         }
+
+        Ok(())
+    }
+
+    fn clear(&mut self) -> Result<(), Report> {
+        self.input = None;
+        self.perturbed_frequencies.clear();
+        self.perturbed_structure = None;
+        self.solutions.clear();
+        self.postprocessing = None;
 
         Ok(())
     }
