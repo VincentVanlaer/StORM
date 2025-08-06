@@ -13,9 +13,7 @@ use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::interpolate::LinearInterpolator;
 use storm::model::{DimensionedProperties, DiscreteModel};
-use storm::perturbed::{
-    ModeCoupling, ModeToPerturb, PerturbedMetric, perturb_deformed, perturb_structure,
-};
+use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
 use storm::postprocessing::Rotating1DPostprocessing;
 use storm::system::adiabatic::Rotating1D;
 
@@ -568,7 +566,6 @@ impl StormCommands {
 struct StormState {
     input: Option<DiscreteModel>,
     solutions: Vec<Solution>,
-    perturbed_structure: Option<PerturbedMetric>,
     postprocessing: Option<Vec<Rotating1DPostprocessing>>,
     perturbed_frequencies: Vec<ModeCoupling>,
 }
@@ -680,7 +677,7 @@ impl StormState {
 
         let rotation = frequency_units.convert_to_natural(rotation, &input.scale)?;
 
-        self.perturbed_structure = Some(perturb_structure(input, rotation));
+        input.metric = Some(perturb_structure(input, rotation));
 
         Ok(())
     }
@@ -713,7 +710,7 @@ impl StormState {
             "Input was not set. Please run `input`, `deform`, and `scan` before running `perturb-deformed`.",
         )?;
 
-        let perturbed_structure = self.perturbed_structure.as_ref().wrap_err(
+        let perturbed_structure = input.metric.as_ref().wrap_err(
             "Deformed structure was not computed. Please run `deform` before `perturb-deformed`",
         )?;
 
@@ -763,7 +760,7 @@ impl StormState {
         )?;
 
         if (model_properties.needs_deformation() || properties.needs_deformation())
-            && (self.perturbed_structure.is_none() || self.perturbed_frequencies.is_empty())
+            && (input.metric.is_none() || self.perturbed_frequencies.is_empty())
         {
             eprintln!("Deformation was requested as output, but was not computed");
         }
@@ -806,7 +803,7 @@ impl StormState {
             }
         }
 
-        if let Some(ref perturbed_structure) = self.perturbed_structure {
+        if let Some(ref perturbed_structure) = input.metric {
             if model_properties.deformation_beta {
                 dataset!(model_group, "deformation-beta", &perturbed_structure.beta)?;
             }
@@ -976,7 +973,6 @@ impl StormState {
         if !keep_data {
             self.solutions.clear();
             self.postprocessing = None;
-            self.perturbed_structure = None;
             self.perturbed_frequencies.clear();
         }
 
@@ -986,7 +982,6 @@ impl StormState {
     fn clear(&mut self) -> Result<(), Report> {
         self.input = None;
         self.perturbed_frequencies.clear();
-        self.perturbed_structure = None;
         self.solutions.clear();
         self.postprocessing = None;
 

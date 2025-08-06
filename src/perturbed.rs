@@ -10,7 +10,7 @@ use num_traits::Zero;
 use crate::{
     gaunt::{q_kl1_h, q_kl1_hd, q_kl2, q_kl2_h, q_kl2_hd},
     linalg::qz,
-    model::DiscreteModel,
+    model::{DiscreteModel, PerturbedMetric},
     postprocessing::Rotating1DPostprocessing,
 };
 
@@ -291,18 +291,6 @@ pub fn perturb_deformed(
         l: l_zero,
         m,
     }
-}
-
-/// Contains the results of deforming the stellar structure with rotation
-pub struct PerturbedMetric {
-    /// P2 perturbation
-    pub beta: Box<[f64]>,
-    /// Derivative of beta
-    pub dbeta: Box<[f64]>,
-    /// Second derivative of beta
-    pub ddbeta: Box<[f64]>,
-    /// Rotation frequency
-    pub rot: f64,
 }
 
 /// Deform the stellar structure of a model for a give rotation frequency

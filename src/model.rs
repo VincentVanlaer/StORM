@@ -8,6 +8,8 @@ pub struct DiscreteModel {
     pub dimensionless: DimensionlessProperties,
     /// Scale parameters of the model
     pub scale: Option<DimensionedProperties>,
+    /// Metric paramters of the model
+    pub metric: Option<PerturbedMetric>,
 }
 
 /// Stellar model which can be evaluated at any point. Typically obtained by interpolating a
@@ -56,6 +58,19 @@ pub struct DimensionedProperties {
     pub mass: f64,
     /// Gravitational acceleration \[Ncm^2/g\]
     pub grav: f64,
+}
+
+/// Contains the results of deforming the stellar structure with rotation
+#[derive(Debug, Clone)]
+pub struct PerturbedMetric {
+    /// P2 perturbation
+    pub beta: Box<[f64]>,
+    /// Derivative of beta
+    pub dbeta: Box<[f64]>,
+    /// Second derivative of beta
+    pub ddbeta: Box<[f64]>,
+    /// Rotation frequency
+    pub rot: f64,
 }
 
 impl DimensionedProperties {

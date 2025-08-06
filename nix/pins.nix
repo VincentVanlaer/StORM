@@ -7,8 +7,8 @@
 {
   pkgs = pkgs;
   fenix = import (pkgs.fetchzip {
-    url = "https://github.com/nix-community/fenix/archive/c3c27e603b0d9b5aac8a16236586696338856fbb.zip";
-    sha256 = "sha256-zky3+lndxKRu98PAwVK8kXPdg+Q1NVAhaI7YGrboKYA=";
+    url = "https://github.com/nix-community/fenix/archive/411d129fad840043f724f98719706be39aa7de9c.zip";
+    sha256 = "sha256-82koJGbd4Z2fkoKRahRrSQY/lHjrXuMvsyUC65+cphU=";
   }) { inherit pkgs; };
 
   gyre =

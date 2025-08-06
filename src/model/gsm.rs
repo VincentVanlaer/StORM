@@ -107,6 +107,7 @@ impl DiscreteModel {
                 mass,
                 grav: GRAV,
             }),
+            metric: None,
         })
     }
 

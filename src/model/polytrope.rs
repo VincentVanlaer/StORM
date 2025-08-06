@@ -139,5 +139,6 @@ pub fn construct_polytrope(n: f64, gamma1: f64, step: f64) -> DiscreteModel {
             rot: vec![0.; xi.len()].into(),
         },
         scale: None,
+        metric: None,
     }
 }

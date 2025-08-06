@@ -1,4 +1,4 @@
-use super::{ContinuousModel, DimensionlessProperties, DiscreteModel};
+use super::{ContinuousModel, DimensionlessProperties, DiscreteModel, PerturbedMetric};
 
 /// Linear interpolator for a [DiscreteModel]
 pub struct LinearInterpolator<'model> {
@@ -17,20 +17,28 @@ impl ContinuousModel for LinearInterpolator<'_> {
         let mut old_grid_iter = self.model.dimensionless.r_coord.iter().enumerate();
         let mut new_grid_iter = grid.iter().enumerate();
 
-        let mut model = DiscreteModel {
-            dimensionless: DimensionlessProperties {
-                r_coord: vec![0.; grid.len()].into(),
-                m_coord: vec![0.; grid.len()].into(),
-                rho: vec![0.; grid.len()].into(),
-                p: vec![0.; grid.len()].into(),
-                v: vec![0.; grid.len()].into(),
-                u: vec![0.; grid.len()].into(),
-                gamma1: vec![0.; grid.len()].into(),
-                a_star: vec![0.; grid.len()].into(),
-                c1: vec![0.; grid.len()].into(),
-                rot: vec![0.; grid.len()].into(),
-            },
-            scale: self.model.scale,
+        let mut dimensionless = DimensionlessProperties {
+            r_coord: vec![0.; grid.len()].into(),
+            m_coord: vec![0.; grid.len()].into(),
+            rho: vec![0.; grid.len()].into(),
+            p: vec![0.; grid.len()].into(),
+            v: vec![0.; grid.len()].into(),
+            u: vec![0.; grid.len()].into(),
+            gamma1: vec![0.; grid.len()].into(),
+            a_star: vec![0.; grid.len()].into(),
+            c1: vec![0.; grid.len()].into(),
+            rot: vec![0.; grid.len()].into(),
+        };
+
+        let mut metric = if let Some(m) = &self.model.metric {
+            Some(PerturbedMetric {
+                beta: vec![0.; grid.len()].into(),
+                dbeta: vec![0.; grid.len()].into(),
+                ddbeta: vec![0.; grid.len()].into(),
+                rot: m.rot,
+            })
+        } else {
+            None
         };
 
         let mut prev = (0, &self.model.dimensionless.r_coord[0]);
@@ -40,12 +48,31 @@ impl ContinuousModel for LinearInterpolator<'_> {
         loop {
             if next.1 == current_new_grid_point.1 {
                 macro_rules! cp {
-                    ($($e: ident),+) => {
-                        $(model.dimensionless.$e[current_new_grid_point.0] = self.model.dimensionless.$e[next.0];)*
+                    ($s: expr, $d: expr, $($e: ident),+) => {
+                        $($s.$e[current_new_grid_point.0] = $d.$e[next.0];)*
                     };
                 }
 
-                cp!(r_coord, m_coord, rho, p, v, u, gamma1, a_star, c1, rot);
+                cp!(
+                    dimensionless,
+                    self.model.dimensionless,
+                    r_coord,
+                    m_coord,
+                    rho,
+                    p,
+                    v,
+                    u,
+                    gamma1,
+                    a_star,
+                    c1,
+                    rot
+                );
+
+                if let Some(l) = &mut metric
+                    && let Some(r) = &self.model.metric
+                {
+                    cp!(l, r, beta, dbeta, ddbeta);
+                }
 
                 if let Some(c) = new_grid_iter.next() {
                     current_new_grid_point = c;
@@ -58,13 +85,13 @@ impl ContinuousModel for LinearInterpolator<'_> {
                     ($($e: ident),+) => {
                         let m = &self.model.dimensionless;
                         let pos = (current_new_grid_point.1 - prev.1) / (next.1 - prev.1);
-                        $(model.dimensionless.$e[current_new_grid_point.0] =
+                        $(dimensionless.$e[current_new_grid_point.0] =
                             m.$e[prev.0] +
                             pos * (m.$e[next.0] - m.$e[prev.0]);)*
                     };
                 }
 
-                model.dimensionless.r_coord[current_new_grid_point.0] = *current_new_grid_point.1;
+                dimensionless.r_coord[current_new_grid_point.0] = *current_new_grid_point.1;
                 interp!(m_coord, rho, p, v, u, gamma1, a_star, c1, rot);
 
                 if let Some(c) = new_grid_iter.next() {
@@ -83,7 +110,11 @@ impl ContinuousModel for LinearInterpolator<'_> {
             };
         }
 
-        model
+        DiscreteModel {
+            dimensionless,
+            scale: self.model.scale,
+            metric,
+        }
     }
 
     fn inner(&self) -> f64 {
