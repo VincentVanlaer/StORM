@@ -891,10 +891,14 @@ impl StormState {
 
         let input = input.as_continuous().eval(&input.grid());
 
-        if (model_properties.needs_deformation() || properties.needs_deformation())
-            && (input.metric.is_none() || self.perturbed_frequencies.is_empty())
-        {
+        if model_properties.needs_deformation() && input.metric.is_none() {
             eprintln!("Deformation was requested as output, but was not computed");
+        }
+
+        if properties.needs_deformation() && self.perturbed_frequencies.is_empty() {
+            eprintln!(
+                "Perturbation from rotational deformation was requested as output, but was not computed"
+            );
         }
 
         if (properties.needs_post_processing() || profiles.needs_post_processing())
