@@ -310,6 +310,8 @@ enum ProfileFlags {
     GravityAcceleration,
     /// Divergence of the displacement
     Divergence,
+    /// Location of the radial nodes of the mode
+    Nodes,
 }
 
 #[derive(Default)]
@@ -328,6 +330,7 @@ struct Profiles {
     gravity_potential: bool,
     gravity_acceleration: bool,
     divergence: bool,
+    nodes: bool,
 }
 
 impl Profiles {
@@ -345,6 +348,7 @@ impl Profiles {
             || self.gravity_potential
             || self.gravity_acceleration
             || self.divergence
+            || self.nodes
     }
 }
 
@@ -368,6 +372,7 @@ impl From<Vec<ProfileFlags>> for Profiles {
                 ProfileFlags::Divergence => prof.divergence = true,
                 ProfileFlags::XiTp => prof.xi_tp = true,
                 ProfileFlags::XiTn => prof.xi_tn = true,
+                ProfileFlags::Nodes => prof.nodes = true,
             }
         }
 
@@ -1022,6 +1027,10 @@ impl StormState {
 
                 if profiles.divergence {
                     dataset!(group, "divergence", &postprocessing.chi)?;
+                }
+
+                if profiles.nodes {
+                    dataset!(group, "nodes", &postprocessing.nodes)?;
                 }
             }
         }

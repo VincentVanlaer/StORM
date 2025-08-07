@@ -48,6 +48,8 @@ pub struct Rotating1DPostprocessing {
     /// This is computed from the clockwise and counter-clockwise crossing number. The exact
     /// formula depends on the degree of the mode
     pub radial_order: i64,
+    /// Locations of the radial nodes
+    pub nodes: Box<[f64]>,
 }
 
 impl Rotating1DPostprocessing {
@@ -242,11 +244,11 @@ impl Rotating1DPostprocessing {
             chi[i] *= norm;
         }
 
-        let (cross_clockwise, cross_counter_clockwise, radial_order) = match ell {
+        let (cross_clockwise, cross_counter_clockwise, radial_order, nodes) = match ell {
             0 => {
-                let (cw, ccw) = count_windings(&y1, &y2);
+                let (cw, ccw, nodes) = count_windings(&y1, &y2, &model.r_coord);
 
-                (cw, ccw, ccw as i64)
+                (cw, ccw, ccw as i64, nodes)
             }
             1 => {
                 let mut y1_alt = vec![0.; model.r_coord.len()].into_boxed_slice();
@@ -257,12 +259,13 @@ impl Rotating1DPostprocessing {
                     y2_alt[i] = y2[i] - y1[i];
                 }
 
-                let (cw, ccw) = count_windings(&y1_alt[2..], &y2_alt[2..]);
+                let (cw, ccw, nodes) =
+                    count_windings(&y1_alt[2..], &y2_alt[2..], &model.r_coord[2..]);
 
                 if cw > ccw {
-                    (cw, ccw, ccw as i64 - cw as i64)
+                    (cw, ccw, ccw as i64 - cw as i64, nodes)
                 } else {
-                    (cw, ccw, ccw as i64 - cw as i64 + 1)
+                    (cw, ccw, ccw as i64 - cw as i64 + 1, nodes)
                 }
             }
             _ => {
@@ -272,9 +275,9 @@ impl Rotating1DPostprocessing {
                     y2_alt[i] = y2[i] + y3[i];
                 }
 
-                let (cw, ccw) = count_windings(&y1, &y2_alt);
+                let (cw, ccw, nodes) = count_windings(&y1, &y2_alt, &model.r_coord);
 
-                (cw, ccw, ccw as i64 - cw as i64)
+                (cw, ccw, ccw as i64 - cw as i64, nodes)
             }
         };
 
@@ -296,24 +299,28 @@ impl Rotating1DPostprocessing {
             cross_clockwise,
             cross_counter_clockwise,
             radial_order,
+            nodes,
         }
     }
 }
 
-fn count_windings(y1: &[f64], y2: &[f64]) -> (u64, u64) {
+fn count_windings(y1: &[f64], y2: &[f64], x: &[f64]) -> (u64, u64, Box<[f64]>) {
     let mut clockwise = 0;
     let mut counter_clockwise = 0;
+    let mut nodes = Vec::new();
 
     #[cfg(test)]
     eprintln!("---");
     y1.iter()
         .zip(y2.iter())
+        .zip(x.iter())
         .tuple_windows()
         .enumerate()
-        .for_each(|(_i, ((&y1_1, &y2_1), (&y1_2, &y2_2)))| {
+        .for_each(|(_i, (((&y1_1, &y2_1), &x_1), ((&y1_2, &y2_2), &x_2)))| {
             if y1_1 <= 0. && y1_2 > 0. {
                 // left to right
                 let yt = y2_1 - y1_1 * (y2_2 - y2_1) / (y1_2 - y1_1);
+                let xt = x_2 - y1_1 * (x_2 - x_1) / (y1_2 - y1_1);
                 if yt > 0. {
                     #[cfg(test)]
                     eprintln!("↷ {_i}, {y1_1:.5e}, {y1_2:.5e}, {yt:.5e}");
@@ -325,9 +332,11 @@ fn count_windings(y1: &[f64], y2: &[f64]) -> (u64, u64) {
                     // Below (or exact zero, this is ignored)
                     counter_clockwise += 1;
                 }
+                nodes.push(xt);
             } else if y1_1 >= 0. && y1_2 < 0. {
                 // right to left
                 let yt = y2_1 - y1_1 * (y2_2 - y2_1) / (y1_2 - y1_1);
+                let xt = x_2 - y1_1 * (x_2 - x_1) / (y1_2 - y1_1);
                 if yt > 0. {
                     // Above
                     #[cfg(test)]
@@ -339,12 +348,13 @@ fn count_windings(y1: &[f64], y2: &[f64]) -> (u64, u64) {
                     // Below  (or exact zero, this is ignored)
                     clockwise += 1
                 }
+                nodes.push(xt);
             }
         });
 
     #[cfg(test)]
     eprintln!("--- cw: {clockwise} ccw: {counter_clockwise} ---");
-    (clockwise, counter_clockwise)
+    (clockwise, counter_clockwise, nodes.into())
 }
 
 #[cfg(test)]
