@@ -34,6 +34,9 @@ impl ContinuousModel for LinearInterpolator<'_> {
 
         let mut metric = if let Some(m) = &self.model.metric {
             Some(PerturbedMetric {
+                alpha: vec![0.; grid.len()].into(),
+                dalpha: vec![0.; grid.len()].into(),
+                ddalpha: vec![0.; grid.len()].into(),
                 beta: vec![0.; grid.len()].into(),
                 dbeta: vec![0.; grid.len()].into(),
                 ddbeta: vec![0.; grid.len()].into(),
@@ -73,7 +76,7 @@ impl ContinuousModel for LinearInterpolator<'_> {
                 if let Some(l) = &mut metric
                     && let Some(r) = &self.model.metric
                 {
-                    cp!(l, r, beta, dbeta, ddbeta);
+                    cp!(l, r, alpha, dalpha, ddalpha, beta, dbeta, ddbeta);
                 }
 
                 if let Some(c) = new_grid_iter.next() {

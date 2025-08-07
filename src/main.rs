@@ -454,6 +454,17 @@ enum ModelPropertyFlags {
     DynamicalFrequency,
     /// The P2 deformation of the stellar structure. This quantity is unitless. This is only
     /// available if the deformation command has not been called.
+    DeformationAlpha,
+    /// The derivative of alpha by a [1/cm]. It is stored in the `model` group. This is only
+    /// available if the deformation command has not been called.
+    #[clap(name = "deformation-dalpha")]
+    DeformationDAlpha,
+    /// The second derivative of alpha by a [1/cm^2]. It is stored in the `model` group. This is
+    /// only available if the deformation command has not been called.
+    #[clap(name = "deformation-ddalpha")]
+    DeformationDDAlpha,
+    /// The P2 deformation of the stellar structure. This quantity is unitless. This is only
+    /// available if the deformation command has not been called.
     DeformationBeta,
     /// The derivative of beta by a [1/cm]. It is stored in the `model` group. This is only
     /// available if the deformation command has not been called.
@@ -472,6 +483,9 @@ enum ModelPropertyFlags {
 #[derive(Default)]
 struct ModelProperties {
     dynamical_frequency: bool,
+    deformation_alpha: bool,
+    deformation_dalpha: bool,
+    deformation_ddalpha: bool,
     deformation_beta: bool,
     deformation_dbeta: bool,
     deformation_ddbeta: bool,
@@ -480,7 +494,10 @@ struct ModelProperties {
 
 impl ModelProperties {
     fn needs_deformation(&self) -> bool {
-        self.deformation_beta
+        self.deformation_alpha
+            || self.deformation_dalpha
+            || self.deformation_ddalpha
+            || self.deformation_beta
             || self.deformation_dbeta
             || self.deformation_ddbeta
             || self.deformation_rotation_frequency
@@ -494,6 +511,9 @@ impl From<Vec<ModelPropertyFlags>> for ModelProperties {
         for val in value {
             match val {
                 ModelPropertyFlags::DynamicalFrequency => prop.dynamical_frequency = true,
+                ModelPropertyFlags::DeformationAlpha => prop.deformation_alpha = true,
+                ModelPropertyFlags::DeformationDAlpha => prop.deformation_dalpha = true,
+                ModelPropertyFlags::DeformationDDAlpha => prop.deformation_ddalpha = true,
                 ModelPropertyFlags::DeformationBeta => prop.deformation_beta = true,
                 ModelPropertyFlags::DeformationDBeta => prop.deformation_dbeta = true,
                 ModelPropertyFlags::DeformationDDBeta => prop.deformation_ddbeta = true,
@@ -940,6 +960,26 @@ impl StormState {
         }
 
         if let Some(ref perturbed_structure) = input.metric {
+            if model_properties.deformation_alpha {
+                dataset!(model_group, "deformation-alpha", &perturbed_structure.alpha)?;
+            }
+
+            if model_properties.deformation_dalpha {
+                dataset!(
+                    model_group,
+                    "deformation-dalpha",
+                    &perturbed_structure.dalpha
+                )?;
+            }
+
+            if model_properties.deformation_ddalpha {
+                dataset!(
+                    model_group,
+                    "deformation-ddalpha",
+                    &perturbed_structure.ddalpha
+                )?;
+            }
+
             if model_properties.deformation_beta {
                 dataset!(model_group, "deformation-beta", &perturbed_structure.beta)?;
             }

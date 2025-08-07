@@ -3,7 +3,7 @@
 
 use std::f64::consts::PI;
 
-use nalgebra::{ComplexField, Const, DMatrix, DVector, Dyn, Matrix2, Vector2};
+use nalgebra::{ComplexField, Const, DMatrix, DVector, Dyn, Matrix2, Matrix3, Vector2};
 use num_complex::Complex64;
 use num_traits::Zero;
 
@@ -61,6 +61,9 @@ pub fn perturb_deformed(
     modes: &[ModeToPerturb],
     m: i64,
     PerturbedMetric {
+        alpha,
+        dalpha,
+        ddalpha,
         beta,
         dbeta,
         ddbeta,
@@ -81,15 +84,26 @@ pub fn perturb_deformed(
         trapezoid
     };
 
-    let epsilon = beta.to_owned();
-    let mut adepsilon = vec![0.; beta.len()];
-    let mut threeepsilonadepsilon = vec![0.; beta.len()];
-    let mut dthreeepsilonadepsilon = vec![0.; beta.len()];
+    let epsilona = alpha.to_owned();
+    let mut adepsilona = vec![0.; alpha.len()];
+    let mut threeepsilonadepsilona = vec![0.; alpha.len()];
+    let mut dthreeepsilonadepsilona = vec![0.; alpha.len()];
+
+    for i in 0..alpha.len() {
+        adepsilona[i] = model.r_coord[i] * dalpha[i];
+        threeepsilonadepsilona[i] = 3. * epsilona[i] + adepsilona[i];
+        dthreeepsilonadepsilona[i] = 4. * dalpha[i] + model.r_coord[i] * ddalpha[i];
+    }
+
+    let epsilonb = beta.to_owned();
+    let mut adepsilonb = vec![0.; beta.len()];
+    let mut threeepsilonadepsilonb = vec![0.; beta.len()];
+    let mut dthreeepsilonadepsilonb = vec![0.; beta.len()];
 
     for i in 0..beta.len() {
-        adepsilon[i] = model.r_coord[i] * dbeta[i];
-        threeepsilonadepsilon[i] = 3. * epsilon[i] + adepsilon[i];
-        dthreeepsilonadepsilon[i] = 4. * dbeta[i] + model.r_coord[i] * ddbeta[i];
+        adepsilonb[i] = model.r_coord[i] * dbeta[i];
+        threeepsilonadepsilonb[i] = 3. * epsilonb[i] + adepsilonb[i];
+        dthreeepsilonadepsilonb[i] = 4. * dbeta[i] + model.r_coord[i] * ddbeta[i];
     }
 
     let mf = m as f64;
@@ -142,10 +156,10 @@ pub fn perturb_deformed(
                 let vol = trapezoid[rc] * model.r_coord[rc].powi(2) * model.rho[rc];
 
                 let val = vol
-                    * (rr * inner_prod_r
-                        + hh * inner_prod_h
-                        + rr * 2. * q_kl2 * (epsilon[rc] + adepsilon[rc])
-                        + (rh * q_kl2_hrd + hr * q_kl2_hld + hh * 2. * q_kl2_h) * epsilon[rc]);
+                    * (rr * inner_prod_r * (1. + 2. * (epsilona[rc] + adepsilona[rc]))
+                        + hh * inner_prod_h * (1. + 2. * epsilona[rc])
+                        + rr * 2. * q_kl2 * (epsilonb[rc] + adepsilonb[rc])
+                        + (rh * q_kl2_hrd + hr * q_kl2_hld + hh * 2. * q_kl2_h) * epsilonb[rc]);
 
                 assert!(
                     val.is_finite(),
@@ -159,9 +173,11 @@ pub fn perturb_deformed(
 
                 let val = vol
                     * 2.
-                    * (inner_prod_r * (hr + rh + hh)
-                        + (rh + hr) * q_kl2 * (2. * epsilon[rc] + adepsilon[rc])
-                        + hh * (inner_prod_r + 6. * q_kl2) * 2. * epsilon[rc]);
+                    * (inner_prod_r
+                        * ((hr + rh) * (1. + 2. * epsilona[rc] + adepsilona[rc])
+                            + hh * (1. + 2. * epsilona[rc]))
+                        + (rh + hr) * q_kl2 * (2. * epsilonb[rc] + adepsilonb[rc])
+                        + hh * (inner_prod_r + 6. * q_kl2) * 2. * epsilonb[rc]);
 
                 let val_t = vol
                     * 2.
@@ -192,37 +208,53 @@ pub fn perturb_deformed(
                         + q_kl2
                             * l.post_processing.psi[rc]
                             * r.post_processing.rho[rc]
-                            * threeepsilonadepsilon[rc]
+                            * threeepsilonadepsilonb[rc]
                         + q_kl2
                             * model.rho[rc]
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_r[rc]
-                            * dthreeepsilonadepsilon[rc]
+                            * dthreeepsilonadepsilonb[rc]
+                        + l.post_processing.psi[rc]
+                            * r.post_processing.rho[rc]
+                            * threeepsilonadepsilona[rc]
+                        + model.rho[rc]
+                            * l.post_processing.psi[rc]
+                            * r.post_processing.xi_r[rc]
+                            * dthreeepsilonadepsilona[rc]
                         + q_kl2_hrd
                             * model.rho[rc]
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_h[rc]
-                            * threeepsilonadepsilon[rc]
+                            * threeepsilonadepsilonb[rc]
                             / model.r_coord[rc]
                         - model.m_coord[rc] / model.r_coord[rc].powi(2)
                             * rr
                             * model.rho[rc]
                             * q_kl2
-                            * dthreeepsilonadepsilon[rc]
+                            * dthreeepsilonadepsilonb[rc]
+                        - model.m_coord[rc] / model.r_coord[rc].powi(2)
+                            * rr
+                            * model.rho[rc]
+                            * dthreeepsilonadepsilona[rc]
                         - model.m_coord[rc] / model.r_coord[rc].powi(2)
                             * rh
                             * model.rho[rc]
                             * q_kl2_hrd
-                            * threeepsilonadepsilon[rc]
+                            * threeepsilonadepsilonb[rc]
                             / model.r_coord[rc]
                         + model.gamma1[rc]
                             * model.p[rc]
                             * l.post_processing.chi[rc]
-                            * (q_kl2 * r.post_processing.xi_r[rc] * dthreeepsilonadepsilon[rc]
+                            * (q_kl2 * r.post_processing.xi_r[rc] * dthreeepsilonadepsilonb[rc]
                                 + q_kl2_hrd
                                     * r.post_processing.xi_h[rc]
-                                    * threeepsilonadepsilon[rc]
-                                    / model.r_coord[rc]));
+                                    * threeepsilonadepsilonb[rc]
+                                    / model.r_coord[rc])
+                        + model.gamma1[rc]
+                            * model.p[rc]
+                            * l.post_processing.chi[rc]
+                            * r.post_processing.xi_r[rc]
+                            * dthreeepsilonadepsilona[rc]);
                 assert!(
                     l_zero[(left_mode, right_mode)].is_finite(),
                     "Not finite number at {}, {}, {}: {}",
@@ -301,9 +333,12 @@ pub fn perturb_structure(
     }: &DiscreteModel,
     rot: f64,
 ) -> PerturbedMetric {
-    let mut y = vec![Vector2::new(0., 0.); model.r_coord.len()];
+    let mut y0 = vec![Vector2::new(0., 0.); model.r_coord.len()];
+    let mut y2 = vec![Vector2::new(0., 0.); model.r_coord.len()];
+    let diag2 = Matrix2::from_diagonal_element(1.);
+    let diag3 = Matrix3::from_diagonal_element(1.);
 
-    y[0] = Vector2::new(1., 2.);
+    y2[1] = Vector2::new(1., 2.);
 
     for i in 1..model.r_coord.len() {
         let delta = model.r_coord[i] - model.r_coord[i - 1];
@@ -323,18 +358,40 @@ pub fn perturb_structure(
                 * (-model.a_star[i - 1] + model.v[i - 1] / model.gamma1[i - 1])
         };
 
-        let a =
-            0.5 * delta / x_12 * Matrix2::new(-1., 1., 6. + 0.5 * x_12.powi(2) * (k + k_prev), -2.);
-        let diag = Matrix2::from_diagonal_element(1.);
+        let a0 = 0.5 * delta / x_12
+            * Matrix3::new(
+                -1.,
+                1.,
+                0.,
+                0.5 * x_12.powi(2) * (k + k_prev),
+                -2.,
+                x_12,
+                0.,
+                0.,
+                0.,
+            );
 
-        let step = nalgebra::Matrix2::try_inverse(diag - a).unwrap() * (diag + a);
+        let step = nalgebra::Matrix3::try_inverse(diag3 - a0).unwrap() * (diag3 + a0);
 
-        y[i] = step * y[i - 1];
+        y0[i] = step.generic_view((0, 0), (Const::<2>, Const::<2>)) * y0[i - 1]
+            + step.generic_view((0, 2), (Const::<2>, Const::<1>));
+
+        if i != 1 {
+            let a2 = 0.5 * delta / x_12
+                * Matrix2::new(-1., 1., 6. + 0.5 * x_12.powi(2) * (k + k_prev), -2.);
+            let step = nalgebra::Matrix2::try_inverse(diag2 - a2).unwrap() * (diag2 + a2);
+
+            y2[i] = step * y2[i - 1];
+        }
     }
 
-    let upper = y.last().unwrap();
+    let upper = y2.last().unwrap();
 
     let a2 = -5. / 6. / (3. * upper.x + upper.y);
+
+    let mut alpha = vec![0.; model.r_coord.len()];
+    let mut dalpha = vec![0.; model.r_coord.len()];
+    let mut ddalpha = vec![0.; model.r_coord.len()];
 
     let mut beta = vec![0.; model.r_coord.len()];
     let mut dbeta = vec![0.; model.r_coord.len()];
@@ -347,25 +404,50 @@ pub fn perturb_structure(
             * model.rho[i]
             * model.r_coord[i]
             * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
-        let ddpsi = ((6. + model.r_coord[i].powi(2) * k) * y[i].x - 2. * y[i].y) / model.r_coord[i];
 
-        beta[i] =
-            2. * model.r_coord[i] / model.m_coord[i] * a2 * y[i].x * model.r_coord[i] * rot.powi(2);
+        let ddpsi = (model.r_coord[i].powi(2) * k * y0[i].x - 2. * y0[i].y) / model.r_coord[i] + 1.;
+
+        alpha[i] =
+            2. * model.r_coord[i] / model.m_coord[i] * y0[i].x * model.r_coord[i] * rot.powi(2);
+        dalpha[i] = alpha[i] / model.r_coord[i] - alpha[i] * dmda
+            + alpha[i] / (y0[i].x * model.r_coord[i]) * y0[i].y;
+        ddalpha[i] = -2. * alpha[i] / model.r_coord[i] * dmda
+            + 2. * alpha[i] / (y0[i].x * model.r_coord[i].powi(2)) * y0[i].y
+            - 2. * alpha[i] / (y0[i].x * model.r_coord[i]) * dmda * y0[i].y
+            + 2. * alpha[i] * dmda.powi(2)
+            + alpha[i] / (y0[i].x * model.r_coord[i]) * ddpsi
+            - alpha[i] / model.m_coord[i] * 8. * PI * model.r_coord[i] * model.rho[i]
+            - alpha[i] * dmda / model.r_coord[i]
+                * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
+
+        let ddpsi =
+            ((6. + model.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y) / model.r_coord[i];
+
+        beta[i] = 2. * model.r_coord[i] / model.m_coord[i]
+            * a2
+            * y2[i].x
+            * model.r_coord[i]
+            * rot.powi(2);
         dbeta[i] = beta[i] / model.r_coord[i] - beta[i] * dmda
-            + beta[i] / (y[i].x * model.r_coord[i]) * y[i].y;
+            + beta[i] / (y2[i].x * model.r_coord[i]) * y2[i].y;
         ddbeta[i] = -2. * beta[i] / model.r_coord[i] * dmda
-            + 2. * beta[i] / (y[i].x * model.r_coord[i].powi(2)) * y[i].y
-            - 2. * beta[i] / (y[i].x * model.r_coord[i]) * dmda * y[i].y
+            + 2. * beta[i] / (y2[i].x * model.r_coord[i].powi(2)) * y2[i].y
+            - 2. * beta[i] / (y2[i].x * model.r_coord[i]) * dmda * y2[i].y
             + 2. * beta[i] * dmda.powi(2)
-            + beta[i] / (y[i].x * model.r_coord[i]) * ddpsi
+            + beta[i] / (y2[i].x * model.r_coord[i]) * ddpsi
             - beta[i] / model.m_coord[i] * 8. * PI * model.r_coord[i] * model.rho[i]
             - beta[i] * dmda / model.r_coord[i] * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
     }
 
+    // TODO: check central point (not that it will have a significant influence)
+
     PerturbedMetric {
-        beta: beta.into_boxed_slice(),
-        dbeta: dbeta.into_boxed_slice(),
-        ddbeta: ddbeta.into_boxed_slice(),
+        alpha: alpha.into(),
+        dalpha: dalpha.into(),
+        ddalpha: ddalpha.into(),
+        beta: beta.into(),
+        dbeta: dbeta.into(),
+        ddbeta: ddbeta.into(),
         rot,
     }
 }

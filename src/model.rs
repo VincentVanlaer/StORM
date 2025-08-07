@@ -104,6 +104,12 @@ pub struct DimensionedProperties {
 /// Contains the results of deforming the stellar structure with rotation
 #[derive(Debug, Clone)]
 pub struct PerturbedMetric {
+    /// P0 perturbation
+    pub alpha: Box<[f64]>,
+    /// Derivative of alpha
+    pub dalpha: Box<[f64]>,
+    /// Second derivative of alpha
+    pub ddalpha: Box<[f64]>,
     /// P2 perturbation
     pub beta: Box<[f64]>,
     /// Derivative of beta
