@@ -303,9 +303,9 @@ pub fn perturb_structure(
 ) -> PerturbedMetric {
     let mut y = vec![Vector2::new(0., 0.); model.r_coord.len()];
 
-    y[1] = Vector2::new(1., 2.);
+    y[0] = Vector2::new(1., 2.);
 
-    for i in 2..model.r_coord.len() {
+    for i in 1..model.r_coord.len() {
         let delta = model.r_coord[i] - model.r_coord[i - 1];
         let x_12 = 0.5 * (model.r_coord[i] + model.r_coord[i - 1]);
 
@@ -314,18 +314,17 @@ pub fn perturb_structure(
             * model.r_coord[i]
             * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
 
-        let k_prev = 4. * PI / model.m_coord[i - 1]
-            * model.rho[i - 1]
-            * model.r_coord[i - 1]
-            * (-model.a_star[i - 1] + model.v[i - 1] / model.gamma1[i - 1]);
+        let k_prev = if i == 1 {
+            0.
+        } else {
+            4. * PI / model.m_coord[i - 1]
+                * model.rho[i - 1]
+                * model.r_coord[i - 1]
+                * (-model.a_star[i - 1] + model.v[i - 1] / model.gamma1[i - 1])
+        };
 
-        let a = 0.5 * delta / x_12
-            * Matrix2::new(
-                -1.,
-                1.,
-                6. + 0.5 * model.r_coord[i].powi(2) * (k + k_prev),
-                -2.,
-            );
+        let a =
+            0.5 * delta / x_12 * Matrix2::new(-1., 1., 6. + 0.5 * x_12.powi(2) * (k + k_prev), -2.);
         let diag = Matrix2::from_diagonal_element(1.);
 
         let step = nalgebra::Matrix2::try_inverse(diag - a).unwrap() * (diag + a);
