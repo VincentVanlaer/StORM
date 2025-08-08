@@ -132,9 +132,9 @@ pub fn perturb_deformed(
             let q_ht_n;
             if l.ell == r.ell {
                 q_rt_p = q_kl1_hd(l.ell, r.ell + 1, m);
-                q_rt_n = q_kl1_hd(l.ell, r.ell - 1, m);
+                q_rt_n = q_kl1_hd(l.ell, r.ell.saturating_sub(1), m);
                 q_ht_p = -q_kl1_h(l.ell, r.ell + 1, m);
-                q_ht_n = -q_kl1_h(l.ell, r.ell - 1, m);
+                q_ht_n = -q_kl1_h(l.ell, r.ell.saturating_sub(1), m);
             } else {
                 q_rt_p = 0.;
                 q_rt_n = 0.;
