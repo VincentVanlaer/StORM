@@ -453,25 +453,25 @@ enum ModelPropertyFlags {
     /// not a dataset.
     DynamicalFrequency,
     /// The P2 deformation of the stellar structure. This quantity is unitless. This is only
-    /// available if the deformation command has not been called.
+    /// available if the deformation command has been called.
     DeformationAlpha,
-    /// The derivative of alpha by a [1/cm]. It is stored in the `model` group. This is only
-    /// available if the deformation command has not been called.
+    /// The logarithmic derivative of alpha by a. It is stored in the `model` group. This is only
+    /// available if the deformation command has been called.
     #[clap(name = "deformation-dalpha")]
     DeformationDAlpha,
-    /// The second derivative of alpha by a [1/cm^2]. It is stored in the `model` group. This is
-    /// only available if the deformation command has not been called.
+    /// The second logarithmic derivative of alpha by a. It is stored in the `model` group. This is
+    /// only available if the deformation command has been called.
     #[clap(name = "deformation-ddalpha")]
     DeformationDDAlpha,
     /// The P2 deformation of the stellar structure. This quantity is unitless. This is only
-    /// available if the deformation command has not been called.
+    /// available if the deformation command has been called.
     DeformationBeta,
-    /// The derivative of beta by a [1/cm]. It is stored in the `model` group. This is only
-    /// available if the deformation command has not been called.
+    /// The logarithmic derivative of beta by a. It is stored in the `model` group. This is only
+    /// available if the deformation command has been called.
     #[clap(name = "deformation-dbeta")]
     DeformationDBeta,
-    /// The second derivative of beta by a [1/cm^2]. It is stored in the `model` group. This is
-    /// only available if the deformation command has not been called.
+    /// The second logarithmic derivative of beta by a. It is stored in the `model` group. This is
+    /// only available if the deformation command has been called.
     #[clap(name = "deformation-ddbeta")]
     DeformationDDBeta,
     /// Rotation frequency used in for the deformation calculations. This might be replaced by just

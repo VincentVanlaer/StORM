@@ -87,23 +87,23 @@ pub fn perturb_deformed(
     let epsilona = alpha.to_owned();
     let mut adepsilona = vec![0.; alpha.len()];
     let mut threeepsilonadepsilona = vec![0.; alpha.len()];
-    let mut dthreeepsilonadepsilona = vec![0.; alpha.len()];
+    let mut adthreeepsilonadepsilona = vec![0.; alpha.len()];
 
     for i in 0..alpha.len() {
-        adepsilona[i] = model.r_coord[i] * dalpha[i];
+        adepsilona[i] = dalpha[i];
         threeepsilonadepsilona[i] = 3. * epsilona[i] + adepsilona[i];
-        dthreeepsilonadepsilona[i] = 4. * dalpha[i] + model.r_coord[i] * ddalpha[i];
+        adthreeepsilonadepsilona[i] = 3. * dalpha[i] + ddalpha[i];
     }
 
     let epsilonb = beta.to_owned();
     let mut adepsilonb = vec![0.; beta.len()];
     let mut threeepsilonadepsilonb = vec![0.; beta.len()];
-    let mut dthreeepsilonadepsilonb = vec![0.; beta.len()];
+    let mut adthreeepsilonadepsilonb = vec![0.; beta.len()];
 
     for i in 0..beta.len() {
-        adepsilonb[i] = model.r_coord[i] * dbeta[i];
+        adepsilonb[i] = dbeta[i];
         threeepsilonadepsilonb[i] = 3. * epsilonb[i] + adepsilonb[i];
-        dthreeepsilonadepsilonb[i] = 4. * dbeta[i] + model.r_coord[i] * ddbeta[i];
+        adthreeepsilonadepsilonb[i] = 3. * dbeta[i] + ddbeta[i];
     }
 
     let mf = m as f64;
@@ -211,56 +211,44 @@ pub fn perturb_deformed(
                             * model.rho[rc]
                             * inner_prod_r
                             * (rh + hr + hh)
-                        + q_kl2
-                            * l.post_processing.psi[rc]
-                            * r.post_processing.rho[rc]
-                            * threeepsilonadepsilonb[rc]
-                        + q_kl2
-                            * model.rho[rc]
-                            * l.post_processing.psi[rc]
-                            * r.post_processing.xi_r[rc]
-                            * dthreeepsilonadepsilonb[rc]
                         + l.post_processing.psi[rc]
                             * r.post_processing.rho[rc]
                             * threeepsilonadepsilona[rc]
-                        + model.rho[rc]
+                        - model.rho[rc]
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_r[rc]
-                            * dthreeepsilonadepsilona[rc]
+                            * adthreeepsilonadepsilona[rc]
+                            / model.r_coord[rc]
+                        + l.post_processing.psi[rc]
+                            * q_kl2
+                            * r.post_processing.rho[rc]
+                            * threeepsilonadepsilonb[rc]
+                        - model.rho[rc]
+                            * l.post_processing.psi[rc]
+                            * q_kl2
+                            * r.post_processing.xi_r[rc]
+                            * adthreeepsilonadepsilonb[rc]
+                            / model.r_coord[rc]
+                        - l.post_processing.p[rc]
+                            * r.post_processing.xi_r[rc]
+                            * adthreeepsilonadepsilona[rc]
+                            / model.r_coord[rc]
+                        - l.post_processing.p[rc]
+                            * q_kl2
+                            * r.post_processing.xi_r[rc]
+                            * adthreeepsilonadepsilonb[rc]
+                            / model.r_coord[rc]
+                        - l.post_processing.p[rc]
+                            * q_kl2_hrd
+                            * r.post_processing.xi_h[rc]
+                            * threeepsilonadepsilonb[rc]
+                            / model.r_coord[rc]
                         + q_kl2_hrd
                             * model.rho[rc]
                             * l.post_processing.psi[rc]
                             * r.post_processing.xi_h[rc]
                             * threeepsilonadepsilonb[rc]
-                            / model.r_coord[rc]
-                        - model.m_coord[rc] / model.r_coord[rc].powi(2)
-                            * rr
-                            * model.rho[rc]
-                            * q_kl2
-                            * dthreeepsilonadepsilonb[rc]
-                        - model.m_coord[rc] / model.r_coord[rc].powi(2)
-                            * rr
-                            * model.rho[rc]
-                            * dthreeepsilonadepsilona[rc]
-                        - model.m_coord[rc] / model.r_coord[rc].powi(2)
-                            * rh
-                            * model.rho[rc]
-                            * q_kl2_hrd
-                            * threeepsilonadepsilonb[rc]
-                            / model.r_coord[rc]
-                        + model.gamma1[rc]
-                            * model.p[rc]
-                            * l.post_processing.chi[rc]
-                            * (q_kl2 * r.post_processing.xi_r[rc] * dthreeepsilonadepsilonb[rc]
-                                + q_kl2_hrd
-                                    * r.post_processing.xi_h[rc]
-                                    * threeepsilonadepsilonb[rc]
-                                    / model.r_coord[rc])
-                        + model.gamma1[rc]
-                            * model.p[rc]
-                            * l.post_processing.chi[rc]
-                            * r.post_processing.xi_r[rc]
-                            * dthreeepsilonadepsilona[rc]);
+                            / model.r_coord[rc]);
                 assert!(
                     l_zero[(left_mode, right_mode)].is_finite(),
                     "Not finite number at {}, {}, {}: {}",
@@ -404,45 +392,37 @@ pub fn perturb_structure(
     let mut ddbeta = vec![0.; model.r_coord.len()];
 
     for i in 1..beta.len() {
-        let dmda = 4. * PI * model.r_coord[i].powi(2) * model.rho[i] / model.m_coord[i];
+        let dlnrhodlna = -model.a_star[i] - model.v[i] / model.gamma1[i];
+        let k = 4. * PI / model.m_coord[i] * model.rho[i] * model.r_coord[i] * dlnrhodlna;
 
-        let k = 4. * PI / model.m_coord[i]
-            * model.rho[i]
-            * model.r_coord[i]
-            * (-model.a_star[i] - model.v[i] / model.gamma1[i]);
-
+        let psi = y0[i].x * model.r_coord[i];
+        let dpsi = y0[i].y;
         let ddpsi = (model.r_coord[i].powi(2) * k * y0[i].x - 2. * y0[i].y) / model.r_coord[i] + 1.;
 
-        alpha[i] =
-            2. * model.r_coord[i] / model.m_coord[i] * y0[i].x * model.r_coord[i] * rot.powi(2);
-        dalpha[i] = alpha[i] / model.r_coord[i] - alpha[i] * dmda
-            + alpha[i] / (y0[i].x * model.r_coord[i]) * y0[i].y;
-        ddalpha[i] = -2. * alpha[i] / model.r_coord[i] * dmda
-            + 2. * alpha[i] / (y0[i].x * model.r_coord[i].powi(2)) * y0[i].y
-            - 2. * alpha[i] / (y0[i].x * model.r_coord[i]) * dmda * y0[i].y
-            + 2. * alpha[i] * dmda.powi(2)
-            + alpha[i] / (y0[i].x * model.r_coord[i]) * ddpsi
-            - alpha[i] / model.m_coord[i] * 8. * PI * model.r_coord[i] * model.rho[i]
-            - alpha[i] * dmda / model.r_coord[i]
-                * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
+        alpha[i] = 2. * model.r_coord[i] / model.m_coord[i] * psi * rot.powi(2);
+        dalpha[i] = alpha[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi);
+        ddalpha[i] = dalpha[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi)
+            + alpha[i]
+                * (-3. * model.u[i] - model.u[i] * dlnrhodlna
+                    + model.u[i].powi(2)
+                    + model.r_coord[i] * dpsi / psi
+                    - (model.r_coord[i] * dpsi / psi).powi(2)
+                    + model.r_coord[i].powi(2) * ddpsi / psi);
 
+        let psi = y2[i].x * model.r_coord[i] * a2;
+        let dpsi = y2[i].y * a2;
         let ddpsi =
-            ((6. + model.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y) / model.r_coord[i];
+            ((6. + model.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y) / model.r_coord[i] * a2;
 
-        beta[i] = 2. * model.r_coord[i] / model.m_coord[i]
-            * a2
-            * y2[i].x
-            * model.r_coord[i]
-            * rot.powi(2);
-        dbeta[i] = beta[i] / model.r_coord[i] - beta[i] * dmda
-            + beta[i] / (y2[i].x * model.r_coord[i]) * y2[i].y;
-        ddbeta[i] = -2. * beta[i] / model.r_coord[i] * dmda
-            + 2. * beta[i] / (y2[i].x * model.r_coord[i].powi(2)) * y2[i].y
-            - 2. * beta[i] / (y2[i].x * model.r_coord[i]) * dmda * y2[i].y
-            + 2. * beta[i] * dmda.powi(2)
-            + beta[i] / (y2[i].x * model.r_coord[i]) * ddpsi
-            - beta[i] / model.m_coord[i] * 8. * PI * model.r_coord[i] * model.rho[i]
-            - beta[i] * dmda / model.r_coord[i] * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
+        beta[i] = 2. * model.r_coord[i] / model.m_coord[i] * psi * rot.powi(2);
+        dbeta[i] = beta[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi);
+        ddbeta[i] = dbeta[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi)
+            + beta[i]
+                * (-3. * model.u[i] - model.u[i] * dlnrhodlna
+                    + model.u[i].powi(2)
+                    + model.r_coord[i] * dpsi / psi
+                    - (model.r_coord[i] * dpsi / psi).powi(2)
+                    + model.r_coord[i].powi(2) * ddpsi / psi);
     }
 
     // TODO: check central point (not that it will have a significant influence)
