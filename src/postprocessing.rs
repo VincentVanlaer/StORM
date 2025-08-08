@@ -10,6 +10,7 @@ use crate::{
 };
 
 /// Result from the post processing of a solution to the 1D oscillation equations
+#[derive(Debug, Clone)]
 pub struct Rotating1DPostprocessing {
     /// The locations of the grid points, scaled by the radius of the star
     pub x: Box<[f64]>,

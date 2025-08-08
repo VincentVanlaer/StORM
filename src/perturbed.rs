@@ -457,3 +457,439 @@ pub fn perturb_structure(
         rot,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use itertools::{Itertools, izip};
+    use nalgebra::ComplexField;
+
+    use crate::{
+        bracket::Precision,
+        dynamic_interface::{DifferenceSchemes, ErasedSolver},
+        model::{PerturbedMetric, interpolate::LinearInterpolator, polytrope::construct_polytrope},
+        perturbed::perturb_structure,
+        postprocessing::Rotating1DPostprocessing,
+        system::adiabatic::Rotating1D,
+    };
+
+    use super::{ModeToPerturb, perturb_deformed};
+
+    fn linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
+        (0..n).map(move |x| lower + (upper - lower) * (x as f64) / ((n - 1) as f64))
+    }
+    const ROT: f64 = 0.01;
+
+    #[ignore = "used for output"]
+    #[test]
+    /// This test is a comparison with the results of Saio (1981). Because StORM does have the same
+    /// form of the expressions and does coupling between modes, this will not exactly reproduce
+    /// the results. However, they should be more or less the same.
+    fn perturbed_asymptotics() {
+        let mut poly3 = construct_polytrope(3., 5. / 3., 0.001);
+
+        // Low rotation rate to supress higher order effects
+        poly3.dimensionless.rot.fill(ROT);
+
+        let deformed = perturb_structure(&poly3, ROT);
+
+        let runner = |ell: u64, scan: &[f64]| {
+            let solver = ErasedSolver::new(
+                &LinearInterpolator::new(&poly3),
+                Rotating1D::new(ell, 0),
+                DifferenceSchemes::Colloc6,
+                &poly3.dimensionless.r_coord,
+            );
+
+            let solutions = solver
+                .scan_and_optimize(scan.iter().cloned(), Precision::Relative(1e-10))
+                .collect_vec();
+
+            let post_processing = solutions
+                .iter()
+                .map(|x| {
+                    Rotating1DPostprocessing::new(
+                        x.root,
+                        &solver.eigenvector(x.root),
+                        ell,
+                        0,
+                        &poly3,
+                    )
+                })
+                .collect_vec();
+
+            let radial_orders = post_processing.iter().map(|x| x.radial_order).collect_vec();
+
+            // First check the toroidal contributions
+            let result_tor = perturb_deformed(
+                &poly3,
+                &solutions
+                    .iter()
+                    .zip(post_processing.iter())
+                    .map(|(sol, post)| ModeToPerturb {
+                        ell,
+                        freq: sol.root,
+                        post_processing: post,
+                    })
+                    .collect_vec(),
+                0,
+                &PerturbedMetric {
+                    alpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    dalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    ddalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    beta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    dbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    ddbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    rot: 0.,
+                },
+            );
+
+            let mut perturbed_freqs_tor = result_tor
+                .freqs
+                .iter()
+                .map(|complex| complex.real())
+                .collect_vec();
+            perturbed_freqs_tor.sort_by(f64::total_cmp);
+
+            let x1 = perturbed_freqs_tor
+                .iter()
+                .zip(solutions.iter())
+                .map(|(freq, sol)| (freq - sol.root) / ROT.powi(2) * sol.root)
+                .collect_vec();
+
+            // Now check the deformation contributions
+            let post_processing_no_tor = post_processing
+                .iter()
+                .map(|x| {
+                    let mut x = x.clone();
+                    x.xi_tp = vec![0.; x.x.len()].into();
+                    x.xi_tn = vec![0.; x.x.len()].into();
+                    x
+                })
+                .collect_vec();
+
+            let result_def_s = perturb_deformed(
+                &poly3,
+                &solutions
+                    .iter()
+                    .zip(post_processing_no_tor.iter())
+                    .map(|(sol, post)| ModeToPerturb {
+                        ell,
+                        freq: sol.root,
+                        post_processing: post,
+                    })
+                    .collect_vec(),
+                0,
+                &PerturbedMetric {
+                    alpha: deformed.alpha.clone(),
+                    dalpha: deformed.dalpha.clone(),
+                    ddalpha: deformed.ddalpha.clone(),
+                    beta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    dbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    ddbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    rot: ROT,
+                },
+            );
+
+            let mut perturbed_freqs_def_s = result_def_s
+                .freqs
+                .iter()
+                .map(|complex| complex.real())
+                .collect_vec();
+            perturbed_freqs_def_s.sort_by(f64::total_cmp);
+
+            let z = perturbed_freqs_def_s
+                .iter()
+                .zip(solutions.iter())
+                .map(|(freq, sol)| (freq - sol.root) / ROT.powi(2) * sol.root)
+                .collect_vec();
+
+            let result_def_n = perturb_deformed(
+                &poly3,
+                &solutions
+                    .iter()
+                    .zip(post_processing_no_tor.iter())
+                    .map(|(sol, post)| ModeToPerturb {
+                        ell,
+                        freq: sol.root,
+                        post_processing: post,
+                    })
+                    .collect_vec(),
+                0,
+                &PerturbedMetric {
+                    alpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    dalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    ddalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                    beta: deformed.beta.clone(),
+                    dbeta: deformed.dbeta.clone(),
+                    ddbeta: deformed.ddbeta.clone(),
+                    rot: ROT,
+                },
+            );
+
+            let mut perturbed_freqs_def_n = result_def_n
+                .freqs
+                .iter()
+                .map(|complex| complex.real())
+                .collect_vec();
+            perturbed_freqs_def_n.sort_by(f64::total_cmp);
+
+            let x2 = perturbed_freqs_def_n
+                .iter()
+                .zip(solutions.iter())
+                .map(|(freq, sol)| (freq - sol.root) / ROT.powi(2) * sol.root)
+                .collect_vec();
+
+            let c1: Option<Vec<_>>;
+            let y2: Option<Vec<_>>;
+
+            if ell != 0 {
+                let solver_m1 = ErasedSolver::new(
+                    &LinearInterpolator::new(&poly3),
+                    Rotating1D::new(ell, 1),
+                    DifferenceSchemes::Colloc6,
+                    &poly3.dimensionless.r_coord,
+                );
+
+                let solutions_m1 = solver_m1
+                    .scan_and_optimize(scan.iter().cloned(), Precision::Relative(1e-10))
+                    .collect_vec();
+
+                let post_processing_m1 = solutions_m1
+                    .iter()
+                    .map(|x| {
+                        Rotating1DPostprocessing::new(
+                            x.root,
+                            &solver.eigenvector(x.root),
+                            ell,
+                            1,
+                            &poly3,
+                        )
+                    })
+                    .inspect(|x| {
+                        dbg!(x.radial_order);
+                    })
+                    .collect_vec();
+
+                c1 = Some(
+                    solutions_m1
+                        .iter()
+                        .zip(solutions.iter())
+                        .map(|(freq, sol)| 1. - (freq.root - sol.root) / ROT)
+                        .collect_vec(),
+                );
+
+                let post_processing_no_tor_m1 = post_processing_m1
+                    .iter()
+                    .map(|x| {
+                        let mut x = x.clone();
+                        x.xi_tp = vec![0.; x.x.len()].into();
+                        x.xi_tn = vec![0.; x.x.len()].into();
+                        x
+                    })
+                    .collect_vec();
+
+                let result_def_n_m1 = perturb_deformed(
+                    &poly3,
+                    &solutions_m1
+                        .iter()
+                        .zip(post_processing_no_tor_m1.iter())
+                        .map(|(sol, post)| ModeToPerturb {
+                            ell,
+                            freq: sol.root,
+                            post_processing: post,
+                        })
+                        .collect_vec(),
+                    1,
+                    &PerturbedMetric {
+                        alpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                        dalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                        ddalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
+                        beta: deformed.beta.clone(),
+                        dbeta: deformed.dbeta.clone(),
+                        ddbeta: deformed.ddbeta.clone(),
+                        rot: ROT,
+                    },
+                );
+
+                let mut perturbed_freqs_def_n_m1 = result_def_n_m1
+                    .freqs
+                    .iter()
+                    .map(|complex| complex.real())
+                    .collect_vec();
+                perturbed_freqs_def_n_m1.sort_by(f64::total_cmp);
+
+                y2 = Some(
+                    perturbed_freqs_def_n_m1
+                        .iter()
+                        .zip(solutions_m1.iter())
+                        .map(|(freq, sol)| (freq - sol.root) / ROT.powi(2) * sol.root)
+                        .collect_vec(),
+                );
+            } else {
+                y2 = None;
+                c1 = None;
+            }
+
+            (
+                radial_orders,
+                solutions.iter().map(|x| x.root).collect_vec(),
+                x1,
+                x2,
+                z,
+                c1,
+                y2,
+            )
+        };
+
+        let (l0_radial_order, l0_sol, l0_x1, l0_x2, l0_z, _l0_c1, _l0_y2) =
+            runner(0, &[3., 4., 5., 6.]);
+        let (l1_radial_order, l1_sol, l1_x1, l1_x2, l1_z, l1_c1, l1_y2) =
+            runner(1, &[0.8, 0.9, 1., 1.5, 2., 3., 4., 5., 6., 8., 9., 10.]);
+        let (l2_radial_order, l2_sol, l2_x1, l2_x2, l2_z, l2_c1, l2_y2) =
+            runner(2, &linspace(1.3, 11., 100).collect_vec());
+        let (l3_radial_order, l3_sol, l3_x1, l3_x2, l3_z, l3_c1, l3_y2) =
+            runner(3, &linspace(1.5, 11., 100).collect_vec());
+
+        println!(
+            "{:^4} {:^8} {:^8} {:^8} {:^8} {:^8} {:^8}",
+            "", "ω²", "C1", "X1", "Z", "X2", "Y2"
+        );
+        println!("{:─<58}", "");
+        println!(
+            "{:^4} {:^8} {:^8} {:^8} {:^8} {:^8} {:^8}",
+            "", "", "", "ℓ = 0", "", "", ""
+        );
+        println!("{:─<58}", "");
+
+        for (n, f, x1, _, z) in izip!(l0_radial_order, l0_sol, l0_x1, l0_x2, l0_z) {
+            let n = if n == 1 {
+                "F".to_string()
+            } else {
+                format!("{}H", n - 1)
+            };
+            println!(
+                "{:<4} {:8.3} {:^8} {:8.3} {:8.3} {:^8} {:^8}",
+                n,
+                f * f,
+                "",
+                x1,
+                z,
+                "",
+                ""
+            );
+        }
+
+        println!("{:─<58}", "");
+        println!(
+            "{:^4} {:^8} {:^8} {:^8} {:^8} {:^8} {:^8}",
+            "", "", "", "ℓ = 1", "", "", ""
+        );
+        println!("{:─<58}", "");
+
+        for (n, f, x1, x2, z, c1, y2) in izip!(
+            l1_radial_order,
+            l1_sol,
+            l1_x1,
+            l1_x2,
+            l1_z,
+            l1_c1.unwrap(),
+            l1_y2.unwrap()
+        )
+        .rev()
+        {
+            let n = if n == 0 {
+                "f".to_string()
+            } else if n > 0 {
+                format!("p{}", n)
+            } else {
+                format!("g{}", -n)
+            };
+            println!(
+                "{:<4} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3}",
+                n,
+                f * f,
+                c1,
+                x1,
+                z,
+                x2,
+                y2 - x2
+            );
+        }
+
+        println!("{:─<58}", "");
+        println!(
+            "{:^4} {:^8} {:^8} {:^8} {:^8} {:^8} {:^8}",
+            "", "", "", "ℓ = 2", "", "", ""
+        );
+        println!("{:─<58}", "");
+
+        for (n, f, x1, x2, z, c1, y2) in izip!(
+            l2_radial_order,
+            l2_sol,
+            l2_x1,
+            l2_x2,
+            l2_z,
+            l2_c1.unwrap(),
+            l2_y2.unwrap()
+        )
+        .rev()
+        {
+            let n = if n == 0 {
+                "f".to_string()
+            } else if n > 0 {
+                format!("p{}", n)
+            } else {
+                format!("g{}", -n)
+            };
+            println!(
+                "{:<4} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3}",
+                n,
+                f * f,
+                c1,
+                x1,
+                z,
+                x2,
+                y2 - x2
+            );
+        }
+
+        println!("{:─<58}", "");
+        println!(
+            "{:^4} {:^8} {:^8} {:^8} {:^8} {:^8} {:^8}",
+            "", "", "", "ℓ = 3", "", "", ""
+        );
+        println!("{:─<58}", "");
+
+        for (n, f, x1, x2, z, c1, y2) in izip!(
+            l3_radial_order,
+            l3_sol,
+            l3_x1,
+            l3_x2,
+            l3_z,
+            l3_c1.unwrap(),
+            l3_y2.unwrap()
+        )
+        .rev()
+        {
+            let n = if n == 0 {
+                "f".to_string()
+            } else if n > 0 {
+                format!("p{}", n)
+            } else {
+                format!("g{}", -n)
+            };
+            println!(
+                "{:<4} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3}",
+                n,
+                f * f,
+                c1,
+                x1,
+                z,
+                x2,
+                y2 - x2
+            );
+        }
+
+        assert!(false);
+    }
+}
