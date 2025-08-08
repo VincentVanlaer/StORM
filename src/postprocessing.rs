@@ -159,13 +159,9 @@ impl Rotating1DPostprocessing {
                     * (-q_hd_n * xi_r[i] + q_h_n * xi_h[i]);
             }
 
-            if ell == 0 {
-                xi_tp[i] = 0.;
-            } else {
-                xi_tp[i] = 2. * model.rot[i]
-                    / (lambda_p1 * (freq - mf * model.rot[i]) + 2. * mf * model.rot[i])
-                    * (-q_hd_p * xi_r[i] + q_h_p * xi_h[i]);
-            }
+            xi_tp[i] = 2. * model.rot[i]
+                / (lambda_p1 * (freq - mf * model.rot[i]) + 2. * mf * model.rot[i])
+                * (-q_hd_p * xi_r[i] + q_h_p * xi_h[i]);
 
             norm += model.rho[i]
                 * model.r_coord[i].powi(2)

@@ -190,6 +190,12 @@ pub fn perturb_deformed(
                     left_mode,
                     right_mode
                 );
+                assert!(
+                    val_t.is_finite(),
+                    "Not finite number at {}, {}",
+                    left_mode,
+                    right_mode
+                );
                 r_linear[(left_mode, right_mode)] += mf * model.rot[rc] * val + val_t;
                 r_zero[(left_mode, right_mode)] +=
                     mf * model.rot[rc] * (mf * model.rot[rc] * val + val_t);
@@ -347,7 +353,7 @@ pub fn perturb_structure(
         let k = 4. * PI / model.m_coord[i]
             * model.rho[i]
             * model.r_coord[i]
-            * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
+            * (-model.a_star[i] - model.v[i] / model.gamma1[i]);
 
         let k_prev = if i == 1 {
             0.
@@ -355,7 +361,7 @@ pub fn perturb_structure(
             4. * PI / model.m_coord[i - 1]
                 * model.rho[i - 1]
                 * model.r_coord[i - 1]
-                * (-model.a_star[i - 1] + model.v[i - 1] / model.gamma1[i - 1])
+                * (-model.a_star[i - 1] - model.v[i - 1] / model.gamma1[i - 1])
         };
 
         let a0 = 0.5 * delta / x_12
@@ -403,7 +409,7 @@ pub fn perturb_structure(
         let k = 4. * PI / model.m_coord[i]
             * model.rho[i]
             * model.r_coord[i]
-            * (-model.a_star[i] + model.v[i] / model.gamma1[i]);
+            * (-model.a_star[i] - model.v[i] / model.gamma1[i]);
 
         let ddpsi = (model.r_coord[i].powi(2) * k * y0[i].x - 2. * y0[i].y) / model.r_coord[i] + 1.;
 
