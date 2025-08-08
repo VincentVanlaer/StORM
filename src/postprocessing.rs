@@ -146,7 +146,7 @@ impl Rotating1DPostprocessing {
                 + (-model.v[i] / model.gamma1[i] + lambda.powi(2) / (omega_rsq * model.c1[i]))
                     * y2[i]
                 + lambda.powi(2) / (omega_rsq * model.c1[i]) * y3[i];
-            chi[i] = (ell + 1) as f64 * model.r_coord[i].powi(ell_i32 - 2) * (y1[i] + xdy1)
+            chi[i] = model.r_coord[i].powi(ell_i32 - 2) * ((ell as f64 + 1.) * y1[i] + xdy1)
                 - lambda / model.r_coord[i] * xi_h[i];
             rho_prime[i] = -model.rho[i] * chi[i]
                 + xi_r[i] * model.rho[i] / model.r_coord[i]
