@@ -484,6 +484,8 @@ enum ModelPropertyFlags {
     /// the model rotation frequency if shellular differential rotation is supported in the
     /// deformation calculations. Saved as an attribute, not a dataset.
     DeformationRotationFrequency,
+    /// Relative change in mass of the star due to the deformation
+    DeformationMassChange,
 }
 
 #[derive(Default)]
@@ -496,6 +498,7 @@ struct ModelProperties {
     deformation_dbeta: bool,
     deformation_ddbeta: bool,
     deformation_rotation_frequency: bool,
+    deformation_mass_change: bool,
 }
 
 impl ModelProperties {
@@ -507,6 +510,7 @@ impl ModelProperties {
             || self.deformation_dbeta
             || self.deformation_ddbeta
             || self.deformation_rotation_frequency
+            || self.deformation_mass_change
     }
 }
 
@@ -526,6 +530,7 @@ impl From<Vec<ModelPropertyFlags>> for ModelProperties {
                 ModelPropertyFlags::DeformationRotationFrequency => {
                     prop.deformation_rotation_frequency = true
                 }
+                ModelPropertyFlags::DeformationMassChange => prop.deformation_mass_change = true,
             }
         }
 
@@ -1028,6 +1033,14 @@ impl StormState {
                 let rot =
                     frequency_units.convert_from_natural(perturbed_structure.rot, &input.scale)?;
                 attr!(model_group, "deformation-rotation-frequency", aview0(&rot))?;
+            }
+
+            if model_properties.deformation_mass_change {
+                attr!(
+                    model_group,
+                    "deformation-mass-change",
+                    aview0(&perturbed_structure.mass_delta)
+                )?;
             }
         }
 

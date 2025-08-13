@@ -118,6 +118,8 @@ pub struct PerturbedMetric {
     pub ddbeta: Box<[f64]>,
     /// Rotation frequency
     pub rot: f64,
+    /// Relative difference in stellar mass due to the deformation
+    pub mass_delta: f64,
 }
 
 impl DimensionedProperties {

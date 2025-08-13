@@ -41,6 +41,7 @@ impl ContinuousModel for LinearInterpolator<'_> {
                 dbeta: vec![0.; grid.len()].into(),
                 ddbeta: vec![0.; grid.len()].into(),
                 rot: m.rot,
+                mass_delta: m.mass_delta,
             })
         } else {
             None

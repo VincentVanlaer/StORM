@@ -68,6 +68,7 @@ pub fn perturb_deformed(
         dbeta,
         ddbeta,
         rot: _,
+        mass_delta: _,
     }: &PerturbedMetric,
 ) -> ModeCoupling {
     let trapezoid = {
@@ -390,6 +391,21 @@ pub fn perturb_structure(
     let mut beta = vec![0.; model.r_coord.len()];
     let mut dbeta = vec![0.; model.r_coord.len()];
     let mut ddbeta = vec![0.; model.r_coord.len()];
+    let mut mass_delta = 0.;
+
+    let trapezoid = {
+        let mut trapezoid = vec![0.; model.r_coord.len()];
+
+        trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]);
+        trapezoid[model.r_coord.len() - 1] =
+            0.5 * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2]);
+
+        for i in 1..(model.r_coord.len() - 1) {
+            trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]);
+        }
+
+        trapezoid
+    };
 
     for i in 1..beta.len() {
         let dlnrhodlna = -model.a_star[i] - model.v[i] / model.gamma1[i];
@@ -423,7 +439,11 @@ pub fn perturb_structure(
                     + model.r_coord[i] * dpsi / psi
                     - (model.r_coord[i] * dpsi / psi).powi(2)
                     + model.r_coord[i].powi(2) * ddpsi / psi);
+        mass_delta +=
+            trapezoid[i] * model.rho[i] * model.r_coord[i].powi(2) * (3. * alpha[i] + dalpha[i]);
     }
+
+    mass_delta *= 4. * PI;
 
     // TODO: check central point (not that it will have a significant influence)
 
@@ -435,6 +455,7 @@ pub fn perturb_structure(
         dbeta: dbeta.into(),
         ddbeta: ddbeta.into(),
         rot,
+        mass_delta,
     }
 }
 
@@ -520,6 +541,7 @@ mod tests {
                     dbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
                     ddbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
                     rot: 0.,
+                    mass_delta: 0.,
                 },
             );
 
@@ -567,6 +589,7 @@ mod tests {
                     dbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
                     ddbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
                     rot: ROT,
+                    mass_delta: 0.,
                 },
             );
 
@@ -603,6 +626,7 @@ mod tests {
                     dbeta: deformed.dbeta.clone(),
                     ddbeta: deformed.ddbeta.clone(),
                     rot: ROT,
+                    mass_delta: 0.,
                 },
             );
 
@@ -688,6 +712,7 @@ mod tests {
                         dbeta: deformed.dbeta.clone(),
                         ddbeta: deformed.ddbeta.clone(),
                         rot: ROT,
+                        mass_delta: 0.,
                     },
                 );
 
