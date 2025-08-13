@@ -212,6 +212,12 @@ enum StormCommands {
         /// Units of rotation
         #[arg(long, default_value = "dynamical")]
         frequency_units: FrequencyUnits,
+        /// Disable the spherically symmetric component of the deformation
+        #[arg(long)]
+        disable_symmetric: bool,
+        /// Disable the P2 component of the deformation
+        #[arg(long)]
+        disable_p2: bool,
     },
     /// Compute derived properties from the eigenfunctions
     ///
@@ -597,7 +603,9 @@ impl StormCommands {
             Self::Deform {
                 rotation,
                 frequency_units,
-            } => state.deform(rotation, frequency_units),
+                disable_symmetric,
+                disable_p2,
+            } => state.deform(rotation, frequency_units, disable_symmetric, disable_p2),
             Self::PostProcess {} => state.post_process(),
             Self::PerturbDeformed { m } => state.perturb_deformed(m),
             Self::Output {
@@ -812,7 +820,13 @@ impl StormState {
         Ok(())
     }
 
-    fn deform(&mut self, rotation: f64, frequency_units: FrequencyUnits) -> Result<(), Report> {
+    fn deform(
+        &mut self,
+        rotation: f64,
+        frequency_units: FrequencyUnits,
+        disable_symmetric: bool,
+        disable_p2: bool,
+    ) -> Result<(), Report> {
         let input = self
             .input
             .as_mut()
@@ -825,7 +839,21 @@ impl StormState {
         };
         let rotation = frequency_units.convert_to_natural(rotation, &model.scale)?;
 
-        model.metric = Some(perturb_structure(model, rotation));
+        let mut metric = perturb_structure(model, rotation);
+
+        if disable_symmetric {
+            metric.alpha.fill(0.);
+            metric.dalpha.fill(0.);
+            metric.ddalpha.fill(0.);
+        }
+
+        if disable_p2 {
+            metric.beta.fill(0.);
+            metric.dbeta.fill(0.);
+            metric.ddbeta.fill(0.);
+        }
+
+        model.metric = Some(metric);
 
         Ok(())
     }
