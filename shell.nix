@@ -66,6 +66,9 @@ package.overrideAttrs (attrs: {
       cargo-export
       gnuplot
       bench
+      # Docs
+      hugo
+      go
     ];
 
   shellHook = ''
