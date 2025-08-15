@@ -1,0 +1,94 @@
+name: Build & deploy
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  rust-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disable man-db
+        run: echo "set man-db/auto-update false" | sudo debconf-communicate && sudo dpkg-reconfigure man-db
+      - run: sudo apt-get install -y musl-tools
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo build --target x86_64-unknown-linux-musl --profile=release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary
+          path: target/x86_64-unknown-linux-musl/release/storm
+  rust-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-test
+      - run: cargo test
+  site-build:
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: 0.147.1
+    steps:
+      - name: Install Hugo CLI
+        run: |
+          wget -O ${{ runner.temp }}/hugo.deb https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
+          && sudo dpkg -i ${{ runner.temp }}/hugo.deb
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cd docs && hugo --gc --minify --baseURL "https://stellar-oscillations.org/preview/"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: ./docs/public
+  deploy:
+    needs:
+      - site-build
+      - rust-build
+      - rust-test
+    environment:
+      name: stellar-oscillations.org
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v5
+        with:
+          name: site
+          path: ./docs/public
+      - uses: actions/download-artifact@v5
+        with:
+          name: binary
+          path: ./docs/public/installation/
+      - name: Make source archive
+        run: git archive HEAD --format=tar.gz > docs/public/installation/storm.tar.gz
+      - name: Set SSH key
+        run: echo "$SSH_KEY" > key && chmod 600 key
+        env:
+          SSH_KEY: ${{secrets.MAIN_SITE_KEY}}
+      - name: Set known hosts
+        run: mkdir -p ~/.ssh/ && echo "stellar-oscillations.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKlufAT5tJFqccQsQdT2yHnJZC75MrCZzJ08Wez+x8iy" >> ~/.ssh/known_hosts
+      - name: Copy files
+        run: rsync -e "ssh -i key" --delete-after -cvrl docs/public/ oscillations@stellar-oscillations.org:preview
+

@@ -22,7 +22,7 @@ Currently, only prebuilt binaries for Linux-based operating systems are supporte
 1. Place it in a folder that is in `PATH`, or refer to it directly
 
 <div class="col-sm-2 pt-2">
-	<a class="ms-auto" href="../storm">
+	<a class="ms-auto" href="storm">
 		<div class="card h-100 my-1 text-center card-title">
 			<div class="card-body py-2">
                 {{< icons/icon vendor=bootstrap name=tux size=5em >}}
