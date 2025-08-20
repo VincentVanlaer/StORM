@@ -185,7 +185,7 @@ impl<T: ComplexField + Copy> System<T> for Rotating1D {
     fn outer_boundary(
         &self,
         _frequency: T,
-        _outer_point: Self::ModelPoint,
+        outer_point: Self::ModelPoint,
         output: &mut Matrix<
             T,
             <Self::N as nalgebra::DimSub<Self::NInner>>::Output,
@@ -201,7 +201,7 @@ impl<T: ComplexField + Copy> System<T> for Rotating1D {
         *output.index_mut((0, 2)) = zero;
         *output.index_mut((0, 3)) = zero;
 
-        *output.index_mut((1, 0)) = zero;
+        *output.index_mut((1, 0)) = T::from_subset(&outer_point.u);
         *output.index_mut((1, 1)) = zero;
         *output.index_mut((1, 2)) = T::from_subset(&self.ell) + one;
         *output.index_mut((1, 3)) = one;
