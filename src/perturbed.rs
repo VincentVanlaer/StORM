@@ -501,9 +501,8 @@ mod tests {
                 &poly3.dimensionless.r_coord,
             );
 
-            let solutions = solver
-                .scan_and_optimize(scan.iter().cloned(), Precision::Relative(1e-10))
-                .collect_vec();
+            let solutions =
+                solver.scan_and_optimize(scan.iter().cloned(), Precision::Relative(1e-10));
 
             let post_processing = solutions
                 .iter()
@@ -654,9 +653,8 @@ mod tests {
                     &poly3.dimensionless.r_coord,
                 );
 
-                let solutions_m1 = solver_m1
-                    .scan_and_optimize(scan.iter().cloned(), Precision::Relative(1e-10))
-                    .collect_vec();
+                let solutions_m1 =
+                    solver_m1.scan_and_optimize(scan.iter().cloned(), Precision::Relative(1e-10));
 
                 let post_processing_m1 = solutions_m1
                     .iter()

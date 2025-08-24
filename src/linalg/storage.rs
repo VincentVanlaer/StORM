@@ -92,6 +92,9 @@ pub(crate) struct UnsizedMatrixArray<T, R: Dim, C: Dim, L: Dim> {
     length: L,
 }
 
+unsafe impl<T: Send, R: Dim, C: Dim, L: Dim> Send for UnsizedMatrixArray<T, R, C, L> {}
+unsafe impl<T: Send, R: Dim, C: Dim, L: Dim> Sync for UnsizedMatrixArray<T, R, C, L> {}
+
 impl<T, R: Dim, C: Dim, L: Dim> UnsizedMatrixArray<T, R, C, L> {
     fn new_with(rows: R, columns: C, length: L, f: impl FnMut() -> T) -> Self {
         let mut data = Vec::new();

@@ -402,6 +402,7 @@ mod tests {
                 points,
                 Precision::ULP(const { NonZeroU64::new(1).unwrap() }),
             )
+            .into_iter()
             .map(|bracket| {
                 let post = Rotating1DPostprocessing::new(
                     bracket.root,

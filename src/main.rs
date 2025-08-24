@@ -7,6 +7,7 @@ use itertools::Itertools;
 use nalgebra::ComplexField;
 use ndarray::aview0;
 use nshare::AsNdarray2;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use std::usize;
@@ -644,7 +645,7 @@ struct StormState {
 
 enum Model {
     Discrete(DiscreteModel, usize),
-    Continuous(Box<dyn ContinuousModel>, usize),
+    Continuous(Box<dyn ContinuousModel + Sync>, usize),
 }
 
 impl Model {
@@ -667,7 +668,7 @@ impl Model {
         }
     }
 
-    fn as_continuous(&self) -> Box<dyn ContinuousModel + '_> {
+    fn as_continuous(&self) -> Box<dyn ContinuousModel + Sync + '_> {
         match self {
             Model::Discrete(discrete_model, _) => Box::new(LinearInterpolator::new(discrete_model)),
             Model::Continuous(continuous_model, _) => Box::new(continuous_model),
@@ -803,20 +804,21 @@ impl StormState {
 
         let determinant = ErasedSolver::new(&model, system, difference_scheme, &input.grid());
         let points = if inverse {
-            &mut rev_linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
+            &mut rev_linspace(lower, upper, steps) as &mut (dyn Iterator<Item = f64> + Send)
         } else {
-            &mut linspace(lower, upper, steps) as &mut dyn Iterator<Item = f64>
+            &mut linspace(lower, upper, steps) as &mut (dyn Iterator<Item = f64> + Send)
         };
 
-        let solutions = determinant
+        let solutions: Vec<_> = determinant
             .scan_and_optimize(points, Precision::Relative(precision))
+            .into_par_iter()
             .map(|res| Solution {
                 eigenvector: determinant.eigenvector(res.root),
                 bracket: res,
                 ell,
                 m,
             })
-            .collect_vec();
+            .collect();
 
         eprintln!("Found {} modes", solutions.len());
 
@@ -870,7 +872,7 @@ impl StormState {
 
         self.postprocessing = Some(
             self.solutions
-                .iter()
+                .par_iter()
                 .map(|sol| -> Result<Rotating1DPostprocessing> {
                     Ok(Rotating1DPostprocessing::new(
                         sol.bracket.root,
@@ -880,7 +882,7 @@ impl StormState {
                         &input.as_continuous().eval(&input.grid()),
                     ))
                 })
-                .try_collect()?,
+                .collect::<Result<Vec<_>, _>>()?,
         );
 
         Ok(())

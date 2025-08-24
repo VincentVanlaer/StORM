@@ -51,7 +51,3 @@ You may need to prepend the command with `cargo run --release --bin`, e.g. `carg
 
 If any of the commands in the file fails, the run as a whole will fail, and StORM will terminate.
 This is the main difference between batch mode and manually entering commands.
-
-Note that batch mode in this case does not mean that StORM will start running commands in parallel.
-In fact, StORM has no internal parallelization at all.
-The recommended way to parallelize StORM is to run StORM multiple times next to each other with, for example, different input models.

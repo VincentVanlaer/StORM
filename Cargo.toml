@@ -36,6 +36,7 @@ iai-callgrind = "0.14.0"
 tango-bench = "0.6.0"
 hdf5-metno-sys = { version = "*", features = ["static"] }
 clap-markdown = { version = "0.1.5", default-features = false }
+rayon = "1.11.0"
 
 [[bench]]
 name = "instruction-count"

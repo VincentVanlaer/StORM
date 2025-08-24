@@ -4,6 +4,7 @@ use std::convert::Infallible;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::{Const, DefaultAllocator, Dim, DimAdd, DimMul, DimSub, Dyn};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::bracket::{
     BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
@@ -57,8 +58,8 @@ pub enum DifferenceSchemes {
 
 /// Type erased interface for computing the determinant and the eigenvector of a problem
 pub struct ErasedSolver {
-    det: Box<dyn Fn(f64) -> f64>,
-    eigenvector: Box<dyn Fn(f64) -> (f64, Vec<f64>)>,
+    det: Box<dyn Fn(f64) -> f64 + Sync>,
+    eigenvector: Box<dyn Fn(f64) -> (f64, Vec<f64>) + Sync>,
 }
 
 impl ErasedSolver {
@@ -112,15 +113,21 @@ impl ErasedSolver {
     }
 
     /// Scan all points given by `freq_grid` and optimize the resulting brackets to `precision`
-    pub fn scan_and_optimize<'a>(
-        &'a self,
-        freq_grid: impl IntoIterator<Item = f64> + 'a,
+    pub fn scan_and_optimize(
+        &self,
+        freq_grid: impl IntoIterator<Item = f64, IntoIter: Send>,
         precision: Precision,
-    ) -> impl Iterator<Item = BracketResult> + 'a {
+    ) -> Vec<BracketResult> {
         freq_grid
             .into_iter()
+            .collect::<Vec<_>>()
+            .into_par_iter()
             .map(|x| Point { x, f: self.det(x) })
+            .collect::<Vec<_>>()
+            .into_iter()
             .filter_sign_swap()
+            .collect::<Vec<_>>()
+            .into_par_iter()
             .map(move |(point1, point2)| {
                 (InverseQuadratic {})
                     .optimize(
@@ -132,10 +139,11 @@ impl ErasedSolver {
                     )
                     .unwrap()
             })
+            .collect()
     }
 }
 
-fn get_solvers_inner<T: ImplicitStepper + 'static>(
+fn get_solvers_inner<T: ImplicitStepper + Sync + 'static>(
     model: &(impl ContinuousModel + ?Sized),
     system: Rotating1D,
     stepper: impl Fn() -> T,
@@ -165,7 +173,7 @@ where
     }
 }
 
-fn get_solvers_inner_explicit<T: ExplicitStepper + 'static>(
+fn get_solvers_inner_explicit<T: ExplicitStepper + Sync + 'static>(
     model: &(impl ContinuousModel + ?Sized),
     system: Rotating1D,
     stepper: impl Fn() -> T,
@@ -235,6 +243,7 @@ mod test {
                 points,
                 Precision::ULP(const { NonZeroU64::new(1).unwrap() }),
             )
+            .into_iter()
             .map(|res| res.root)
             .collect_vec()
     }
@@ -487,9 +496,8 @@ mod test {
             &linspace(0., 1., 10000).collect_vec(),
         );
 
-        let results = solver
-            .scan_and_optimize([3., 4.].into_iter(), Precision::ULP(1.try_into().unwrap()))
-            .collect_vec();
+        let results =
+            solver.scan_and_optimize([3., 4.].into_iter(), Precision::ULP(1.try_into().unwrap()));
 
         assert_eq!(results.len(), 1);
         assert!(dbg!(results[0].root / model.exact(0, 1) - 1.) < 1e-13);
