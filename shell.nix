@@ -27,12 +27,12 @@ let
   bench = pkgs.writeScriptBin "bench" /* bash */ ''
     cur=`jj st | grep "(@)" | cut -f 6 -d " "`
     # baseline
-    jj edit $1
+    jj new $1
     cargo export target/benchmarks -- bench --bench=wall-clock 2>/dev/null
     cargo bench -q --bench=instruction-count 2>/dev/null 1>/dev/null
 
     # actual
-    jj edit $2
+    jj new $2
     cargo bench -q --bench=wall-clock -- compare -s 100 -d test-data/generated/benches/ --gnuplot target/benchmarks/wall_clock 2>/dev/null
     cargo bench -q --bench=instruction-count 2>/dev/null
 
