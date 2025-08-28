@@ -1,6 +1,5 @@
-{
-  fetchFromGitHub,
-  rustPlatform,
+{ fetchFromGitHub
+, rustPlatform
 }:
 rustPlatform.buildRustPackage rec {
   pname = "cargo-export";

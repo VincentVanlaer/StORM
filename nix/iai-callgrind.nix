@@ -1,6 +1,5 @@
-{
-  fetchFromGitHub,
-  rustPlatform,
+{ fetchFromGitHub
+, rustPlatform
 }:
 rustPlatform.buildRustPackage rec {
   pname = "iai-callgrind-runner";

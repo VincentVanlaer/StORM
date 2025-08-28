@@ -1,7 +1,6 @@
-{
-  pkgs ? (import ./nix/pins.nix { }).pkgs,
-  fenix ? (import ./nix/pins.nix { }).fenix,
-  gyre ? (import ./nix/pins.nix { }).gyre,
+{ pkgs ? (import ./nix/pins.nix { }).pkgs
+, fenix ? (import ./nix/pins.nix { }).fenix
+, gyre ? (import ./nix/pins.nix { }).gyre
 }:
 let
   rust-toolchain = fenix.combine [

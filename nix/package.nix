@@ -1,9 +1,8 @@
-{
-  buildRustPackage,
-  hdf5,
-  pkg-config,
-  autoPatchelfHook,
-  lib,
+{ buildRustPackage
+, hdf5
+, pkg-config
+, autoPatchelfHook
+, lib
 }:
 buildRustPackage {
   pname = "storm";

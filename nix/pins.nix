@@ -1,19 +1,25 @@
-{
-  pkgs ? import (fetchTarball {
-    url = "https://github.com/nixos/nixpkgs/archive/32a4e87942101f1c9f9865e04dc3ddb175f5f32e.zip";
-    sha256 = "sha256:1jvflnbrxa8gjxkwjq6kdpdzgwp0hs59h9l3xjasksv0v7xlwykz";
-  }) { },
+{ pkgs ? import
+    (fetchTarball {
+      url = "https://github.com/nixos/nixpkgs/archive/32a4e87942101f1c9f9865e04dc3ddb175f5f32e.zip";
+      sha256 = "sha256:1jvflnbrxa8gjxkwjq6kdpdzgwp0hs59h9l3xjasksv0v7xlwykz";
+    })
+    { }
 }:
 {
   pkgs = pkgs;
-  fenix = import (pkgs.fetchzip {
-    url = "https://github.com/nix-community/fenix/archive/411d129fad840043f724f98719706be39aa7de9c.zip";
-    sha256 = "sha256-82koJGbd4Z2fkoKRahRrSQY/lHjrXuMvsyUC65+cphU=";
-  }) { inherit pkgs; };
+
+  fenix = import
+    (pkgs.fetchzip {
+      url = "https://github.com/nix-community/fenix/archive/411d129fad840043f724f98719706be39aa7de9c.zip";
+      sha256 = "sha256-82koJGbd4Z2fkoKRahRrSQY/lHjrXuMvsyUC65+cphU=";
+    })
+    { inherit pkgs; };
 
   gyre =
-    (import (pkgs.fetchzip {
-      url = "https://github.com/VincentVanlaer/nix-gyre/archive/dc05b5672236bf79420d0e04b1e92cf61d382e90.zip";
-      sha256 = "sha256-5m8lOQhGMlLcitPbudBt8FVwxVQSdSxVtJhcNi145Uw=";
-    }) { inherit pkgs; }).gyre-80;
+    (import
+      (pkgs.fetchzip {
+        url = "https://github.com/VincentVanlaer/nix-gyre/archive/dc05b5672236bf79420d0e04b1e92cf61d382e90.zip";
+        sha256 = "sha256-5m8lOQhGMlLcitPbudBt8FVwxVQSdSxVtJhcNi145Uw=";
+      })
+      { inherit pkgs; }).gyre-80;
 }
