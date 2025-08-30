@@ -8,6 +8,7 @@ use nalgebra::ComplexField;
 use ndarray::aview0;
 use nshare::AsNdarray2;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::fs::write;
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use std::usize;
@@ -269,7 +270,7 @@ enum StormCommands {
     /// without saving results.
     Clear,
     #[command(hide(true))]
-    GenerateMarkdown,
+    GenerateMarkdown { file: String },
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -630,7 +631,16 @@ impl StormCommands {
                 keep_data,
             ),
             Self::Clear => state.clear(),
-            Self::GenerateMarkdown => Ok(clap_markdown::print_help_markdown::<StormCommands>()),
+            Self::GenerateMarkdown { file } => write(
+                file,
+                format!(
+                    "{}",
+                    clap_markdown::help_markdown_custom::<StormCommands>(
+                        &clap_markdown::MarkdownOptions::new().show_table_of_contents(false),
+                    )
+                ),
+            )
+            .wrap_err("Could not write markdown file"),
         }
     }
 }

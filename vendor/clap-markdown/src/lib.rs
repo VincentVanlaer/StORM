@@ -144,14 +144,12 @@ fn write_help_markdown(
     // Write the document title
     //----------------------------------
 
+    writeln!(buffer, "{}", "---").unwrap();
+    writeln!(buffer, "{}", "title: CLI Reference").unwrap();
+    writeln!(buffer, "{}", "icon: terminal").unwrap();
+    writeln!(buffer, "{}", "---").unwrap();
+
     let title_name = get_canonical_name(command);
-
-    let title = match options.title {
-        Some(ref title) => title.to_owned(),
-        None => format!("Command-Line Help for `{title_name}`"),
-    };
-    writeln!(buffer, "# {title}\n",).unwrap();
-
     writeln!(
         buffer,
         "This document contains the help content for the `{}` command-line program.\n",
@@ -304,7 +302,10 @@ fn build_command_markdown(
     // Append the name of `command` to `command_path`.
     let command_path = {
         let mut command_path = parent_command_path.clone();
-        command_path.push(title_name);
+
+        if !command.is_multicall_set() {
+            command_path.push(title_name);
+        }
         command_path
     };
 
@@ -321,119 +322,126 @@ fn build_command_markdown(
         )
     }
     */
-    writeln!(buffer, "## `{}`\n", command_path.join(" "))?;
 
-    if let Some(long_about) = command.get_long_about() {
-        writeln!(buffer, "{}\n", long_about)?;
-    } else if let Some(about) = command.get_about() {
-        writeln!(buffer, "{}\n", about)?;
-    }
+    if !command.is_multicall_set() {
+        writeln!(buffer, "# {}\n", command_path.join(" "))?;
 
-    if let Some(help) = command.get_before_long_help() {
-        writeln!(buffer, "{}\n", help)?;
-    } else if let Some(help) = command.get_before_help() {
-        writeln!(buffer, "{}\n", help)?;
-    }
-
-    writeln!(
-        buffer,
-        "**Usage:** `{}{}`\n",
-        if parent_command_path.is_empty() {
-            String::new()
-        } else {
-            let mut s = parent_command_path.join(" ");
-            s.push_str(" ");
-            s
-        },
-        command
-            .clone()
-            .render_usage()
-            .to_string()
-            .replace("Usage: ", "")
-    )?;
-
-    if options.show_aliases {
-        let aliases = command.get_visible_aliases().collect::<Vec<&str>>();
-        if let Some(aliases_str) = get_alias_string(&aliases) {
-            writeln!(
-                buffer,
-                "**{}:** {aliases_str}\n",
-                pluralize(aliases.len(), "Command Alias", "Command Aliases")
-            )?;
+        if let Some(long_about) = command.get_long_about() {
+            writeln!(buffer, "{}\n", long_about)?;
+        } else if let Some(about) = command.get_about() {
+            writeln!(buffer, "{}\n", about)?;
         }
-    }
 
-    if let Some(help) = command.get_after_long_help() {
-        writeln!(buffer, "{}\n", help)?;
-    } else if let Some(help) = command.get_after_help() {
-        writeln!(buffer, "{}\n", help)?;
-    }
+        if let Some(help) = command.get_before_long_help() {
+            writeln!(buffer, "{}\n", help)?;
+        } else if let Some(help) = command.get_before_help() {
+            writeln!(buffer, "{}\n", help)?;
+        }
 
-    //----------------------------------
-    // Subcommands
-    //----------------------------------
+        writeln!(
+            buffer,
+            "**Usage:** `{}{}`\n",
+            if parent_command_path.is_empty() {
+                String::new()
+            } else {
+                let mut s = parent_command_path.join(" ");
+                s.push_str(" ");
+                s
+            },
+            command
+                .clone()
+                .render_usage()
+                .to_string()
+                .replace("Usage: ", "")
+        )?;
 
-    if command.get_subcommands().next().is_some() {
-        writeln!(buffer, "###### **Subcommands:**\n")?;
+        if options.show_aliases {
+            let aliases = command.get_visible_aliases().collect::<Vec<&str>>();
+            if let Some(aliases_str) = get_alias_string(&aliases) {
+                writeln!(
+                    buffer,
+                    "**{}:** {aliases_str}\n",
+                    pluralize(
+                        aliases.len(),
+                        "Command Alias",
+                        "Command Aliases"
+                    )
+                )?;
+            }
+        }
 
-        for subcommand in command.get_subcommands() {
-            if subcommand.is_hide_set() {
-                continue;
+        if let Some(help) = command.get_after_long_help() {
+            writeln!(buffer, "{}\n", help)?;
+        } else if let Some(help) = command.get_after_help() {
+            writeln!(buffer, "{}\n", help)?;
+        }
+
+        //----------------------------------
+        // Subcommands
+        //----------------------------------
+
+        if command.get_subcommands().next().is_some() {
+            writeln!(buffer, "###### **Subcommands:**\n")?;
+
+            for subcommand in command.get_subcommands() {
+                if subcommand.is_hide_set() {
+                    continue;
+                }
+
+                let title_name = get_canonical_name(subcommand);
+
+                let about = match subcommand.get_about() {
+                    Some(about) => about.to_string(),
+                    None => String::new(),
+                };
+
+                writeln!(buffer, "* `{title_name}` — {about}",)?;
             }
 
-            let title_name = get_canonical_name(subcommand);
-
-            let about = match subcommand.get_about() {
-                Some(about) => about.to_string(),
-                None => String::new(),
-            };
-
-            writeln!(buffer, "* `{title_name}` — {about}",)?;
+            write!(buffer, "\n")?;
         }
 
-        write!(buffer, "\n")?;
-    }
+        //----------------------------------
+        // Arguments
+        //----------------------------------
 
-    //----------------------------------
-    // Arguments
-    //----------------------------------
+        if command.get_positionals().next().is_some() {
+            writeln!(buffer, "###### **Arguments:**\n")?;
 
-    if command.get_positionals().next().is_some() {
-        writeln!(buffer, "###### **Arguments:**\n")?;
+            for pos_arg in command.get_positionals() {
+                write_arg_markdown(buffer, pos_arg)?;
+            }
 
-        for pos_arg in command.get_positionals() {
-            write_arg_markdown(buffer, pos_arg)?;
+            write!(buffer, "\n")?;
         }
 
-        write!(buffer, "\n")?;
-    }
+        //----------------------------------
+        // Options
+        //----------------------------------
 
-    //----------------------------------
-    // Options
-    //----------------------------------
+        let non_pos: Vec<_> = command
+            .get_arguments()
+            .filter(|arg| !arg.is_positional() && !arg.is_hide_set())
+            .collect();
 
-    let non_pos: Vec<_> = command
-        .get_arguments()
-        .filter(|arg| !arg.is_positional() && !arg.is_hide_set())
-        .collect();
+        if !non_pos.is_empty() {
+            writeln!(buffer, "###### **Options:**\n")?;
 
-    if !non_pos.is_empty() {
-        writeln!(buffer, "###### **Options:**\n")?;
+            for arg in non_pos {
+                write_arg_markdown(buffer, arg)?;
+            }
 
-        for arg in non_pos {
-            write_arg_markdown(buffer, arg)?;
+            write!(buffer, "\n")?;
         }
 
-        write!(buffer, "\n")?;
+        //----------------------------------
+        // Recurse to write subcommands
+        //----------------------------------
+
+        // Include extra space between commands. This is purely for the benefit of
+        // anyone reading the source .md file.
+        write!(buffer, "\n\n")?;
     }
-
-    //----------------------------------
-    // Recurse to write subcommands
-    //----------------------------------
-
-    // Include extra space between commands. This is purely for the benefit of
-    // anyone reading the source .md file.
-    write!(buffer, "\n\n")?;
 
     for subcommand in command.get_subcommands() {
         build_command_markdown(
