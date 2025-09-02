@@ -118,7 +118,8 @@ impl ErasedSolver {
         freq_grid: impl IntoIterator<Item = f64, IntoIter: Send>,
         precision: Precision,
     ) -> Vec<BracketResult> {
-        freq_grid
+        let mut has_invalid_numbers = false;
+        let results = freq_grid
             .into_iter()
             .collect::<Vec<_>>()
             .into_par_iter()
@@ -126,6 +127,14 @@ impl ErasedSolver {
             .collect::<Vec<_>>()
             .into_iter()
             .filter_sign_swap()
+            .filter(|pair| {
+                if pair.0.f.is_finite() && pair.1.f.is_finite() {
+                    true
+                } else {
+                    has_invalid_numbers = true;
+                    false
+                }
+            })
             .collect::<Vec<_>>()
             .into_par_iter()
             .map(move |(point1, point2)| {
@@ -139,7 +148,15 @@ impl ErasedSolver {
                     )
                     .unwrap()
             })
-            .collect()
+            .collect();
+
+        if has_invalid_numbers {
+            println!(
+                "Invalid numbers encountered in initial scan, suspected rotation too high for scan."
+            )
+        }
+
+        results
     }
 }
 
