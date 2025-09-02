@@ -15,17 +15,34 @@ StORM can be installed in two ways:
 ## Prebuilt binaries
 
 Prebuilt binaries of StORM are provided, and require no dependencies.
-Currently, only prebuilt binaries for Linux-based operating systems are supported.
 
 1. Download the prebuilt binary below
-1. Make the binary executable by running `chmod +x storm`
+1. Make the binary executable by running `chmod +x storm` (on Linux)
 1. Place it in a folder that is in `PATH`, or refer to it directly
 
-<div class="col-sm-2 pt-2">
-	<a class="ms-auto" href="storm">
+<div class="d-flex col-sm-6 pt-6">
+    <a class="ms-auto" href="linux/storm">
 		<div class="card h-100 my-1 text-center card-title">
 			<div class="card-body py-2">
                 {{< icons/icon vendor=bootstrap name=tux size=5em >}}
+                <br>
+                <i class="material-icons align-middle">download</i>
+			</div>
+		</div>
+    </a>
+    <a class="ms-auto" href="macos/storm">
+		<div class="card h-100 my-1 text-center card-title">
+			<div class="card-body py-2">
+                {{< icons/icon vendor=bootstrap name=apple size=5em >}}
+                <br>
+                <i class="material-icons align-middle">download</i>
+			</div>
+		</div>
+    </a>
+    <a class="ms-auto" href="windows/storm.exe">
+		<div class="card h-100 my-1 text-center card-title">
+			<div class="card-body py-2">
+                {{< icons/icon vendor=bootstrap name=windows size=5em >}}
                 <br>
                 <i class="material-icons align-middle">download</i>
 			</div>

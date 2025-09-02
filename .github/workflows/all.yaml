@@ -7,13 +7,24 @@ on:
 jobs:
   rust-build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - target: x86_64-unknown-linux-musl
+            exec: storm
+            name: linux
+          - target: x86_64-pc-windows-gnu
+            exec: storm.exe
+            name: windows
+          - target: universal2-apple-darwin
+            exec: storm
+            name: macos
     steps:
-      - name: Disable man-db
-        run: echo "set man-db/auto-update false" | sudo debconf-communicate && sudo dpkg-reconfigure man-db
-      - run: sudo apt-get install -y musl-tools
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
-          targets: x86_64-unknown-linux-musl
+          targets: x86_64-unknown-linux-musl,x86_64-pc-windows-gnu,x86_64-apple-darwin,aarch64-apple-darwin
+      - uses: mlugg/setup-zig@v2
+      - run: cargo install --locked cargo-zigbuild
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
@@ -23,13 +34,13 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - run: cargo build --target x86_64-unknown-linux-musl --profile=release
+          key: ${{ runner.os }}-cargo-${{ matrix.platform.name }}-${{ hashFiles('**/Cargo.lock') }}
+      - run: CFLAGS="-D_GNU_SOURCE" cargo zigbuild --target ${{ matrix.platform.target }} --profile=release
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binary
-          path: target/x86_64-unknown-linux-musl/release/storm
+          name: binary-${{ matrix.platform.name }}
+          path: target/${{ matrix.platform.target }}/release/${{ matrix.platform.exec }}
   rust-test:
     runs-on: ubuntu-latest
     steps:
@@ -59,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v5
         with:
-          name: binary
+          name: binary-linux
           path: .
       - name: Generate CLI reference
         run: chmod +x storm && echo "generate-markdown ./docs/content/reference.md" | ./storm
@@ -87,8 +98,16 @@ jobs:
           path: ./docs/public
       - uses: actions/download-artifact@v5
         with:
-          name: binary
-          path: ./docs/public/installation/
+          name: binary-linux
+          path: ./docs/public/installation/linux/
+      - uses: actions/download-artifact@v5
+        with:
+          name: binary-windows
+          path: ./docs/public/installation/windows/
+      - uses: actions/download-artifact@v5
+        with:
+          name: binary-macos
+          path: ./docs/public/installation/macos/
       - name: Make source archive
         run: git archive HEAD --format=tar.gz > docs/public/installation/storm.tar.gz
       - name: Set SSH key

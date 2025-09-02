@@ -12,6 +12,9 @@ let
     fenix.stable.rust-src
     fenix.stable.rust-std
     fenix.targets.x86_64-unknown-linux-musl.stable.rust-std
+    fenix.targets.x86_64-pc-windows-gnu.stable.rust-std
+    fenix.targets.x86_64-apple-darwin.stable.rust-std
+    fenix.targets.aarch64-apple-darwin.stable.rust-std
   ];
   package = (import ./default.nix { inherit rust-toolchain; });
 
@@ -23,6 +26,7 @@ let
 
   iai-callgrind-runner = pkgs.callPackage ./nix/iai-callgrind.nix { inherit rustPlatform; };
   cargo-export = pkgs.callPackage ./nix/cargo-export.nix { inherit rustPlatform; };
+  cargo-zigbuild = pkgs.cargo-zigbuild.override { inherit rustPlatform; };
   bench = pkgs.writeScriptBin "bench" /* bash */ ''
     cur=`jj st | grep "(@)" | cut -f 6 -d " "`
     # baseline
@@ -63,16 +67,13 @@ package.overrideAttrs (attrs: {
       libclang
       iai-callgrind-runner
       cargo-export
+      cargo-zigbuild
       gnuplot
       bench
       # Docs
       hugo
       go
     ];
-
-  shellHook = ''
-    export CC="${pkgs.musl.dev}/bin/musl-gcc -static -Os"
-  '';
 
   RUST_BACKTRACE = 1;
 })
