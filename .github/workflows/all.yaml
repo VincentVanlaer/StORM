@@ -76,7 +76,7 @@ jobs:
         run: chmod +x storm && echo "generate-markdown ./docs/content/reference.md" | ./storm
       - name: Build
         run: |
-          cd docs && hugo --gc --minify --baseURL "https://stellar-oscillations.org/preview/"
+          cd docs && hugo --gc --minify --baseURL "https://storm.stellar-oscillations.org/docs/latest/"
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -95,15 +95,15 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: site
-          path: ./docs/public
+          path: ./docs/landing/docs/latest
       - uses: actions/download-artifact@v5
         with:
           name: binary-linux
-          path: ./docs/public/installation/linux/
+          path: ./docs/landing/docs/latest/installation/linux/
       - uses: actions/download-artifact@v5
         with:
           name: binary-windows
-          path: ./docs/public/installation/windows/
+          path: ./docs/landing/docs/latest/installation/windows/
       - uses: actions/download-artifact@v5
         with:
           name: binary-macos
@@ -117,5 +117,4 @@ jobs:
       - name: Set known hosts
         run: mkdir -p ~/.ssh/ && echo "stellar-oscillations.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKlufAT5tJFqccQsQdT2yHnJZC75MrCZzJ08Wez+x8iy" >> ~/.ssh/known_hosts
       - name: Copy files
-        run: rsync -e "ssh -i key" --delete-after -cvrl docs/public/ oscillations@stellar-oscillations.org:preview
-
+        run: rsync -e "ssh -i key" --delete-after -cvrl docs/landing/ oscillations@stellar-oscillations.org:storm

@@ -1,0 +1,110 @@
+body {
+  font-family: Arial, sans-serif;
+  align-content: center;
+  background-color: #1b142e;
+  margin: 0;
+  background-color: #39037A;
+  background-color: #1b142e;
+}
+
+.header {
+  box-sizing: border-box;
+  padding: 10px;
+  height: 80px;
+  width: 100vw;
+  background-color: #39037A;
+  background-color: #1b142e;
+}
+
+.header img {
+  max-height:100%;
+}
+
+nav {
+  margin-right: 40px;
+}
+
+nav a {
+  color: lightgrey;
+  text-decoration: none;
+  font-size: 15px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.splash {
+  padding-top: 30px;
+  padding-bottom: 30px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap-reverse;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash img {
+  box-sizing: border-box;
+  min-height: 200px;
+  max-height: 40vw;
+  max-width: 100%;
+  padding-right: 10%;
+  padding-left: 10%;
+  margin-bottom: 30px;
+}
+
+.title {
+  min-width: 400px;
+  margin-left: 40px;
+  margin-right: 40px;
+  box-sizing: border-box;
+  flex: 1;
+  margin-bottom: 30px;
+}
+
+.title h1 {
+  color: white;
+  font-weight: bold;
+  font-size: 5vw;
+  margin-bottom: 20px;
+  margin-top: 20px;
+}
+
+.title p {
+  color: lightgrey;
+  font-size: 20pt;
+}
+
+.instructions {
+  display: grid;
+  gap: 1em;
+  grid-template-columns: repeat(auto-fit, minmax(10em, 25em));
+  justify-content: center;
+}
+
+.instructions div {
+  border: 2px lightgrey solid;
+  border-radius: 4px;
+  padding: 10px;
+  margin: 10px;
+  display: flex;
+  flex-direction: column;
+  transition: border color 0.25s;
+  color: lightgrey;
+}
+
+.instructions div:hover {
+  border-color: darkorange;
+  color: darkorange;
+}
+
+.instructions a {
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: inherit;
+}
+
+.instructions svg {
+  margin-top: 10px;
+}
