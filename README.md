@@ -27,3 +27,7 @@ StORM comes with a built-in `help` command, so if you get stuck, you can run `he
 For example, by running `help scan`, we see that scan requires the following arguments: `Usage: scan [OPTIONS] <ELL> <M> <LOWER> <UPPER> <STEPS>`, which are the degree of the modes to scan for, the azimuthal order, the lower and upper limits in frequency of the scan, and the number of steps to take between those two limits. The `help` provides a lot more information (the `scan` command has various options).
 
 A walkthrough can be found on the [documentation website](https://storm.stellar-oscillations.org/docs/latest).
+
+## License
+
+Except for files in the vendor folder, which carry their own licenses, all files in this repository are licensed under the GNU General Public License version 3. You may find a copy of this license in the `LICENSE` file.
