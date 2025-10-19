@@ -52,7 +52,7 @@ The only variable that then needs to be determined is $\varepsilon$.
 We use the Chandrasekhar-Milne expansion for this.
 It defines $\varepsilon$ as a series of even Legendre polynomials:
 $$ \varepsilon(\zeta, \theta) = \sum_{k \geq 0} \varepsilon_k(\zeta) P_{2k}(\theta) \,. $$
-StORM only includes the $P_2$ term.
+StORM includes the $P_0$ and $P_2$ term.
 
 With the deformed structure, StORM perturbs the oscillation frequencies, assuming that the perturbed displacement functions can be written as a sum of unperturbed modes:
 
@@ -119,7 +119,8 @@ The single argument to this command is the azimuthal order to select, which in o
 
 After these commands, the following additional outputs are enabled:
 
-- `deformation-beta`, `deformation-dbeta`, and `deformation-ddbeta`: these define the deformed structure of the star, and correspond to $\beta(a)$ in Eq. (27) of [Lee and Baraffe (1995)](https://ui.adsabs.harvard.edu/abs/1995A&A...301..419L)
+- `deformation-alpha`, `deformation-dalpha`, and `deformation-ddalpha`: these define the $P_0$ deformed structure of the star, and correspond to $\alpha(a)$ in Eq. (27) of [Lee and Baraffe (1995)](https://ui.adsabs.harvard.edu/abs/1995A&A...301..419L)
+- `deformation-beta`, `deformation-dbeta`, and `deformation-ddbeta`: these define the $P_2$ deformed structure of the star, and correspond to $\beta(a)$ in Eq. (27) of [Lee and Baraffe (1995)](https://ui.adsabs.harvard.edu/abs/1995A&A...301..419L)
 - `deformed-frequency`: Perturbed oscillation frequencies
 - `deformed-eigenvector`: The parameters $a_{kk'}$
 
