@@ -9,14 +9,12 @@ StORM (which stands for Stellar Oscillations with Rotation ~and Magnetism~) comp
 
 ## Installation
 
-To compile StORM, you will need the following prerequisites:
+Pre-compiled executables can be found on (https://storm.stellar-oscillations.org). To compile StORM for source, you will need the following prerequisites:
 
-* A rust nightly compiler. Follow the [rust installation instructions](https://www.rust-lang.org/tools/install) and [add the `nightly`](https://rust-lang.github.io/rustup/concepts/channels.html#working-with-nightly-rust) toolchain.
-* The HDF5 library, with the necessary dependencies to actually find the library. See this [rust hdf5 bindings](https://github.com/metno/hdf5-rust?tab=readme-ov-file#building) repository for details. 
+* A rust compiler. Follow the [rust installation instructions](https://www.rust-lang.org/tools/install).
+* `cmake`, to compile the HDF5 library. 
 
 If you are familiar with nix, you can also run `nix-shell` in this repository to get all the necessary dependencies, or `nix-build` to directly build the StORM binaries.
-If you do not want to install HDF5 on your system, you can also uncomment the last line of `Cargo.toml` to automatically compile HDF5 and statically link it into the StORM binaries.
-Note that this requires cmake to be installed.
 
 After the necessary dependencies are installed, you can compile StORM by running `cargo build --release` or run it directly with `cargo run --release --bin storm`.
 
@@ -28,26 +26,4 @@ To let StORM actually do its job, you will have to enter commands to read in a s
 StORM comes with a built-in `help` command, so if you get stuck, you can run `help` to see which commands are available, and `help some-command` to get detailed information on the command.
 For example, by running `help scan`, we see that scan requires the following arguments: `Usage: scan [OPTIONS] <ELL> <M> <LOWER> <UPPER> <STEPS>`, which are the degree of the modes to scan for, the azimuthal order, the lower and upper limits in frequency of the scan, and the number of steps to take between those two limits. The `help` provides a lot more information (the `scan` command has various options).
 
-### A sample session
-
-The following code block shows a sample session. It loads loads a model, search for some radial modes, computes the mode properties and writes out the results to a file named `modes.hdf5`.
-
-
-```
-[storm] > input model.hdf5
-Loaded model with 1000 points
-[storm] > scan 0 0 5. 10. 200 --frequency-units=cycles-per-day
-Found 10 modes
-[storm] > post-process
-[storm] > output --properties=degree,azimuthal-order,radial-order,frequency --profiles=xi_r,xi_h,radial-coordinate modes.hdf5
-[storm] >
-```
-
-### Running StORM in batch mode
-
-To run StORM in batch mode, you will need to place the commands you want to run a file (this could even be automatically generated).
-You can then let StORM read this file either by piping the file to StORM (`storm < commands.txt`) or by passing the file as the first argument to the StORM executable (`storm commands.txt`).
-You may need to prepend the command with `cargo run --release --bin`, e.g. `cargo run --release --bin storm < commands.txt`
-
-If any of the commands in the file fails, the run as a whole will fail, and StORM will terminate.
-This is the main difference between batch mode and manually entering commands.
+A walkthrough can be found on the [documentation website](https://storm.stellar-oscillations.org/docs/latest).
