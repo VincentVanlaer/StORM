@@ -107,9 +107,9 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: binary-macos
-          path: ./docs/public/installation/macos/
+          path: ./docs/landing/docs/latest/installation/macos/
       - name: Make source archive
-        run: git archive HEAD --format=tar.gz > docs/public/installation/storm.tar.gz
+        run: git archive HEAD --format=tar.gz > docs/landing/docs/latest/installation/storm.tar.gz
       - name: Set SSH key
         run: echo "$SSH_KEY" > key && chmod 600 key
         env:
