@@ -4,10 +4,11 @@ use std::{
 };
 
 use hdf5::{File, H5Type};
-use ndarray::Array1;
+use itertools::Itertools;
+use ndarray::{Array1, s};
 use thiserror::Error;
 
-use super::{DimensionedProperties, DimensionlessProperties, DiscreteModel};
+use super::{DimensionedProperties, DimensionlessProperties, DiscreteModel, DiscreteModelSegment};
 
 // As defined by MESA
 const GRAV: f64 = 6.67430e-8;
@@ -34,6 +35,9 @@ pub enum ModelError {
     /// third parameter the name of the dataset.
     #[error("Length mismatch, expected {0} points, got {1} for dataset `{2}`")]
     LengthMismatch(usize, usize, &'static str),
+    /// At least one segment in the model has zero length
+    #[error("At least one segment has zero length. Starting point is at `{0}`")]
+    ZeroLengthSegment(usize),
 }
 
 fn read_attr<T: H5Type>(file: &File, attr: &'static str) -> Result<T, ModelError> {
@@ -57,6 +61,36 @@ fn read_dataset<T: H5Type>(
     }
 
     Ok(res)
+}
+
+fn split_segments(r_coord: &[f64]) -> Result<Vec<(usize, usize)>, ModelError> {
+    let segment_indices = std::iter::once(0)
+        .chain(
+            r_coord
+                .iter()
+                .tuple_windows()
+                .enumerate()
+                .filter_map(|(idx, (r1, r2))| if r1 == r2 { Some(idx + 1) } else { None }),
+        )
+        .chain(std::iter::once(r_coord.len()))
+        .tuple_windows()
+        .collect_vec();
+
+    if let Some(idx) = segment_indices
+        .iter()
+        .filter_map(|(idx1, idx2)| {
+            if *idx1 + 1 == *idx2 {
+                Some(*idx1)
+            } else {
+                None
+            }
+        })
+        .next()
+    {
+        return Err(ModelError::ZeroLengthSegment(idx));
+    }
+
+    Ok(segment_indices)
 }
 
 impl DiscreteModel {
@@ -89,25 +123,41 @@ impl DiscreteModel {
         let mut u = 4. * PI * rho * r_coord.mapv(|r| r.powi(3)) / m_coord;
         u[0] = 3.;
 
+        let segment_indices = split_segments(r_coord.as_slice().unwrap())?;
+
+        let segments = segment_indices
+            .iter()
+            .map(|&(idx1, idx2)| DiscreteModelSegment {
+                dimensionless: DimensionlessProperties {
+                    r_coord: (r_coord / radius).slice(s![idx1..idx2]).to_vec().into(),
+                    m_coord: (m_coord / mass).slice(s![idx1..idx2]).to_vec().into(),
+                    rho: (rho / mass * radius.powi(3))
+                        .slice(s![idx1..idx2])
+                        .to_vec()
+                        .into(),
+                    p: (p / GRAV / mass.powi(2) * radius.powi(4))
+                        .slice(s![idx1..idx2])
+                        .to_vec()
+                        .into(),
+                    v: v.slice(s![idx1..idx2]).to_vec().into(),
+                    u: u.slice(s![idx1..idx2]).to_vec().into(),
+                    gamma1: gamma1.slice(s![idx1..idx2]).to_vec().into(),
+                    a_star: a_star.slice(s![idx1..idx2]).to_vec().into(),
+                    c1: c1.slice(s![idx1..idx2]).to_vec().into(),
+                    rot: rot.slice(s![idx1..idx2]).to_vec().into(),
+                },
+                metric: None,
+            })
+            .collect();
+
         Ok(DiscreteModel {
-            dimensionless: DimensionlessProperties {
-                r_coord: (r_coord / radius).to_vec().into(),
-                m_coord: (m_coord / mass).to_vec().into(),
-                rho: (rho / mass * radius.powi(3)).to_vec().into(),
-                p: (p / GRAV / mass.powi(2) * radius.powi(4)).to_vec().into(),
-                v: v.to_vec().into(),
-                u: u.to_vec().into(),
-                gamma1: gamma1.to_vec().into(),
-                a_star: a_star.to_vec().into(),
-                c1: c1.to_vec().into(),
-                rot: rot.to_vec().into(),
-            },
+            segments,
             scale: Some(DimensionedProperties {
                 radius,
                 mass,
                 grav: GRAV,
             }),
-            metric: None,
+            perturbed: None,
         })
     }
 
@@ -117,11 +167,23 @@ impl DiscreteModel {
         let input = &hdf5::File::open(file.as_ref())
             .map_err(|err| ModelError::HDF5OpenError(file.as_ref().to_owned(), err))?;
         let scale = self.scale.unwrap().freq_scale();
-        self.dimensionless.rot =
-            read_dataset(input, "Omega_rot", self.dimensionless.r_coord.len())?
-                .mapv(|rot: f64| rot / scale)
-                .to_vec()
-                .into();
+        let rot = read_dataset(
+            input,
+            "Omega_rot",
+            self.segments
+                .iter()
+                .map(|x| x.dimensionless.r_coord.len())
+                .sum(),
+        )?
+        .mapv(|rot: f64| rot / scale);
+
+        let mut idx = 0;
+
+        for segment in self.segments.iter_mut() {
+            let l = segment.dimensionless.rot.len();
+            segment.dimensionless.rot = rot.slice(s![idx..(idx + l)]).to_vec().into();
+            idx += l;
+        }
 
         Ok(())
     }

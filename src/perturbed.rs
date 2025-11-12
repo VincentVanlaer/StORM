@@ -3,6 +3,7 @@
 
 use std::f64::consts::PI;
 
+use itertools::Itertools;
 use nalgebra::{ComplexField, Const, DMatrix, DVector, Dyn, Matrix2, Matrix3, Vector2};
 use num_complex::Complex64;
 use num_traits::Zero;
@@ -10,7 +11,10 @@ use num_traits::Zero;
 use crate::{
     gaunt::{q_kl1_h, q_kl1_hd, q_kl2, q_kl2_h, q_kl2_hd},
     linalg::qz,
-    model::{DiscreteModel, PerturbedMetric},
+    model::{
+        ContinuousModel, DiscreteModel, DiscreteModelSegment, PerturbedMetric, PerturbedParameters,
+        interpolate::LinearInterpolator,
+    },
     postprocessing::Rotating1DPostprocessing,
 };
 
@@ -54,57 +58,69 @@ pub struct ModeCoupling {
 /// The rotation used to compute the modes should match the rotation frequency in the perturbed
 /// metric. Similarly, the azimuthal order should also match the way the modes are computed
 pub fn perturb_deformed(
-    DiscreteModel {
-        dimensionless: model,
-        ..
-    }: &DiscreteModel,
+    model: &[DiscreteModelSegment],
     modes: &[ModeToPerturb],
     m: i64,
-    PerturbedMetric {
-        alpha,
-        dalpha,
-        ddalpha,
-        beta,
-        dbeta,
-        ddbeta,
-        rot: _,
-        mass_delta: _,
-    }: &PerturbedMetric,
 ) -> ModeCoupling {
+    let total_len = model.iter().map(|s| s.dimensionless.r_coord.len()).sum();
+
     let trapezoid = {
-        let mut trapezoid = vec![0.; model.r_coord.len()];
+        let mut trapezoid = vec![0.; total_len];
 
-        trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]);
-        trapezoid[model.r_coord.len() - 1] =
-            0.5 * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2]);
+        let mut idx = 0;
+        for s in model {
+            let s = &s.dimensionless;
+            trapezoid[idx] = 0.5 * (s.r_coord[1] - s.r_coord[0]);
 
-        for i in 1..(model.r_coord.len() - 1) {
-            trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]);
+            idx += 1;
+            for i in 1..(s.r_coord.len() - 1) {
+                trapezoid[idx] = 0.5 * (s.r_coord[i + 1] - s.r_coord[i - 1]);
+                idx += 1;
+            }
+            trapezoid[idx] =
+                0.5 * (s.r_coord[s.r_coord.len() - 1] - s.r_coord[s.r_coord.len() - 2]);
+            idx += 1;
         }
 
         trapezoid
     };
 
-    let epsilona = alpha.to_owned();
-    let mut adepsilona = vec![0.; alpha.len()];
-    let mut threeepsilonadepsilona = vec![0.; alpha.len()];
-    let mut adthreeepsilonadepsilona = vec![0.; alpha.len()];
-
-    for i in 0..alpha.len() {
-        adepsilona[i] = dalpha[i];
-        threeepsilonadepsilona[i] = 3. * epsilona[i] + adepsilona[i];
-        adthreeepsilonadepsilona[i] = 3. * dalpha[i] + ddalpha[i];
+    for x in &trapezoid {
+        debug_assert!(x.is_finite());
     }
 
-    let epsilonb = beta.to_owned();
-    let mut adepsilonb = vec![0.; beta.len()];
-    let mut threeepsilonadepsilonb = vec![0.; beta.len()];
-    let mut adthreeepsilonadepsilonb = vec![0.; beta.len()];
+    let mut epsilona = vec![0.; total_len];
+    let mut adepsilona = vec![0.; total_len];
+    let mut threeepsilonadepsilona = vec![0.; total_len];
+    let mut adthreeepsilonadepsilona = vec![0.; total_len];
+    let mut epsilonb = vec![0.; total_len];
+    let mut adepsilonb = vec![0.; total_len];
+    let mut threeepsilonadepsilonb = vec![0.; total_len];
+    let mut adthreeepsilonadepsilonb = vec![0.; total_len];
 
-    for i in 0..beta.len() {
-        adepsilonb[i] = dbeta[i];
-        threeepsilonadepsilonb[i] = 3. * epsilonb[i] + adepsilonb[i];
-        adthreeepsilonadepsilonb[i] = 3. * dbeta[i] + ddbeta[i];
+    let mut idx = 0;
+
+    for s in model {
+        let PerturbedMetric {
+            alpha,
+            dalpha,
+            ddalpha,
+            beta,
+            dbeta,
+            ddbeta,
+        } = s.metric.as_ref().unwrap();
+        for i in 0..s.dimensionless.r_coord.len() {
+            epsilona[idx] = alpha[i];
+            adepsilona[idx] = dalpha[i];
+            threeepsilonadepsilona[idx] = 3. * epsilona[i] + adepsilona[i];
+            adthreeepsilonadepsilona[idx] = 3. * dalpha[i] + ddalpha[i];
+
+            epsilonb[idx] = beta[i];
+            adepsilonb[idx] = dbeta[i];
+            threeepsilonadepsilonb[idx] = 3. * epsilonb[i] + adepsilonb[i];
+            adthreeepsilonadepsilonb[idx] = 3. * dbeta[i] + ddbeta[i];
+            idx += 1;
+        }
     }
 
     let mf = m as f64;
@@ -144,120 +160,126 @@ pub fn perturb_deformed(
             }
             let inner_prod_r = inner_prod_r(l.ell, r.ell);
             let inner_prod_h = inner_prod_h(l.ell, r.ell);
+            let mut rc = 0;
 
-            for rc in 1..l.post_processing.x.len() {
-                let rr = l.post_processing.xi_r[rc] * r.post_processing.xi_r[rc];
-                let rh = l.post_processing.xi_r[rc] * r.post_processing.xi_h[rc];
-                let hr = l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc];
-                let hh = l.post_processing.xi_h[rc] * r.post_processing.xi_h[rc];
-                let rtp = l.post_processing.xi_r[rc] * r.post_processing.xi_tp[rc];
-                let rtn = l.post_processing.xi_r[rc] * r.post_processing.xi_tn[rc];
-                let htp = l.post_processing.xi_h[rc] * r.post_processing.xi_tp[rc];
-                let htn = l.post_processing.xi_h[rc] * r.post_processing.xi_tn[rc];
-                let vol = trapezoid[rc] * model.r_coord[rc].powi(2) * model.rho[rc];
+            for (s_idx, s) in model.iter().enumerate() {
+                let s = &s.dimensionless;
+                for p_idx in (if s_idx == 0 { 1 } else { 0 })..s.r_coord.len() {
+                    let rr = l.post_processing.xi_r[rc] * r.post_processing.xi_r[rc];
+                    let rh = l.post_processing.xi_r[rc] * r.post_processing.xi_h[rc];
+                    let hr = l.post_processing.xi_h[rc] * r.post_processing.xi_r[rc];
+                    let hh = l.post_processing.xi_h[rc] * r.post_processing.xi_h[rc];
+                    let rtp = l.post_processing.xi_r[rc] * r.post_processing.xi_tp[rc];
+                    let rtn = l.post_processing.xi_r[rc] * r.post_processing.xi_tn[rc];
+                    let htp = l.post_processing.xi_h[rc] * r.post_processing.xi_tp[rc];
+                    let htn = l.post_processing.xi_h[rc] * r.post_processing.xi_tn[rc];
+                    let vol = trapezoid[rc] * s.r_coord[p_idx].powi(2) * s.rho[p_idx];
 
-                let val = vol
-                    * (rr * inner_prod_r * (1. + 2. * (epsilona[rc] + adepsilona[rc]))
-                        + hh * inner_prod_h * (1. + 2. * epsilona[rc])
-                        + rr * 2. * q_kl2 * (epsilonb[rc] + adepsilonb[rc])
-                        + (rh * q_kl2_hrd + hr * q_kl2_hld + hh * 2. * q_kl2_h) * epsilonb[rc]);
+                    let val = vol
+                        * (rr * inner_prod_r * (1. + 2. * (epsilona[rc] + adepsilona[rc]))
+                            + hh * inner_prod_h * (1. + 2. * epsilona[rc])
+                            + rr * 2. * q_kl2 * (epsilonb[rc] + adepsilonb[rc])
+                            + (rh * q_kl2_hrd + hr * q_kl2_hld + hh * 2. * q_kl2_h) * epsilonb[rc]);
 
-                assert!(
-                    val.is_finite(),
-                    "Not finite number at {}, {}",
-                    left_mode,
-                    right_mode
-                );
-                d_squared[(left_mode, right_mode)] += val;
-                d_linear[(left_mode, right_mode)] += 2. * mf * model.rot[rc] * val;
-                d_zero[(left_mode, right_mode)] += mf * mf * model.rot[rc] * model.rot[rc] * val;
+                    assert!(
+                        val.is_finite(),
+                        "Not finite number at {}, {}",
+                        left_mode,
+                        right_mode
+                    );
+                    d_squared[(left_mode, right_mode)] += val;
+                    d_linear[(left_mode, right_mode)] += 2. * mf * s.rot[p_idx] * val;
+                    d_zero[(left_mode, right_mode)] += mf * mf * s.rot[p_idx] * s.rot[p_idx] * val;
 
-                let val = vol
-                    * 2.
-                    * (inner_prod_r
-                        * ((hr + rh) * (1. + 2. * epsilona[rc] + adepsilona[rc])
-                            + hh * (1. + 2. * epsilona[rc]))
-                        + (rh + hr) * q_kl2 * (2. * epsilonb[rc] + adepsilonb[rc])
-                        + hh * (inner_prod_r + 6. * q_kl2) * 2. * epsilonb[rc]);
+                    let val = vol
+                        * 2.
+                        * (inner_prod_r
+                            * ((hr + rh) * (1. + 2. * epsilona[rc] + adepsilona[rc])
+                                + hh * (1. + 2. * epsilona[rc]))
+                            + (rh + hr) * q_kl2 * (2. * epsilonb[rc] + adepsilonb[rc])
+                            + hh * (inner_prod_r + 6. * q_kl2) * 2. * epsilonb[rc]);
 
-                let val_t = vol
-                    * 2.
-                    * model.rot[rc]
-                    * (q_rt_p * rtp + q_rt_n * rtn + q_ht_n * htn + q_ht_p * htp);
+                    let val_t = vol
+                        * 2.
+                        * s.rot[p_idx]
+                        * (q_rt_p * rtp + q_rt_n * rtn + q_ht_n * htn + q_ht_p * htp);
 
-                assert!(
-                    val.is_finite(),
-                    "Not finite number at {}, {}",
-                    left_mode,
-                    right_mode
-                );
-                assert!(
-                    val_t.is_finite(),
-                    "Not finite number at {}, {}",
-                    left_mode,
-                    right_mode
-                );
-                r_linear[(left_mode, right_mode)] += mf * model.rot[rc] * val + val_t;
-                r_zero[(left_mode, right_mode)] +=
-                    mf * model.rot[rc] * (mf * model.rot[rc] * val + val_t);
+                    assert!(
+                        val.is_finite(),
+                        "Not finite number at {}, {}",
+                        left_mode,
+                        right_mode
+                    );
+                    assert!(
+                        val_t.is_finite(),
+                        "Not finite number at {}, {}",
+                        left_mode,
+                        right_mode
+                    );
+                    r_linear[(left_mode, right_mode)] += mf * s.rot[p_idx] * val + val_t;
+                    r_zero[(left_mode, right_mode)] +=
+                        mf * s.rot[p_idx] * (mf * s.rot[p_idx] * val + val_t);
 
-                l_zero[(left_mode, right_mode)] += trapezoid[rc]
-                    * model.r_coord[rc].powi(2)
-                    * ((r.freq - mf * model.rot[rc]).powi(2)
-                        * model.rho[rc]
-                        * (inner_prod_r * rr + inner_prod_h * hh)
-                        + 2. * mf
-                            * model.rot[rc]
-                            * (r.freq - mf * model.rot[rc])
-                            * model.rho[rc]
-                            * inner_prod_r
-                            * (rh + hr + hh)
-                        + l.post_processing.psi[rc]
-                            * r.post_processing.rho[rc]
-                            * threeepsilonadepsilona[rc]
-                        - model.rho[rc]
-                            * l.post_processing.psi[rc]
-                            * r.post_processing.xi_r[rc]
-                            * adthreeepsilonadepsilona[rc]
-                            / model.r_coord[rc]
-                        + l.post_processing.psi[rc]
-                            * q_kl2
-                            * r.post_processing.rho[rc]
-                            * threeepsilonadepsilonb[rc]
-                        - model.rho[rc]
-                            * l.post_processing.psi[rc]
-                            * q_kl2
-                            * r.post_processing.xi_r[rc]
-                            * adthreeepsilonadepsilonb[rc]
-                            / model.r_coord[rc]
-                        - l.post_processing.p[rc]
-                            * r.post_processing.xi_r[rc]
-                            * adthreeepsilonadepsilona[rc]
-                            / model.r_coord[rc]
-                        - l.post_processing.p[rc]
-                            * q_kl2
-                            * r.post_processing.xi_r[rc]
-                            * adthreeepsilonadepsilonb[rc]
-                            / model.r_coord[rc]
-                        - l.post_processing.p[rc]
-                            * q_kl2_hrd
-                            * r.post_processing.xi_h[rc]
-                            * threeepsilonadepsilonb[rc]
-                            / model.r_coord[rc]
-                        + q_kl2_hrd
-                            * model.rho[rc]
-                            * l.post_processing.psi[rc]
-                            * r.post_processing.xi_h[rc]
-                            * threeepsilonadepsilonb[rc]
-                            / model.r_coord[rc]);
-                assert!(
-                    l_zero[(left_mode, right_mode)].is_finite(),
-                    "Not finite number at {}, {}, {}: {}",
-                    left_mode,
-                    right_mode,
-                    rc,
-                    l_zero[(left_mode, right_mode)]
-                );
+                    l_zero[(left_mode, right_mode)] += trapezoid[rc]
+                        * s.r_coord[p_idx].powi(2)
+                        * ((r.freq - mf * s.rot[p_idx]).powi(2)
+                            * s.rho[p_idx]
+                            * (inner_prod_r * rr + inner_prod_h * hh)
+                            + 2. * mf
+                                * s.rot[p_idx]
+                                * (r.freq - mf * s.rot[p_idx])
+                                * s.rho[p_idx]
+                                * inner_prod_r
+                                * (rh + hr + hh)
+                            + l.post_processing.psi[rc]
+                                * r.post_processing.rho[rc]
+                                * threeepsilonadepsilona[rc]
+                            - s.rho[p_idx]
+                                * l.post_processing.psi[rc]
+                                * r.post_processing.xi_r[rc]
+                                * adthreeepsilonadepsilona[rc]
+                                / s.r_coord[p_idx]
+                            + l.post_processing.psi[rc]
+                                * q_kl2
+                                * r.post_processing.rho[rc]
+                                * threeepsilonadepsilonb[rc]
+                            - s.rho[p_idx]
+                                * l.post_processing.psi[rc]
+                                * q_kl2
+                                * r.post_processing.xi_r[rc]
+                                * adthreeepsilonadepsilonb[rc]
+                                / s.r_coord[p_idx]
+                            - l.post_processing.p[rc]
+                                * r.post_processing.xi_r[rc]
+                                * adthreeepsilonadepsilona[rc]
+                                / s.r_coord[p_idx]
+                            - l.post_processing.p[rc]
+                                * q_kl2
+                                * r.post_processing.xi_r[rc]
+                                * adthreeepsilonadepsilonb[rc]
+                                / s.r_coord[p_idx]
+                            - l.post_processing.p[rc]
+                                * q_kl2_hrd
+                                * r.post_processing.xi_h[rc]
+                                * threeepsilonadepsilonb[rc]
+                                / s.r_coord[p_idx]
+                            + q_kl2_hrd
+                                * s.rho[p_idx]
+                                * l.post_processing.psi[rc]
+                                * r.post_processing.xi_h[rc]
+                                * threeepsilonadepsilonb[rc]
+                                / s.r_coord[p_idx]);
+                    assert!(
+                        l_zero[(left_mode, right_mode)].is_finite(),
+                        "Not finite number at {}, {}, {}: {}",
+                        left_mode,
+                        right_mode,
+                        rc,
+                        l_zero[(left_mode, right_mode)]
+                    );
+
+                    rc += 1;
+                }
             }
         }
     }
@@ -321,142 +343,162 @@ pub fn perturb_deformed(
 }
 
 /// Deform the stellar structure of a model for a give rotation frequency
-pub fn perturb_structure(
-    DiscreteModel {
-        dimensionless: model,
-        ..
-    }: &DiscreteModel,
-    rot: f64,
-) -> PerturbedMetric {
-    let mut y0 = vec![Vector2::new(0., 0.); model.r_coord.len()];
-    let mut y2 = vec![Vector2::new(0., 0.); model.r_coord.len()];
+pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
     let diag2 = Matrix2::from_diagonal_element(1.);
     let diag3 = Matrix3::from_diagonal_element(1.);
 
-    y2[1] = Vector2::new(1., 2.);
+    let mut init_y0 = Vector2::new(0., 0.);
+    let mut init_y2 = Vector2::new(1., 2.);
 
-    for i in 1..model.r_coord.len() {
-        let delta = model.r_coord[i] - model.r_coord[i - 1];
-        let x_12 = 0.5 * (model.r_coord[i] + model.r_coord[i - 1]);
+    let mut segments = Vec::new();
 
-        let k = 4. * PI / model.m_coord[i]
-            * model.rho[i]
-            * model.r_coord[i]
-            * (-model.a_star[i] - model.v[i] / model.gamma1[i]);
+    let layer = LinearInterpolator::new(model);
 
-        let k_prev = if i == 1 {
-            0.
-        } else {
-            4. * PI / model.m_coord[i - 1]
-                * model.rho[i - 1]
-                * model.r_coord[i - 1]
-                * (-model.a_star[i - 1] - model.v[i - 1] / model.gamma1[i - 1])
-        };
+    for segment in 0..model.segments.len() {
+        let grid = &model.segments[segment].dimensionless.r_coord;
+        let mut y0 = vec![Vector2::new(0., 0.); grid.len()];
+        let mut y2 = vec![Vector2::new(0., 0.); grid.len()];
 
-        let a0 = 0.5 * delta / x_12
-            * Matrix3::new(
-                -1.,
-                1.,
-                0.,
-                0.5 * x_12.powi(2) * (k + k_prev),
-                -2.,
-                x_12,
-                0.,
-                0.,
-                0.,
-            );
+        let integration_points: Vec<_> = grid
+            .iter()
+            .tuple_windows()
+            .map(|(x1, x2)| 0.5 * (x1 + x2))
+            .collect();
 
-        let step = nalgebra::Matrix3::try_inverse(diag3 - a0).unwrap() * (diag3 + a0);
+        let structure = layer.eval(segment, &integration_points).dimensionless;
 
-        y0[i] = step.generic_view((0, 0), (Const::<2>, Const::<2>)) * y0[i - 1]
-            + step.generic_view((0, 2), (Const::<2>, Const::<1>));
+        if segment != 0 {
+            let lower = layer.eval(segment, &grid[0..1]).dimensionless;
+            init_y0.y += 4. * PI / lower.m_coord[0] * lower.rho[0];
+            init_y2.y += 4. * PI / lower.m_coord[0] * lower.rho[0];
+        }
 
-        if i != 1 {
-            let a2 = 0.5 * delta / x_12
-                * Matrix2::new(-1., 1., 6. + 0.5 * x_12.powi(2) * (k + k_prev), -2.);
+        y0[0] = init_y0;
+        y2[0] = init_y2;
+
+        for i in 0..(grid.len() - 1) {
+            let delta = grid[i + 1] - grid[i];
+            let x12 = integration_points[i];
+
+            let k = 4. * PI / structure.m_coord[i]
+                * structure.rho[i]
+                * structure.r_coord[i]
+                * (-structure.a_star[i] - structure.v[i] / structure.gamma1[i]);
+
+            let a0 = 0.5 * delta / x12
+                * Matrix3::new(-1., 1., 0., 0.5 * x12.powi(2) * k, -2., x12, 0., 0., 0.);
+            let step = nalgebra::Matrix3::try_inverse(diag3 - a0).unwrap() * (diag3 + a0);
+
+            y0[i + 1] = step.generic_view((0, 0), (Const::<2>, Const::<2>)) * y0[i]
+                + step.generic_view((0, 2), (Const::<2>, Const::<1>));
+
+            let a2 = 0.5 * delta / x12 * Matrix2::new(-1., 1., 6. + 0.5 * x12.powi(2) * k, -2.);
             let step = nalgebra::Matrix2::try_inverse(diag2 - a2).unwrap() * (diag2 + a2);
 
-            y2[i] = step * y2[i - 1];
+            y2[i + 1] = step * y2[i];
         }
+
+        init_y0 = *y0.last().unwrap();
+        init_y2 = *y2.last().unwrap();
+
+        let upper = layer.eval(segment, &[*grid.last().unwrap()]).dimensionless;
+        init_y0.y -= 4. * PI / upper.m_coord[0] * upper.rho[0];
+        init_y2.y -= 4. * PI / upper.m_coord[0] * upper.rho[0];
+
+        segments.push((y0, y2));
     }
 
-    let upper = y2.last().unwrap();
-
+    let upper = segments.last().unwrap().1.last().unwrap();
     let a2 = -5. / 6. / (3. * upper.x + upper.y);
-
-    let mut alpha = vec![0.; model.r_coord.len()];
-    let mut dalpha = vec![0.; model.r_coord.len()];
-    let mut ddalpha = vec![0.; model.r_coord.len()];
-
-    let mut beta = vec![0.; model.r_coord.len()];
-    let mut dbeta = vec![0.; model.r_coord.len()];
-    let mut ddbeta = vec![0.; model.r_coord.len()];
     let mut mass_delta = 0.;
 
-    let trapezoid = {
-        let mut trapezoid = vec![0.; model.r_coord.len()];
+    for segment in 0..layer.segments().len() {
+        let s = &mut model.segments[segment];
+        let grid = &s.dimensionless.r_coord;
 
-        trapezoid[0] = 0.5 * (model.r_coord[1] - model.r_coord[0]);
-        trapezoid[model.r_coord.len() - 1] =
-            0.5 * (model.r_coord[model.r_coord.len() - 1] - model.r_coord[model.r_coord.len() - 2]);
+        let mut alpha = vec![0.; grid.len()];
+        let mut dalpha = vec![0.; grid.len()];
+        let mut ddalpha = vec![0.; grid.len()];
 
-        for i in 1..(model.r_coord.len() - 1) {
-            trapezoid[i] = 0.5 * (model.r_coord[i + 1] - model.r_coord[i - 1]);
+        let mut beta = vec![0.; grid.len()];
+        let mut dbeta = vec![0.; grid.len()];
+        let mut ddbeta = vec![0.; grid.len()];
+
+        let trapezoid = {
+            let mut trapezoid = vec![0.; grid.len()];
+
+            trapezoid[0] = 0.5 * (grid[1] - grid[0]);
+            trapezoid[grid.len() - 1] = 0.5 * (grid[grid.len() - 1] - grid[grid.len() - 2]);
+
+            for i in 1..(grid.len() - 1) {
+                trapezoid[i] = 0.5 * (grid[i + 1] - grid[i - 1]);
+            }
+
+            trapezoid
+        };
+
+        let d = &s.dimensionless;
+
+        let (y0, y2) = &segments[segment];
+
+        for i in (if segment == 0 { 1 } else { 0 })..beta.len() {
+            let dlnrhodlna = -d.a_star[i] - d.v[i] / d.gamma1[i];
+            let k = 4. * PI / d.m_coord[i] * d.rho[i] * d.r_coord[i] * dlnrhodlna;
+
+            let psi = y0[i].x * d.r_coord[i];
+            let dpsi = y0[i].y;
+            let ddpsi = (d.r_coord[i].powi(2) * k * y0[i].x - 2. * y0[i].y) / d.r_coord[i] + 1.;
+
+            alpha[i] = 2. * d.r_coord[i] / d.m_coord[i] * psi * rot.powi(2);
+            dalpha[i] = alpha[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi);
+            ddalpha[i] = dalpha[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi)
+                + alpha[i]
+                    * (-3. * d.u[i] - d.u[i] * dlnrhodlna
+                        + d.u[i].powi(2)
+                        + d.r_coord[i] * dpsi / psi
+                        - (d.r_coord[i] * dpsi / psi).powi(2)
+                        + d.r_coord[i].powi(2) * ddpsi / psi);
+
+            let psi = y2[i].x * d.r_coord[i] * a2;
+            let dpsi = y2[i].y * a2;
+            let ddpsi =
+                ((6. + d.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y) / d.r_coord[i] * a2;
+
+            beta[i] = 2. * d.r_coord[i] / d.m_coord[i] * psi * rot.powi(2);
+            dbeta[i] = beta[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi);
+            ddbeta[i] = dbeta[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi)
+                + beta[i]
+                    * (-3. * d.u[i] - d.u[i] * dlnrhodlna
+                        + d.u[i].powi(2)
+                        + d.r_coord[i] * dpsi / psi
+                        - (d.r_coord[i] * dpsi / psi).powi(2)
+                        + d.r_coord[i].powi(2) * ddpsi / psi);
+            mass_delta +=
+                trapezoid[i] * d.rho[i] * d.r_coord[i].powi(2) * (3. * alpha[i] + dalpha[i]);
         }
 
-        trapezoid
-    };
+        for i in 0..beta.len() {
+            debug_assert!(alpha[i].is_finite());
+            debug_assert!(dalpha[i].is_finite());
+            debug_assert!(ddalpha[i].is_finite());
+            debug_assert!(beta[i].is_finite());
+            debug_assert!(dbeta[i].is_finite());
+            debug_assert!(ddbeta[i].is_finite());
+        }
 
-    for i in 1..beta.len() {
-        let dlnrhodlna = -model.a_star[i] - model.v[i] / model.gamma1[i];
-        let k = 4. * PI / model.m_coord[i] * model.rho[i] * model.r_coord[i] * dlnrhodlna;
-
-        let psi = y0[i].x * model.r_coord[i];
-        let dpsi = y0[i].y;
-        let ddpsi = (model.r_coord[i].powi(2) * k * y0[i].x - 2. * y0[i].y) / model.r_coord[i] + 1.;
-
-        alpha[i] = 2. * model.r_coord[i] / model.m_coord[i] * psi * rot.powi(2);
-        dalpha[i] = alpha[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi);
-        ddalpha[i] = dalpha[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi)
-            + alpha[i]
-                * (-3. * model.u[i] - model.u[i] * dlnrhodlna
-                    + model.u[i].powi(2)
-                    + model.r_coord[i] * dpsi / psi
-                    - (model.r_coord[i] * dpsi / psi).powi(2)
-                    + model.r_coord[i].powi(2) * ddpsi / psi);
-
-        let psi = y2[i].x * model.r_coord[i] * a2;
-        let dpsi = y2[i].y * a2;
-        let ddpsi =
-            ((6. + model.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y) / model.r_coord[i] * a2;
-
-        beta[i] = 2. * model.r_coord[i] / model.m_coord[i] * psi * rot.powi(2);
-        dbeta[i] = beta[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi);
-        ddbeta[i] = dbeta[i] * (1. - model.u[i] + model.r_coord[i] * dpsi / psi)
-            + beta[i]
-                * (-3. * model.u[i] - model.u[i] * dlnrhodlna
-                    + model.u[i].powi(2)
-                    + model.r_coord[i] * dpsi / psi
-                    - (model.r_coord[i] * dpsi / psi).powi(2)
-                    + model.r_coord[i].powi(2) * ddpsi / psi);
-        mass_delta +=
-            trapezoid[i] * model.rho[i] * model.r_coord[i].powi(2) * (3. * alpha[i] + dalpha[i]);
+        s.metric = Some(PerturbedMetric {
+            alpha: alpha.into(),
+            dalpha: dalpha.into(),
+            ddalpha: ddalpha.into(),
+            beta: beta.into(),
+            dbeta: dbeta.into(),
+            ddbeta: ddbeta.into(),
+        });
     }
 
     mass_delta *= 4. * PI;
 
-    // TODO: check central point (not that it will have a significant influence)
-
-    PerturbedMetric {
-        alpha: alpha.into(),
-        dalpha: dalpha.into(),
-        ddalpha: ddalpha.into(),
-        beta: beta.into(),
-        dbeta: dbeta.into(),
-        ddbeta: ddbeta.into(),
-        rot,
-        mass_delta,
-    }
+    model.perturbed = Some(PerturbedParameters { mass_delta, rot });
 }
 
 #[cfg(test)]
@@ -467,7 +509,7 @@ mod tests {
     use crate::{
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, ErasedSolver},
-        model::{PerturbedMetric, interpolate::LinearInterpolator, polytrope::construct_polytrope},
+        model::{interpolate::LinearInterpolator, polytrope::construct_polytrope},
         perturbed::perturb_structure,
         postprocessing::Rotating1DPostprocessing,
         system::adiabatic::Rotating1D,
@@ -489,16 +531,54 @@ mod tests {
         let mut poly3 = construct_polytrope(3., 5. / 3., 0.001);
 
         // Low rotation rate to supress higher order effects
-        poly3.dimensionless.rot.fill(ROT);
+        poly3.segments[0].dimensionless.rot.fill(ROT);
+        let mut poly3_rot = poly3.clone();
+        perturb_structure(&mut poly3_rot, ROT);
 
-        let deformed = perturb_structure(&poly3, ROT);
+        let mut poly3_symm = poly3_rot.clone();
+        let mut poly3_p2 = poly3_rot.clone();
+        let mut poly3_nonrot = poly3_rot.clone();
+
+        for s in poly3_p2.segments.iter_mut() {
+            let s = s.metric.as_mut().unwrap();
+
+            s.alpha.fill(0.);
+            s.dalpha.fill(0.);
+            s.ddalpha.fill(0.);
+        }
+
+        for s in poly3_symm.segments.iter_mut() {
+            let s = s.metric.as_mut().unwrap();
+
+            s.beta.fill(0.);
+            s.dbeta.fill(0.);
+            s.ddbeta.fill(0.);
+        }
+
+        for s in poly3_nonrot.segments.iter_mut() {
+            let s = s.metric.as_mut().unwrap();
+
+            s.alpha.fill(0.);
+            s.dalpha.fill(0.);
+            s.ddalpha.fill(0.);
+
+            s.beta.fill(0.);
+            s.dbeta.fill(0.);
+            s.ddbeta.fill(0.);
+        }
+
+        let grid: Vec<_> = poly3
+            .segments
+            .iter()
+            .map(|x| &*x.dimensionless.r_coord)
+            .collect();
 
         let runner = |ell: u64, scan: &[f64]| {
             let solver = ErasedSolver::new(
                 &LinearInterpolator::new(&poly3),
                 Rotating1D::new(ell, 0),
                 DifferenceSchemes::Colloc6,
-                &poly3.dimensionless.r_coord,
+                &grid,
             );
 
             let solutions =
@@ -512,7 +592,7 @@ mod tests {
                         &solver.eigenvector(x.root),
                         ell,
                         0,
-                        &poly3,
+                        &poly3.segments,
                     )
                 })
                 .collect_vec();
@@ -521,7 +601,7 @@ mod tests {
 
             // First check the toroidal contributions
             let result_tor = perturb_deformed(
-                &poly3,
+                &poly3_nonrot.segments,
                 &solutions
                     .iter()
                     .zip(post_processing.iter())
@@ -532,16 +612,6 @@ mod tests {
                     })
                     .collect_vec(),
                 0,
-                &PerturbedMetric {
-                    alpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    dalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    ddalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    beta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    dbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    ddbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    rot: 0.,
-                    mass_delta: 0.,
-                },
             );
 
             let mut perturbed_freqs_tor = result_tor
@@ -569,7 +639,7 @@ mod tests {
                 .collect_vec();
 
             let result_def_s = perturb_deformed(
-                &poly3,
+                &poly3_symm.segments,
                 &solutions
                     .iter()
                     .zip(post_processing_no_tor.iter())
@@ -580,16 +650,6 @@ mod tests {
                     })
                     .collect_vec(),
                 0,
-                &PerturbedMetric {
-                    alpha: deformed.alpha.clone(),
-                    dalpha: deformed.dalpha.clone(),
-                    ddalpha: deformed.ddalpha.clone(),
-                    beta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    dbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    ddbeta: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    rot: ROT,
-                    mass_delta: 0.,
-                },
             );
 
             let mut perturbed_freqs_def_s = result_def_s
@@ -606,7 +666,7 @@ mod tests {
                 .collect_vec();
 
             let result_def_n = perturb_deformed(
-                &poly3,
+                &poly3_p2.segments,
                 &solutions
                     .iter()
                     .zip(post_processing_no_tor.iter())
@@ -617,16 +677,6 @@ mod tests {
                     })
                     .collect_vec(),
                 0,
-                &PerturbedMetric {
-                    alpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    dalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    ddalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                    beta: deformed.beta.clone(),
-                    dbeta: deformed.dbeta.clone(),
-                    ddbeta: deformed.ddbeta.clone(),
-                    rot: ROT,
-                    mass_delta: 0.,
-                },
             );
 
             let mut perturbed_freqs_def_n = result_def_n
@@ -650,7 +700,7 @@ mod tests {
                     &LinearInterpolator::new(&poly3),
                     Rotating1D::new(ell, 1),
                     DifferenceSchemes::Colloc6,
-                    &poly3.dimensionless.r_coord,
+                    &grid,
                 );
 
                 let solutions_m1 =
@@ -664,7 +714,7 @@ mod tests {
                             &solver.eigenvector(x.root),
                             ell,
                             1,
-                            &poly3,
+                            &poly3.segments,
                         )
                     })
                     .inspect(|x| {
@@ -691,7 +741,7 @@ mod tests {
                     .collect_vec();
 
                 let result_def_n_m1 = perturb_deformed(
-                    &poly3,
+                    &poly3_p2.segments,
                     &solutions_m1
                         .iter()
                         .zip(post_processing_no_tor_m1.iter())
@@ -702,16 +752,6 @@ mod tests {
                         })
                         .collect_vec(),
                     1,
-                    &PerturbedMetric {
-                        alpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                        dalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                        ddalpha: vec![0.; poly3.dimensionless.r_coord.len()].into(),
-                        beta: deformed.beta.clone(),
-                        dbeta: deformed.dbeta.clone(),
-                        ddbeta: deformed.ddbeta.clone(),
-                        rot: ROT,
-                        mass_delta: 0.,
-                    },
                 );
 
                 let mut perturbed_freqs_def_n_m1 = result_def_n_m1

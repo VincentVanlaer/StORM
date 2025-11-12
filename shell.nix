@@ -29,15 +29,20 @@ let
   cargo-zigbuild = pkgs.cargo-zigbuild.override { inherit rustPlatform; };
   bench = pkgs.writeScriptBin "bench" /* bash */ ''
     cur=`jj st | grep "(@)" | cut -f 6 -d " "`
+    log='test-data/generated/bench-log'
     # baseline
     jj new $1
-    cargo export target/benchmarks -- bench --bench=wall-clock 2>/dev/null
-    cargo bench -q --bench=instruction-count 2>/dev/null 1>/dev/null
+    rm $log
+    touch $log
+    direnv exec . cargo export target/benchmarks -- bench --bench=wall-clock 2>>$log 1>>$log
+    direnv exec . cargo bench -q --bench=instruction-count 2>>$log 1>>$log
+    jj abandon
 
     # actual
     jj new $2
-    cargo bench -q --bench=wall-clock -- compare -s 100 -d test-data/generated/benches/ --gnuplot target/benchmarks/wall_clock 2>/dev/null
-    cargo bench -q --bench=instruction-count 2>/dev/null
+    direnv exec . cargo bench -q --bench=wall-clock -- compare -s 100 -d test-data/generated/benches/ --gnuplot target/benchmarks/wall_clock 2>>$log
+    direnv exec . cargo bench -q --bench=instruction-count 2>>$log
+    jj abandon
 
     jj edit $cur
   '';

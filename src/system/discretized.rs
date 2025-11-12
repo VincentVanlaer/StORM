@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use nalgebra::{
     ComplexField, DefaultAllocator, Dim, DimName, DimSub, Dyn, Matrix, StorageMut,
     allocator::Allocator,
@@ -5,7 +6,7 @@ use nalgebra::{
 
 use crate::{
     linalg::storage::{ArrayAllocator, ArrayStorage, MatrixArray},
-    model::{ContinuousModel, DiscreteModel},
+    model::{ContinuousModel, DiscreteModelSegment},
     stepper::{ExplicitStepper, ImplicitStepper},
 };
 
@@ -15,7 +16,8 @@ pub(crate) trait DiscretizedSystem<T: ComplexField> {
     type N: Dim + DimSub<Self::NInner>;
     type NInner: Dim;
 
-    fn len(&self) -> usize;
+    fn len_segments(&self) -> usize;
+    fn len_steps(&self, segment: usize) -> usize;
     fn shape(&self) -> Self::N;
     fn shape_inner(&self) -> Self::NInner;
     fn shape_outer(&self) -> <Self::N as DimSub<Self::NInner>>::Output;
@@ -37,8 +39,16 @@ pub(crate) trait DiscretizedSystem<T: ComplexField> {
         >,
     );
 
+    fn transition_segment(
+        &self,
+        segment: usize,
+        left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+        right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+    );
+
     fn fill(
         &self,
+        segment: usize,
         step: usize,
         frequency: T,
         left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
@@ -49,6 +59,7 @@ pub(crate) trait DiscretizedSystem<T: ComplexField> {
 pub(crate) trait ExplicitDiscretizedSystem<T: ComplexField>: DiscretizedSystem<T> {
     fn fill_explicit(
         &self,
+        segment: usize,
         step: usize,
         frequency: T,
         left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
@@ -58,6 +69,10 @@ pub(crate) trait ExplicitDiscretizedSystem<T: ComplexField>: DiscretizedSystem<T
 pub(crate) struct DiscretizedSystemImpl<T: ComplexField + Copy, S: System<T>, Stepper, SArray> {
     stepper: Stepper,
     system: S,
+    segments: Vec<DiscretizedSegment<T, S, SArray>>,
+}
+
+struct DiscretizedSegment<T: ComplexField + Copy, S: System<T>, SArray> {
     matrices: MatrixArray<T, S::N, S::N, Dyn, SArray>,
     interpolated_points: Vec<S::ModelPoint>,
     inner: S::ModelPoint,
@@ -76,49 +91,69 @@ impl<T: ComplexField + Copy, Stepper: ImplicitStepper, S: System<T>>
 where
     DefaultAllocator: ArrayAllocator<S::N, S::N, Dyn>,
     S::ModelPoint: Copy,
-    Vec<S::ModelPoint>: for<'a> From<&'a DiscreteModel>,
+    Vec<S::ModelPoint>: for<'a> From<&'a DiscreteModelSegment>,
 {
     pub(crate) fn new(
         model: &(impl ContinuousModel + ?Sized),
         stepper: Stepper,
         system: S,
-        solving_grid: &[f64],
+        solving_grid: &[&[f64]],
     ) -> Self {
         let n = System::<T>::shape(&system);
         let point_locations = stepper.points();
-        let steps = solving_grid.len() - 1;
+        let segments = model.segments();
 
-        let points = point_locations.len() * steps;
+        assert_eq!(segments.len(), solving_grid.len());
 
-        let mut matrices = MatrixArray::new_with(n, n, Dyn(points), || T::zero());
-        let delta: Vec<_> = solving_grid.windows(2).map(|a| a[1] - a[0]).collect();
-        let xs: Vec<_> = solving_grid
-            .iter()
-            .zip(delta.iter())
-            .flat_map(|(&x, &delta)| point_locations.iter().map(move |&p| x + p * delta))
-            .collect();
-        let interpolated_points: Vec<S::ModelPoint> = (&model.eval(&xs)).into();
+        let mut discretized_segments = Vec::new();
 
-        for i in 0..steps {
-            for j in 0..point_locations.len() {
-                let index = i * point_locations.len() + j;
-                system.eval(
-                    interpolated_points[index],
-                    delta[i] / xs[index],
-                    &mut matrices.index_mut(index),
-                );
+        for (idx, grid) in solving_grid.iter().enumerate() {
+            let steps = grid.len() - 1;
+            let points = point_locations.len() * steps;
+
+            let mut matrices = MatrixArray::new_with(n, n, Dyn(points), || T::zero());
+            let delta: Vec<_> = grid
+                .iter()
+                .tuple_windows()
+                .map(|(x1, x2)| x2 - x1)
+                .collect();
+            let xs: Vec<_> = grid
+                .iter()
+                .zip(delta.iter())
+                .flat_map(|(&x, &delta)| point_locations.iter().map(move |&p| x + p * delta))
+                .collect();
+
+            let interpolated_points: Vec<S::ModelPoint> = (&model.eval(idx, &xs)).into();
+
+            for i in 0..steps {
+                for j in 0..point_locations.len() {
+                    let index = i * point_locations.len() + j;
+                    system.eval(
+                        interpolated_points[index],
+                        delta[i] / xs[index],
+                        &mut matrices.index_mut(index),
+                    );
+                }
             }
+
+            discretized_segments.push(DiscretizedSegment {
+                matrices,
+                interpolated_points,
+                inner: Into::<Vec<S::ModelPoint>>::into(
+                    &model.eval(idx, &[model.segments()[idx].lower]),
+                )[0],
+                outer: Into::<Vec<S::ModelPoint>>::into(
+                    &model.eval(idx, &[model.segments()[idx].upper]),
+                )[0],
+                delta,
+                points: xs,
+            })
         }
 
         Self {
             stepper,
             system,
-            interpolated_points,
-            matrices,
-            delta,
-            inner: Into::<Vec<S::ModelPoint>>::into(&model.eval(&[model.inner()]))[0],
-            outer: Into::<Vec<S::ModelPoint>>::into(&model.eval(&[model.outer()]))[0],
-            points: xs,
+            segments: discretized_segments,
         }
     }
 }
@@ -136,8 +171,12 @@ where
     type N = S::N;
     type NInner = S::NInner;
 
-    fn len(&self) -> usize {
-        self.delta.len()
+    fn len_segments(&self) -> usize {
+        self.segments.len()
+    }
+
+    fn len_steps(&self, segment: usize) -> usize {
+        self.segments[segment].delta.len()
     }
 
     fn shape(&self) -> Self::N {
@@ -157,7 +196,8 @@ where
         frequency: T,
         output: &mut Matrix<T, Self::NInner, Self::N, impl StorageMut<T, Self::NInner, Self::N>>,
     ) {
-        self.system.inner_boundary(frequency, self.inner, output)
+        self.system
+            .inner_boundary(frequency, self.segments[0].inner, output)
     }
 
     fn outer_boundary(
@@ -170,17 +210,30 @@ where
             impl StorageMut<T, <Self::N as DimSub<Self::NInner>>::Output, Self::N>,
         >,
     ) {
-        self.system.outer_boundary(frequency, self.outer, output)
+        self.system
+            .outer_boundary(frequency, self.segments.last().unwrap().outer, output)
+    }
+
+    fn transition_segment(
+        &self,
+        segment: usize,
+        left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+        right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+    ) {
+        left.fill_with_identity();
+        right.fill_with_identity();
     }
 
     #[inline(always)]
     fn fill(
         &self,
+        segment: usize,
         step: usize,
         frequency: T,
         left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
         right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
     ) {
+        let segment = &self.segments[segment];
         let points_per_step = Stepper::Points::dim();
         let mut matrix_array =
             MatrixArray::new_with(self.shape(), self.shape(), Stepper::Points::name(), || {
@@ -190,12 +243,12 @@ where
         for i in 0..points_per_step {
             matrix_array
                 .index_mut(i)
-                .copy_from(&self.matrices.index(step * points_per_step + i));
+                .copy_from(&segment.matrices.index(step * points_per_step + i));
 
             self.system.add_frequency(
                 frequency,
-                self.interpolated_points[step * points_per_step + i],
-                self.delta[step] / self.points[step * points_per_step + i],
+                segment.interpolated_points[step * points_per_step + i],
+                segment.delta[step] / segment.points[step * points_per_step + i],
                 &mut matrix_array.index_mut(i),
             );
         }
@@ -217,10 +270,12 @@ where
     #[inline(always)]
     fn fill_explicit(
         &self,
+        segment: usize,
         step: usize,
         frequency: T,
         left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
     ) {
+        let segment = &self.segments[segment];
         let points_per_step = Stepper::Points::dim();
         let mut matrix_array =
             MatrixArray::new_with(self.shape(), self.shape(), Stepper::Points::name(), || {
@@ -230,12 +285,12 @@ where
         for i in 0..points_per_step {
             matrix_array
                 .index_mut(i)
-                .copy_from(&self.matrices.index(step * points_per_step + i));
+                .copy_from(&segment.matrices.index(step * points_per_step + i));
 
             self.system.add_frequency(
                 frequency,
-                self.interpolated_points[step * points_per_step + i],
-                self.delta[step] / self.points[step * points_per_step + i],
+                segment.interpolated_points[step * points_per_step + i],
+                segment.delta[step] / segment.points[step * points_per_step + i],
                 &mut matrix_array.index_mut(i),
             );
         }

@@ -659,21 +659,33 @@ enum Model {
 }
 
 impl Model {
-    fn grid(&self) -> Box<[f64]> {
+    fn grid(&self) -> Vec<Vec<f64>> {
         match self {
             Model::Discrete(model, scale) => model
-                .dimensionless
-                .r_coord
-                .windows(2)
-                .flat_map(|a| linspace(a[0], a[1], scale + 1).take(*scale))
-                .chain([*model.dimensionless.r_coord.last().unwrap()].into_iter())
-                .collect_vec()
-                .into(),
+                .segments
+                .iter()
+                .map(|x| {
+                    x.dimensionless
+                        .r_coord
+                        .windows(2)
+                        .flat_map(|a| linspace(a[0], a[1], scale + 1).take(*scale))
+                        .chain([*x.dimensionless.r_coord.last().unwrap()].into_iter())
+                        .collect_vec()
+                })
+                .collect_vec(),
             Model::Continuous(model, scale) => {
-                let lower = model.inner();
-                let upper = model.outer();
+                let lower = model.segments().first().unwrap().lower;
+                let upper = model.segments().last().unwrap().upper;
+                let delta = (upper - lower) / *scale as f64;
 
-                linspace(lower, upper, *scale).collect_vec().into()
+                model
+                    .segments()
+                    .iter()
+                    .map(|x| {
+                        linspace(x.lower, x.upper, (delta * (x.upper - x.lower)) as usize)
+                            .collect_vec()
+                    })
+                    .collect_vec()
             }
         }
     }
@@ -697,8 +709,12 @@ impl StormState {
         let file = DiscreteModel::from_gsm(file).wrap_err(eyre!("Failed to load model"))?;
 
         eprintln!(
-            "Loaded model with {} points",
-            file.dimensionless.r_coord.len()
+            "Loaded model with {} points ({} segments)",
+            file.segments
+                .iter()
+                .map(|s| s.dimensionless.r_coord.len())
+                .sum::<usize>(),
+            file.segments.len()
         );
 
         self.input = Some(Model::Discrete(file, resample));
@@ -729,7 +745,11 @@ impl StormState {
 
         eprintln!(
             "Loaded model with {} points",
-            model.dimensionless.r_coord.len()
+            model
+                .segments
+                .iter()
+                .map(|s| s.dimensionless.r_coord.len())
+                .sum::<usize>()
         );
 
         self.input = Some(Model::Discrete(model, resample));
@@ -782,10 +802,11 @@ impl StormState {
             ));
         };
 
-        model
-            .dimensionless
-            .rot
-            .fill(frequency_units.convert_to_natural(value, &model.scale)?);
+        for s in &mut model.segments {
+            s.dimensionless
+                .rot
+                .fill(frequency_units.convert_to_natural(value, &model.scale)?);
+        }
 
         Ok(())
     }
@@ -812,8 +833,12 @@ impl StormState {
         let upper = frequency_units.convert_to_natural(upper, &model.dimensions())?;
         let lower = frequency_units.convert_to_natural(lower, &model.dimensions())?;
 
-        let determinant =
-            ErasedSolver::new(model.as_ref(), system, difference_scheme, &input.grid());
+        let determinant = ErasedSolver::new(
+            model.as_ref(),
+            system,
+            difference_scheme,
+            &input.grid().iter().map(AsRef::as_ref).collect_vec(),
+        );
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut (dyn Iterator<Item = f64> + Send)
         } else {
@@ -857,21 +882,29 @@ impl StormState {
         };
         let rotation = frequency_units.convert_to_natural(rotation, &model.scale)?;
 
-        let mut metric = perturb_structure(model, rotation);
+        perturb_structure(model, rotation);
 
         if disable_symmetric {
-            metric.alpha.fill(0.);
-            metric.dalpha.fill(0.);
-            metric.ddalpha.fill(0.);
+            for s in model.segments.iter_mut() {
+                let s = s.metric.as_mut().unwrap();
+
+                s.alpha.fill(0.);
+                s.dalpha.fill(0.);
+                s.ddalpha.fill(0.);
+            }
+
+            model.perturbed.as_mut().unwrap().mass_delta = 0.;
         }
 
         if disable_p2 {
-            metric.beta.fill(0.);
-            metric.dbeta.fill(0.);
-            metric.ddbeta.fill(0.);
-        }
+            for s in model.segments.iter_mut() {
+                let s = s.metric.as_mut().unwrap();
 
-        model.metric = Some(metric);
+                s.beta.fill(0.);
+                s.dbeta.fill(0.);
+                s.ddbeta.fill(0.);
+            }
+        }
 
         Ok(())
     }
@@ -890,7 +923,9 @@ impl StormState {
                         &sol.eigenvector,
                         sol.ell,
                         sol.m,
-                        &input.as_continuous().eval(&input.grid()),
+                        &input
+                            .as_continuous()
+                            .eval_all(&input.grid().iter().map(AsRef::as_ref).collect_vec()),
                     ))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
@@ -904,9 +939,11 @@ impl StormState {
             "Input was not set. Please run `input`, `deform`, and `scan` before running `perturb-deformed`.",
         )?;
 
-        let input = input.as_continuous().eval(&input.grid());
+        let input = input
+            .as_continuous()
+            .eval_all(&input.grid().iter().map(AsRef::as_ref).collect_vec());
 
-        let perturbed_structure = input.metric.as_ref().wrap_err(
+        let _ = input[0].metric.as_ref().wrap_err(
             "Deformed structure was not computed. Please run `deform` before `perturb-deformed`",
         )?;
 
@@ -934,7 +971,6 @@ impl StormState {
                 .collect_vec()
                 .as_ref(),
             m,
-            perturbed_structure,
         ));
 
         Ok(())
@@ -955,9 +991,12 @@ impl StormState {
             "Input was not set. Please run `input`, `scan`, and potentially `post-process` before running `output`.",
         )?;
 
-        let input = input.as_continuous().eval(&input.grid());
+        let deformed_params = match input {
+            Model::Discrete(discrete_model, _) => discrete_model.perturbed,
+            _ => None,
+        };
 
-        if model_properties.needs_deformation() && input.metric.is_none() {
+        if model_properties.needs_deformation() && deformed_params.is_none() {
             eprintln!("Deformation was requested as output, but was not computed");
         }
 
@@ -986,13 +1025,19 @@ impl StormState {
         }
 
         if profiles.radial_coordinate {
-            dataset!(output, "radial-coordinate", &input.dimensionless.r_coord)?;
+            dataset!(
+                output,
+                "radial-coordinate",
+                &input.grid().iter().flatten().cloned().collect_vec()
+            )?;
         }
 
         let model_group = output.create_group("model")?;
 
+        let cont = input.as_continuous();
+
         if model_properties.dynamical_frequency {
-            if let Some(scale) = input.scale {
+            if let Some(scale) = cont.dimensions() {
                 attr!(
                     model_group,
                     "dynamical-frequency",
@@ -1005,46 +1050,45 @@ impl StormState {
             }
         }
 
-        if let Some(ref perturbed_structure) = input.metric {
+        let data = cont.eval_all(&input.grid().iter().map(AsRef::as_ref).collect_vec());
+
+        if let Some(params) = deformed_params {
+            macro_rules! merge {
+                ($f: ident) => {
+                    &data
+                        .iter()
+                        .flat_map(|x| &x.metric.as_ref().unwrap().$f)
+                        .cloned()
+                        .collect_vec()
+                };
+            }
+
             if model_properties.deformation_alpha {
-                dataset!(model_group, "deformation-alpha", &perturbed_structure.alpha)?;
+                dataset!(model_group, "deformation-alpha", merge!(alpha))?;
             }
 
             if model_properties.deformation_dalpha {
-                dataset!(
-                    model_group,
-                    "deformation-dalpha",
-                    &perturbed_structure.dalpha
-                )?;
+                dataset!(model_group, "deformation-dalpha", merge!(dalpha))?;
             }
 
             if model_properties.deformation_ddalpha {
-                dataset!(
-                    model_group,
-                    "deformation-ddalpha",
-                    &perturbed_structure.ddalpha
-                )?;
+                dataset!(model_group, "deformation-ddalpha", merge!(ddalpha))?;
             }
 
             if model_properties.deformation_beta {
-                dataset!(model_group, "deformation-beta", &perturbed_structure.beta)?;
+                dataset!(model_group, "deformation-beta", merge!(beta))?;
             }
 
             if model_properties.deformation_dbeta {
-                dataset!(model_group, "deformation-dbeta", &perturbed_structure.dbeta)?;
+                dataset!(model_group, "deformation-dbeta", merge!(dbeta))?;
             }
 
             if model_properties.deformation_ddbeta {
-                dataset!(
-                    model_group,
-                    "deformation-ddbeta",
-                    &perturbed_structure.ddbeta
-                )?;
+                dataset!(model_group, "deformation-ddbeta", merge!(ddbeta))?;
             }
 
             if model_properties.deformation_rotation_frequency {
-                let rot =
-                    frequency_units.convert_from_natural(perturbed_structure.rot, &input.scale)?;
+                let rot = frequency_units.convert_from_natural(params.rot, &cont.dimensions())?;
                 attr!(model_group, "deformation-rotation-frequency", aview0(&rot))?;
             }
 
@@ -1052,7 +1096,7 @@ impl StormState {
                 attr!(
                     model_group,
                     "deformation-mass-change",
-                    aview0(&perturbed_structure.mass_delta)
+                    aview0(&params.mass_delta)
                 )?;
             }
         }
@@ -1067,7 +1111,9 @@ impl StormState {
         for (i, solution) in self.solutions.iter().enumerate() {
             let group = solution_group.create_group(format!("{i}").as_str())?;
 
-            freq.push(frequency_units.convert_from_natural(solution.bracket.root, &input.scale)?);
+            freq.push(
+                frequency_units.convert_from_natural(solution.bracket.root, &cont.dimensions())?,
+            );
             ell.push(solution.ell);
             m.push(solution.m);
 
@@ -1160,9 +1206,10 @@ impl StormState {
                     .iter()
                     .map(|x| -> Result<H5Complex> {
                         Ok(H5Complex {
-                            re: frequency_units.convert_from_natural(x.real(), &input.scale)?,
+                            re: frequency_units
+                                .convert_from_natural(x.real(), &cont.dimensions())?,
                             im: frequency_units
-                                .convert_from_natural(x.imaginary(), &input.scale)?,
+                                .convert_from_natural(x.imaginary(), &cont.dimensions())?,
                         })
                     })
                     .collect::<Result<Vec<H5Complex>>>()?;

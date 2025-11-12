@@ -1,6 +1,7 @@
 use std::cell::Cell;
 
 use color_eyre::Result;
+use itertools::Itertools;
 use ndarray::aview0;
 use storm::{
     bracket::{
@@ -34,7 +35,11 @@ fn main() -> Result<()> {
         &LinearInterpolator::new(&model),
         system,
         difference_scheme,
-        &model.dimensionless.r_coord,
+        &model
+            .segments
+            .iter()
+            .map(|x| &*x.dimensionless.r_coord)
+            .collect_vec(),
     );
 
     let dets: Vec<_> = linspace(lower, upper, steps)

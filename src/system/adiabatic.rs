@@ -1,6 +1,6 @@
 use nalgebra::{ComplexField, Const, Matrix, StorageMut};
 
-use crate::model::DiscreteModel;
+use crate::model::DiscreteModelSegment;
 
 use super::System;
 
@@ -39,12 +39,12 @@ pub struct AdiabaticStructureCoefficients {
     pub rot: f64,
 }
 
-impl From<&DiscreteModel> for Vec<AdiabaticStructureCoefficients> {
+impl From<&DiscreteModelSegment> for Vec<AdiabaticStructureCoefficients> {
     fn from(
-        DiscreteModel {
+        DiscreteModelSegment {
             dimensionless: model,
             ..
-        }: &DiscreteModel,
+        }: &DiscreteModelSegment,
     ) -> Vec<AdiabaticStructureCoefficients> {
         (0..model.r_coord.len())
             .map(|index| AdiabaticStructureCoefficients {

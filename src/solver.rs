@@ -49,7 +49,7 @@ where
         > + Allocator<<System::N as DimMul<Const<2>>>::Output, Const<1>>,
 {
     assert_eq!(upper.n, system.shape().value());
-    assert_eq!(upper.n_systems, system.len());
+    assert_eq!(upper.n_systems, UpperResult::elem_count(system));
 
     determinant_inner(system, frequency, upper)
 }
@@ -95,6 +95,17 @@ impl<T: ComplexField + Copy> UpperResult<T> {
             n_systems: points,
             column_pivot: Vec::with_capacity(matrix_size),
         }
+    }
+
+    pub(crate) fn new_from_system(system: &impl DiscretizedSystem<T>) -> UpperResult<T> {
+        Self::new(system.shape().value(), Self::elem_count(system))
+    }
+
+    fn elem_count(system: &impl DiscretizedSystem<T>) -> usize {
+        (0..system.len_segments())
+            .map(|idx| system.len_steps(idx) + 1)
+            .sum::<usize>()
+            - 1
     }
 
     pub(crate) fn eigenvectors(&self) -> Vec<T> {
@@ -268,6 +279,28 @@ macro_rules! row_pivot {
     }};
 }
 
+macro_rules! band_shift {
+    ($bands: ident, $rows: ident, $columns: ident) => {
+        for i in 0..$rows {
+            for j in 0..$columns {
+                *$bands.index_mut((j, i)) = *$bands.index((j + $columns, i + $columns));
+                *$bands.index_mut((j + $columns, i)) = T::zero();
+            }
+        }
+    };
+}
+
+macro_rules! load {
+    ($bands: ident, $size: ident, $shift: ident, $left: ident, $right: ident) => {
+        for r in 0..$size {
+            for c in 0..$size {
+                *$bands.index_mut((c, r + $shift)) = *$left.index((r, c));
+                *$bands.index_mut((c + $size, r + $shift)) = *$right.index((r, c));
+            }
+        }
+    };
+}
+
 fn determinant_inner<
     T: ComplexField + Copy,
     System: DiscretizedSystem<T, N: DimMul<Const<2>> + DimAdd<System::NInner>>,
@@ -319,17 +352,14 @@ where
     let mut det = T::one();
     let mut n_step = 0;
 
-    // In order to keep the algebraic equations at the inner boundary local, we need to use column
-    // pivotting in the first iteration of the loop
-    if n_step != system.len() {
-        system.fill(n_step, frequency, &mut left, &mut right);
+    let segments = system.len_segments();
 
-        for r in 0..n {
-            for c in 0..n {
-                *bands.index_mut((c, r + n_inner)) = *left.index((r, c));
-                *bands.index_mut((c + n, r + n_inner)) = *right.index((r, c));
-            }
-        }
+    for segment in 0..segments {
+        // In order to keep the algebraic equations at the inner boundaries local, we need to use column
+        // pivotting in the first iteration of the loop
+        system.fill(segment, 0, frequency, &mut left, &mut right);
+
+        load!(bands, n, n_inner, left, right);
 
         for k in 0..n {
             let (pivot, pivot_row) = if k < n_inner {
@@ -357,56 +387,71 @@ where
             );
         }
 
-        for i in 0..n_inner {
-            for j in 0..n {
-                *bands.index_mut((j, i)) = *bands.index((j + n, i + n));
-                *bands.index_mut((j + n, i)) = T::zero();
-            }
-        }
+        band_shift!(bands, n_inner, n);
 
         n_step += 1;
-    }
 
-    while n_step < system.len() {
-        system.fill(n_step, frequency, &mut left, &mut right);
+        for point in 1..system.len_steps(segment) {
+            system.fill(segment, point, frequency, &mut left, &mut right);
 
-        for r in 0..n {
-            for c in 0..n {
-                *bands.index_mut((c, r + n_inner)) = *left.index((r, c));
-                *bands.index_mut((c + n, r + n_inner)) = *right.index((r, c));
+            load!(bands, n, n_inner, left, right);
+
+            for k in 0..n {
+                let (pivot, pivot_row) = row_pivot!(bands, det, n + n_inner, 2 * n, k);
+
+                det *= pivot;
+
+                debug_assert!(
+                    pivot.is_finite() && det.is_finite(),
+                    "det = {det}, pivot = {pivot}, n = {n_step}"
+                );
+
+                sweep!(
+                    bands,
+                    upper,
+                    n_step,
+                    n + n_inner,
+                    2 * n,
+                    k,
+                    pivot,
+                    pivot_row
+                );
             }
+
+            band_shift!(bands, n_inner, n);
+            n_step += 1;
         }
 
-        for k in 0..n {
-            let (pivot, pivot_row) = row_pivot!(bands, det, n + n_inner, 2 * n, k);
+        if segment != segments - 1 {
+            system.transition_segment(segment, &mut left, &mut right);
 
-            det *= pivot;
+            load!(bands, n, n_inner, left, right);
 
-            debug_assert!(
-                pivot.is_finite() && det.is_finite(),
-                "det = {det}, pivot = {pivot}, n = {n_step}"
-            );
+            for k in 0..n {
+                let (pivot, pivot_row) = row_pivot!(bands, det, n + n_inner, 2 * n, k);
 
-            sweep!(
-                bands,
-                upper,
-                n_step,
-                n + n_inner,
-                2 * n,
-                k,
-                pivot,
-                pivot_row
-            );
-        }
+                det *= pivot;
 
-        for i in 0..n_inner {
-            for j in 0..n {
-                *bands.index_mut((j, i)) = *bands.index((j + n, i + n));
-                *bands.index_mut((j + n, i)) = T::zero();
+                debug_assert!(
+                    pivot.is_finite() && det.is_finite(),
+                    "det = {det}, pivot = {pivot}, n = {n_step}"
+                );
+
+                sweep!(
+                    bands,
+                    upper,
+                    n_step,
+                    n + n_inner,
+                    2 * n,
+                    k,
+                    pivot,
+                    pivot_row
+                );
             }
-        }
 
-        n_step += 1;
+            band_shift!(bands, n_inner, n);
+            n_step += 1;
+        }
     }
 
     // Outer boundary
@@ -470,6 +515,8 @@ where
 
     let mut left: OMatrix<T, System::N, System::N> =
         OMatrix::zeros_generic(system.shape(), system.shape());
+    let mut right: OMatrix<T, System::N, System::N> =
+        OMatrix::zeros_generic(system.shape(), system.shape());
     let mut accum: OMatrix<T, System::N, System::N> =
         OMatrix::identity_generic(system.shape(), system.shape());
     let mut accum2: OMatrix<T, System::N, System::N> =
@@ -483,12 +530,24 @@ where
 
     let mut det = T::one();
 
-    for step in 0..system.len() {
-        system.fill_explicit(step, frequency, &mut left);
+    for segment in 0..system.len_segments() {
+        for step in 0..system.len_steps(segment) {
+            system.fill_explicit(segment, step, frequency, &mut left);
 
-        accum2.clone_from(&accum);
+            accum2.clone_from(&accum);
 
-        accum.gemm(T::one(), &left, &accum2, T::zero());
+            accum.gemm(T::one(), &left, &accum2, T::zero());
+        }
+
+        if segment != system.len_segments() - 1 {
+            system.transition_segment(segment, &mut left, &mut right);
+
+            accum2.clone_from(&accum);
+            accum.gemm(T::one(), &left, &accum2, T::zero());
+            accum2.clone_from(&accum);
+            assert_eq!(right.try_inverse_mut(), true);
+            accum.gemm(T::one(), &right, &accum2, T::zero());
+        }
     }
 
     for r in 0..n {

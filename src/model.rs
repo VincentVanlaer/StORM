@@ -3,24 +3,53 @@
 #[non_exhaustive]
 /// Wrapper struct for potential model properties. Depending on the type of model (MESA, polytrope,
 /// ...) the scale field may or may not be filled.
+#[derive(Debug, Clone)]
 pub struct DiscreteModel {
-    /// Dimensionless properties of the model. This field information is always present
-    pub dimensionless: DimensionlessProperties,
+    /// Segments of the model
+    pub segments: Vec<DiscreteModelSegment>,
     /// Scale parameters of the model
     pub scale: Option<DimensionedProperties>,
+    /// Global perturbation parameters
+    pub perturbed: Option<PerturbedParameters>,
+}
+
+/// Segment of a model
+///
+/// Models are split in segments to account for density discontinuities
+#[derive(Debug, Clone)]
+pub struct DiscreteModelSegment {
+    /// Dimensionless properties of the model. This field information is always present
+    pub dimensionless: DimensionlessProperties,
     /// Metric paramters of the model
     pub metric: Option<PerturbedMetric>,
+}
+
+/// A continuous segment of a stellar model.
+///
+/// The purpose of this struct is the indicate where potential discontinuities in the model are.
+/// All properties of the model must be defined from `lower` to `upper`, including the edge points,
+/// and must be continuous.
+#[derive(Debug, Clone, Copy)]
+pub struct Segment {
+    /// Lower limit of the segment
+    pub lower: f64,
+    /// Upper limit of the segment
+    pub upper: f64,
 }
 
 /// Stellar model which can be evaluated at any point. Typically obtained by interpolating a
 /// [DiscreteModel]
 pub trait ContinuousModel {
-    /// Inner radius of the model
-    fn inner(&self) -> f64;
-    /// Outer radius of the model
-    fn outer(&self) -> f64;
+    /// Segments of the model
+    fn segments(&self) -> Vec<Segment>;
     /// Evaluate the model at discrete points given by frational radius
-    fn eval(&self, grid: &[f64]) -> DiscreteModel;
+    fn eval(&self, segment: usize, points: &[f64]) -> DiscreteModelSegment;
+    /// Evaluate the model at discrete points given by frational radius for all segments
+    fn eval_all(&self, points: &[&[f64]]) -> Vec<DiscreteModelSegment> {
+        (0..self.segments().len())
+            .map(|s_idx| self.eval(s_idx, points[s_idx]))
+            .collect()
+    }
     /// Forward the dimensions, these do not need to be interpolated
     fn dimensions(&self) -> Option<DimensionedProperties>;
 }
@@ -29,16 +58,12 @@ pub trait ContinuousModel {
 // with an additional layer of indirection (dyn* would be nice in this case). This effectively
 // prevents &mut self and self members
 impl<T: ContinuousModel + ?Sized> ContinuousModel for &T {
-    fn inner(&self) -> f64 {
-        (*self).inner()
+    fn segments(&self) -> Vec<Segment> {
+        (*self).segments()
     }
 
-    fn outer(&self) -> f64 {
-        (*self).outer()
-    }
-
-    fn eval(&self, grid: &[f64]) -> DiscreteModel {
-        (*self).eval(grid)
+    fn eval(&self, segment: usize, grid: &[f64]) -> DiscreteModelSegment {
+        (*self).eval(segment, grid)
     }
 
     fn dimensions(&self) -> Option<DimensionedProperties> {
@@ -72,6 +97,23 @@ pub struct DimensionlessProperties {
     pub rot: Box<[f64]>,
 }
 
+impl DimensionlessProperties {
+    fn zeroed(len: usize) -> DimensionlessProperties {
+        DimensionlessProperties {
+            r_coord: vec![0.; len].into(),
+            m_coord: vec![0.; len].into(),
+            rho: vec![0.; len].into(),
+            p: vec![0.; len].into(),
+            v: vec![0.; len].into(),
+            u: vec![0.; len].into(),
+            gamma1: vec![0.; len].into(),
+            a_star: vec![0.; len].into(),
+            c1: vec![0.; len].into(),
+            rot: vec![0.; len].into(),
+        }
+    }
+}
+
 /// Total radius and mass, and gravitational constant
 #[derive(Debug, Clone, Copy)]
 pub struct DimensionedProperties {
@@ -98,10 +140,28 @@ pub struct PerturbedMetric {
     pub dbeta: Box<[f64]>,
     /// Second derivative of beta
     pub ddbeta: Box<[f64]>,
+}
+
+/// Deformation global parameters
+#[derive(Debug, Copy, Clone)]
+pub struct PerturbedParameters {
     /// Rotation frequency
     pub rot: f64,
     /// Relative difference in stellar mass due to the deformation
     pub mass_delta: f64,
+}
+
+impl PerturbedMetric {
+    fn zeroed(len: usize) -> PerturbedMetric {
+        PerturbedMetric {
+            alpha: vec![0.; len].into(),
+            dalpha: vec![0.; len].into(),
+            ddalpha: vec![0.; len].into(),
+            beta: vec![0.; len].into(),
+            dbeta: vec![0.; len].into(),
+            ddbeta: vec![0.; len].into(),
+        }
+    }
 }
 
 impl DimensionedProperties {

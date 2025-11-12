@@ -1,8 +1,11 @@
-use std::f64::consts::PI;
+use std::{f64::consts::PI, vec};
 
 use itertools::Itertools;
 
-use crate::bracket::{BracketOptimizer, InverseQuadratic, Point, Precision};
+use crate::{
+    bracket::{BracketOptimizer, InverseQuadratic, Point, Precision},
+    model::{DiscreteModelSegment, Segment},
+};
 
 use super::{ContinuousModel, DimensionedProperties, DimensionlessProperties, DiscreteModel};
 
@@ -147,20 +150,23 @@ pub fn construct_polytrope(n: f64, gamma1: f64, step: f64) -> DiscreteModel {
     let p = rho.iter().map(|r| r.powf(1. + 1. / n) * k).collect_vec();
 
     DiscreteModel {
-        dimensionless: DimensionlessProperties {
-            r_coord: x.into(),
-            m_coord: m_coord.into(),
-            rho: rho.into(),
-            p: p.into(),
-            v: v.into(),
-            u: u.into(),
-            gamma1: vec![gamma1; xi.len()].into(),
-            a_star: a_star.into(),
-            c1: c1.into(),
-            rot: vec![0.; xi.len()].into(),
-        },
+        segments: vec![DiscreteModelSegment {
+            dimensionless: DimensionlessProperties {
+                r_coord: x.into(),
+                m_coord: m_coord.into(),
+                rho: rho.into(),
+                p: p.into(),
+                v: v.into(),
+                u: u.into(),
+                gamma1: vec![gamma1; xi.len()].into(),
+                a_star: a_star.into(),
+                c1: c1.into(),
+                rot: vec![0.; xi.len()].into(),
+            },
+            metric: None,
+        }],
+        perturbed: None,
         scale: None,
-        metric: None,
     }
 }
 
@@ -187,15 +193,9 @@ impl Polytrope0 {
 }
 
 impl ContinuousModel for Polytrope0 {
-    fn inner(&self) -> f64 {
-        0.
-    }
+    fn eval(&self, segment: usize, grid: &[f64]) -> DiscreteModelSegment {
+        assert_eq!(segment, 0);
 
-    fn outer(&self) -> f64 {
-        1.
-    }
-
-    fn eval(&self, grid: &[f64]) -> DiscreteModel {
         let xi = grid.iter().map(|g| g * Self::MAX_X).collect_vec();
         let theta = xi.iter().map(|x| 1. - x.powi(2) / 6.).collect_vec();
         let phi = xi.iter().map(|x| x.powi(3) / 3.).collect_vec();
@@ -224,7 +224,7 @@ impl ContinuousModel for Polytrope0 {
         let m_coord = phi.iter().map(|r| r / phi_max).collect_vec();
         let p = vec![f64::INFINITY; xi.len()];
 
-        DiscreteModel {
+        DiscreteModelSegment {
             dimensionless: DimensionlessProperties {
                 r_coord: grid.to_owned().into_boxed_slice(),
                 m_coord: m_coord.into(),
@@ -237,12 +237,18 @@ impl ContinuousModel for Polytrope0 {
                 c1: vec![1.; xi.len()].into(),
                 rot: vec![0.; xi.len()].into(),
             },
-            scale: None,
             metric: None,
         }
     }
 
     fn dimensions(&self) -> Option<DimensionedProperties> {
         None
+    }
+
+    fn segments(&self) -> Vec<super::Segment> {
+        vec![Segment {
+            lower: 0.,
+            upper: 1.,
+        }]
     }
 }

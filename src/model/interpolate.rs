@@ -1,5 +1,6 @@
 use super::{
-    ContinuousModel, DimensionedProperties, DimensionlessProperties, DiscreteModel, PerturbedMetric,
+    ContinuousModel, DimensionedProperties, DimensionlessProperties, DiscreteModel,
+    DiscreteModelSegment, PerturbedMetric, Segment,
 };
 
 /// Linear interpolator for a [DiscreteModel]
@@ -15,53 +16,30 @@ impl<'model> LinearInterpolator<'model> {
 }
 
 impl ContinuousModel for LinearInterpolator<'_> {
-    fn eval(&self, grid: &[f64]) -> DiscreteModel {
-        let mut old_grid_iter = self.model.dimensionless.r_coord.iter().enumerate();
-        let mut new_grid_iter = grid.iter().enumerate();
+    fn eval(&self, segment: usize, grid: &[f64]) -> DiscreteModelSegment {
+        let base_model = &self.model.segments[segment];
 
-        let mut dimensionless = DimensionlessProperties {
-            r_coord: vec![0.; grid.len()].into(),
-            m_coord: vec![0.; grid.len()].into(),
-            rho: vec![0.; grid.len()].into(),
-            p: vec![0.; grid.len()].into(),
-            v: vec![0.; grid.len()].into(),
-            u: vec![0.; grid.len()].into(),
-            gamma1: vec![0.; grid.len()].into(),
-            a_star: vec![0.; grid.len()].into(),
-            c1: vec![0.; grid.len()].into(),
-            rot: vec![0.; grid.len()].into(),
-        };
+        let mut dimensionless = DimensionlessProperties::zeroed(grid.len());
 
-        let mut metric = if let Some(m) = &self.model.metric {
-            Some(PerturbedMetric {
-                alpha: vec![0.; grid.len()].into(),
-                dalpha: vec![0.; grid.len()].into(),
-                ddalpha: vec![0.; grid.len()].into(),
-                beta: vec![0.; grid.len()].into(),
-                dbeta: vec![0.; grid.len()].into(),
-                ddbeta: vec![0.; grid.len()].into(),
-                rot: m.rot,
-                mass_delta: m.mass_delta,
-            })
+        let mut metric = if base_model.metric.is_some() {
+            Some(PerturbedMetric::zeroed(grid.len()))
         } else {
             None
         };
 
-        let mut prev = (0, &self.model.dimensionless.r_coord[0]);
-        let mut next = (0, &self.model.dimensionless.r_coord[0]);
-        let mut current_new_grid_point = new_grid_iter.next().unwrap();
-
-        loop {
-            if next.1 == current_new_grid_point.1 {
-                macro_rules! cp {
+        interpolate(
+            base_model.dimensionless.r_coord.iter().cloned(),
+            grid.iter().cloned(),
+            |lower_idx1, upper_idx1, idx2, pos| {
+                macro_rules! linear {
                     ($s: expr, $d: expr, $($e: ident),+) => {
-                        $($s.$e[current_new_grid_point.0] = $d.$e[next.0];)*
+                        $($d.$e[idx2] = (1. - pos) * $s.$e[lower_idx1] + pos * $s.$e[upper_idx1];)*
                     };
                 }
 
-                cp!(
+                linear!(
+                    base_model.dimensionless,
                     dimensionless,
-                    self.model.dimensionless,
                     r_coord,
                     m_coord,
                     rho,
@@ -74,64 +52,69 @@ impl ContinuousModel for LinearInterpolator<'_> {
                     rot
                 );
 
-                if let Some(l) = &mut metric
-                    && let Some(r) = &self.model.metric
+                if let Some(m2) = &mut metric
+                    && let Some(m1) = &base_model.metric
                 {
-                    cp!(l, r, alpha, dalpha, ddalpha, beta, dbeta, ddbeta);
+                    linear!(m1, m2, alpha, dalpha, ddalpha, beta, dbeta, ddbeta);
                 }
+            },
+        );
 
-                if let Some(c) = new_grid_iter.next() {
-                    current_new_grid_point = c;
-                    continue;
-                } else {
-                    break;
-                };
-            } else if next.1 > current_new_grid_point.1 {
-                macro_rules! interp {
-                    ($($e: ident),+) => {
-                        let m = &self.model.dimensionless;
-                        let pos = (current_new_grid_point.1 - prev.1) / (next.1 - prev.1);
-                        $(dimensionless.$e[current_new_grid_point.0] =
-                            m.$e[prev.0] +
-                            pos * (m.$e[next.0] - m.$e[prev.0]);)*
-                    };
-                }
-
-                dimensionless.r_coord[current_new_grid_point.0] = *current_new_grid_point.1;
-                interp!(m_coord, rho, p, v, u, gamma1, a_star, c1, rot);
-
-                if let Some(c) = new_grid_iter.next() {
-                    current_new_grid_point = c;
-                    continue;
-                } else {
-                    break;
-                };
-            }
-
-            prev = next;
-            if let Some(n) = old_grid_iter.next() {
-                next = n;
-            } else {
-                break;
-            };
-        }
-
-        DiscreteModel {
+        DiscreteModelSegment {
             dimensionless,
-            scale: self.model.scale,
             metric,
         }
     }
 
-    fn inner(&self) -> f64 {
-        self.model.dimensionless.r_coord[0]
-    }
-
-    fn outer(&self) -> f64 {
-        *self.model.dimensionless.r_coord.last().unwrap()
-    }
-
     fn dimensions(&self) -> Option<DimensionedProperties> {
         self.model.scale
+    }
+
+    fn segments(&self) -> Vec<super::Segment> {
+        self.model
+            .segments
+            .iter()
+            .map(|x| Segment {
+                lower: *x.dimensionless.r_coord.first().unwrap(),
+                upper: *x.dimensionless.r_coord.last().unwrap(),
+            })
+            .collect()
+    }
+}
+
+fn interpolate(
+    old_grid_iter: impl Iterator<Item = f64>,
+    new_grid_iter: impl Iterator<Item = f64>,
+    mut interpolate: impl FnMut(usize, usize, usize, f64),
+) {
+    let mut old_grid_iter = old_grid_iter.enumerate();
+    let mut new_grid_iter = new_grid_iter.enumerate();
+
+    let mut prev = old_grid_iter.next().unwrap();
+    let mut next = old_grid_iter.next().unwrap();
+    let mut current_new_grid_point = new_grid_iter.next().unwrap();
+
+    loop {
+        if next.1 >= current_new_grid_point.1 {
+            // Interpolate the point
+            interpolate(
+                prev.0,
+                next.0,
+                current_new_grid_point.0,
+                (current_new_grid_point.1 - prev.1) / (next.1 - prev.1),
+            );
+            if let Some(c) = new_grid_iter.next() {
+                current_new_grid_point = c;
+            } else {
+                break;
+            };
+        } else {
+            prev = next;
+            if let Some(n) = old_grid_iter.next() {
+                next = n;
+            } else {
+                todo!("Extrapolation not supported");
+            };
+        }
     }
 }

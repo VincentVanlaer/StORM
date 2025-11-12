@@ -12,7 +12,7 @@ fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
         &LinearInterpolator::new(&poly),
         Rotating1D::new(0, 0),
         scheme,
-        &poly.dimensionless.r_coord,
+        &[&poly.segments[0].dimensionless.r_coord],
     )
 }
 
