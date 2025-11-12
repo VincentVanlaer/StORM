@@ -681,7 +681,7 @@ impl Model {
     fn as_continuous(&self) -> Box<dyn ContinuousModel + Sync + '_> {
         match self {
             Model::Discrete(discrete_model, _) => Box::new(LinearInterpolator::new(discrete_model)),
-            Model::Continuous(continuous_model, _) => Box::new(continuous_model),
+            Model::Continuous(continuous_model, _) => Box::new(continuous_model.as_ref()),
         }
     }
 }
@@ -812,7 +812,8 @@ impl StormState {
         let upper = frequency_units.convert_to_natural(upper, &model.dimensions())?;
         let lower = frequency_units.convert_to_natural(lower, &model.dimensions())?;
 
-        let determinant = ErasedSolver::new(&model, system, difference_scheme, &input.grid());
+        let determinant =
+            ErasedSolver::new(model.as_ref(), system, difference_scheme, &input.grid());
         let points = if inverse {
             &mut rev_linspace(lower, upper, steps) as &mut (dyn Iterator<Item = f64> + Send)
         } else {

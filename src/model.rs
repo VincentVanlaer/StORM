@@ -25,42 +25,24 @@ pub trait ContinuousModel {
     fn dimensions(&self) -> Option<DimensionedProperties>;
 }
 
-impl<T: ContinuousModel + ?Sized> ContinuousModel for Box<T> {
-    fn inner(&self) -> f64 {
-        self.as_ref().inner()
-    }
-
-    fn outer(&self) -> f64 {
-        self.as_ref().outer()
-    }
-
-    fn eval(&self, grid: &[f64]) -> DiscreteModel {
-        self.as_ref().eval(grid)
-    }
-
-    fn dimensions(&self) -> Option<DimensionedProperties> {
-        self.as_ref().dimensions()
-    }
-}
-
 // The goal of this implementation is to allow unifications of discrete models with continuous model
 // with an additional layer of indirection (dyn* would be nice in this case). This effectively
 // prevents &mut self and self members
-impl<T: ContinuousModel + ?Sized> ContinuousModel for &Box<T> {
+impl<T: ContinuousModel + ?Sized> ContinuousModel for &T {
     fn inner(&self) -> f64 {
-        self.as_ref().inner()
+        (*self).inner()
     }
 
     fn outer(&self) -> f64 {
-        self.as_ref().outer()
+        (*self).outer()
     }
 
     fn eval(&self, grid: &[f64]) -> DiscreteModel {
-        self.as_ref().eval(grid)
+        (*self).eval(grid)
     }
 
     fn dimensions(&self) -> Option<DimensionedProperties> {
-        self.as_ref().dimensions()
+        (*self).dimensions()
     }
 }
 
