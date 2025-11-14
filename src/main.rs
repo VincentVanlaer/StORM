@@ -15,7 +15,7 @@ use std::usize;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::interpolate::LinearInterpolator;
-use storm::model::polytrope::{Polytrope0, construct_polytrope};
+use storm::model::polytrope::{IndexSegments, Polytrope0, construct_polytrope};
 use storm::model::{ContinuousModel, DimensionedProperties, DiscreteModel};
 use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
 use storm::postprocessing::Rotating1DPostprocessing;
@@ -741,7 +741,7 @@ impl StormState {
             ));
         }
 
-        let model = construct_polytrope(index, gamma1, dx);
+        let model = construct_polytrope(IndexSegments::central(index), gamma1, dx);
 
         eprintln!(
             "Loaded model with {} points",

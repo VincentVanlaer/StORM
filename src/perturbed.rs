@@ -509,7 +509,10 @@ mod tests {
     use crate::{
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, ErasedSolver},
-        model::{interpolate::LinearInterpolator, polytrope::construct_polytrope},
+        model::{
+            interpolate::LinearInterpolator,
+            polytrope::{IndexSegments, construct_polytrope},
+        },
         perturbed::perturb_structure,
         postprocessing::Rotating1DPostprocessing,
         system::adiabatic::Rotating1D,
@@ -528,7 +531,7 @@ mod tests {
     /// form of the expressions and does coupling between modes, this will not exactly reproduce
     /// the results. However, they should be more or less the same.
     fn perturbed_asymptotics() {
-        let mut poly3 = construct_polytrope(3., 5. / 3., 0.001);
+        let mut poly3 = construct_polytrope(IndexSegments::central(3.), 5. / 3., 0.1);
 
         // Low rotation rate to supress higher order effects
         poly3.segments[0].dimensionless.rot.fill(ROT);

@@ -2,12 +2,15 @@ use iai_callgrind::{library_benchmark, library_benchmark_group, main};
 use std::hint::black_box;
 use storm::{
     dynamic_interface::{DifferenceSchemes, ErasedSolver},
-    model::{interpolate::LinearInterpolator, polytrope::construct_polytrope},
+    model::{
+        interpolate::LinearInterpolator,
+        polytrope::{IndexSegments, construct_polytrope},
+    },
     system::adiabatic::Rotating1D,
 };
 
 fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
-    let poly = construct_polytrope(3., 5. / 3., 0.01);
+    let poly = construct_polytrope(IndexSegments::central(3.), 5. / 3., 0.01);
 
     ErasedSolver::new(
         &LinearInterpolator::new(&poly),
