@@ -220,8 +220,12 @@ where
         left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
         right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
     ) {
-        left.fill_with_identity();
-        right.fill_with_identity();
+        self.system.double_point(
+            self.segments[segment].outer,
+            self.segments[segment + 1].inner,
+            left,
+            right,
+        );
     }
 
     #[inline(always)]

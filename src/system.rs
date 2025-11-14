@@ -43,6 +43,14 @@ pub(crate) trait System<T: ComplexField> {
             impl StorageMut<T, <Self::N as DimSub<Self::NInner>>::Output, Self::N>,
         >,
     );
+
+    fn double_point(
+        &self,
+        inner_point: Self::ModelPoint,
+        outer_point: Self::ModelPoint,
+        left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+        right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+    );
 }
 
 /// Adiabatic stellar oscillation equations

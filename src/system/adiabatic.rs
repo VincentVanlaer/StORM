@@ -206,4 +206,57 @@ impl<T: ComplexField + Copy> System<T> for Rotating1D {
         *output.index_mut((1, 2)) = T::from_subset(&self.ell) + one;
         *output.index_mut((1, 3)) = one;
     }
+
+    fn double_point(
+        &self,
+        inner_point: Self::ModelPoint,
+        outer_point: Self::ModelPoint,
+        left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+        right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+    ) {
+        let zero = T::from_subset(&0.);
+        let one = T::from_subset(&1.);
+        let u_inner = T::from_subset(&inner_point.u);
+        let u_outer = T::from_subset(&outer_point.u);
+
+        *left.index_mut((0, 0)) = one;
+        *left.index_mut((0, 1)) = zero;
+        *left.index_mut((0, 2)) = zero;
+        *left.index_mut((0, 3)) = zero;
+
+        *left.index_mut((1, 0)) = -u_inner;
+        *left.index_mut((1, 1)) = u_inner;
+        *left.index_mut((1, 2)) = zero;
+        *left.index_mut((1, 3)) = zero;
+
+        *left.index_mut((2, 0)) = zero;
+        *left.index_mut((2, 1)) = zero;
+        *left.index_mut((2, 2)) = one;
+        *left.index_mut((2, 3)) = zero;
+
+        *left.index_mut((3, 0)) = u_inner;
+        *left.index_mut((3, 1)) = zero;
+        *left.index_mut((3, 2)) = zero;
+        *left.index_mut((3, 3)) = one;
+
+        *right.index_mut((0, 0)) = -one;
+        *right.index_mut((0, 1)) = zero;
+        *right.index_mut((0, 2)) = zero;
+        *right.index_mut((0, 3)) = zero;
+
+        *right.index_mut((1, 0)) = u_outer;
+        *right.index_mut((1, 1)) = -u_outer;
+        *right.index_mut((1, 2)) = zero;
+        *right.index_mut((1, 3)) = zero;
+
+        *right.index_mut((2, 0)) = zero;
+        *right.index_mut((2, 1)) = zero;
+        *right.index_mut((2, 2)) = -one;
+        *right.index_mut((2, 3)) = zero;
+
+        *right.index_mut((3, 0)) = -u_outer;
+        *right.index_mut((3, 1)) = zero;
+        *right.index_mut((3, 2)) = zero;
+        *right.index_mut((3, 3)) = -one;
+    }
 }
