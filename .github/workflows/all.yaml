@@ -115,6 +115,6 @@ jobs:
         env:
           SSH_KEY: ${{secrets.MAIN_SITE_KEY}}
       - name: Set known hosts
-        run: mkdir -p ~/.ssh/ && echo "stellar-oscillations.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKlufAT5tJFqccQsQdT2yHnJZC75MrCZzJ08Wez+x8iy" >> ~/.ssh/known_hosts
+        run: mkdir -p ~/.ssh/ && echo "stellar-oscillations.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILClmFHy/1PILQqrfQftA4n3Qgjv+/UnGhno1hp65Q03" >> ~/.ssh/known_hosts
       - name: Copy files
         run: rsync -e "ssh -i key" --delete-after -cvrl docs/landing/ oscillations@stellar-oscillations.org:storm
