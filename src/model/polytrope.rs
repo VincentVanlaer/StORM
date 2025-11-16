@@ -513,6 +513,6 @@ mod tests {
             .map(|res| res.root)
             .collect_vec();
 
-        assert_eq!(solutions, vec![1.4450547277751564, 3.5183813886332906])
+        assert_eq!(solutions, [1.445054727775158, 3.5183813886332884])
     }
 }

@@ -3,6 +3,7 @@ use itertools::Itertools;
 use std::{num::NonZeroU64, ops::ControlFlow};
 
 /// Result of optimizing a root finding bracket
+#[derive(Debug, Clone, Copy)]
 pub struct BracketResult {
     /// Lower limit of the bracket
     pub lower: Point,
@@ -55,7 +56,7 @@ pub trait BracketOptimizer {
         f: impl Fn(f64) -> Result<f64, E>,
         precision: Precision,
         inspect_callback: Option<&mut dyn FnMut(Self::InternalState)>,
-    ) -> Result<BracketResult, E>;
+    ) -> Result<BracketResult, BracketError<E>>;
 }
 
 /// Combination of `x` and `f(x)`
@@ -155,7 +156,7 @@ impl BracketOptimizer for InverseQuadratic {
         f: impl Fn(f64) -> Result<f64, E>,
         precision: Precision,
         mut f_callback: Option<&mut dyn FnMut(Self::InternalState)>,
-    ) -> Result<BracketResult, E> {
+    ) -> Result<BracketResult, BracketError<E>> {
         assert!(lower.x.is_finite());
         assert!(lower.f.is_finite());
         assert!(upper.x.is_finite());
@@ -165,6 +166,8 @@ impl BracketOptimizer for InverseQuadratic {
             panic!("Upper and lower values in bracket have the same sign????");
         }
 
+        let orig_lower = lower;
+        let orig_upper = upper;
         let mut evals = 0;
         let mut previous: Option<Point> = None;
         let requested_ulp_precision = precision.as_ulp();
@@ -185,6 +188,10 @@ impl BracketOptimizer for InverseQuadratic {
 
             let x = match ensure_maximal_bracket(upper.x, lower.x, x, requested_ulp_precision) {
                 ControlFlow::Break(x) => {
+                    if lower.f.abs() >= orig_lower.f.abs() && upper.f.abs() >= orig_upper.f.abs() {
+                        return Err(BracketError::Singularity);
+                    }
+
                     return Ok(BracketResult {
                         lower,
                         upper,
@@ -219,6 +226,21 @@ impl BracketOptimizer for InverseQuadratic {
                 lower = next;
             }
         }
+    }
+}
+
+/// Errors that may occur during bracketing
+#[derive(Debug)]
+pub enum BracketError<E> {
+    /// Error occured in the function evaluation
+    Eval(E),
+    /// The bracket is around a singularity, not a root
+    Singularity,
+}
+
+impl<E> From<E> for BracketError<E> {
+    fn from(value: E) -> Self {
+        Self::Eval(value)
     }
 }
 

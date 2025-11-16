@@ -7,7 +7,8 @@ use nalgebra::{Const, DefaultAllocator, DimAdd, DimMul, DimSub, Dyn};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::bracket::{
-    BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point, Precision,
+    BracketError, BracketOptimizer as _, BracketResult, FilterSignSwap, InverseQuadratic, Point,
+    Precision,
 };
 use crate::linalg::storage::ArrayAllocator;
 use crate::model::ContinuousModel;
@@ -73,10 +74,10 @@ impl ErasedSolver {
         #[allow(deprecated)]
         match scheme {
             DifferenceSchemes::Colloc2 => {
-                get_solvers_inner_explicit(model, system, || Colloc2 {}.as_explicit(), solver_grid)
+                get_solvers_inner(model, system, || Colloc2 {}, solver_grid)
             }
             DifferenceSchemes::Colloc4 => {
-                get_solvers_inner_explicit(model, system, || Colloc4 {}.as_explicit(), solver_grid)
+                get_solvers_inner(model, system, || Colloc4 {}, solver_grid)
             }
             DifferenceSchemes::Magnus2 => {
                 get_solvers_inner_explicit(model, system, || Magnus2 {}, solver_grid)
@@ -91,10 +92,10 @@ impl ErasedSolver {
                 get_solvers_inner_explicit(model, system, || Magnus8 {}, solver_grid)
             }
             DifferenceSchemes::Colloc6 => {
-                get_solvers_inner_explicit(model, system, || Colloc6 {}.as_explicit(), solver_grid)
+                get_solvers_inner(model, system, || Colloc6 {}, solver_grid)
             }
             DifferenceSchemes::Colloc8 => {
-                get_solvers_inner_explicit(model, system, || Colloc8 {}.as_explicit(), solver_grid)
+                get_solvers_inner(model, system, || Colloc8 {}, solver_grid)
             }
         }
     }
@@ -137,7 +138,7 @@ impl ErasedSolver {
             })
             .collect::<Vec<_>>()
             .into_par_iter()
-            .map(move |(point1, point2)| {
+            .filter_map(move |(point1, point2)| {
                 (InverseQuadratic {})
                     .optimize(
                         point1,
@@ -146,7 +147,16 @@ impl ErasedSolver {
                         precision,
                         None,
                     )
-                    .unwrap()
+                    .inspect_err(|err| match err {
+                        BracketError::Eval(_) => {
+                            unreachable!()
+                        }
+                        BracketError::Singularity => println!(
+                            "Singularity between {:?} and {:?}, increase resolution",
+                            point1, point2
+                        ),
+                    })
+                    .ok()
             })
             .collect();
 
@@ -276,25 +286,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047705823634703,
-                4.266736343870047,
-                5.171687595587034,
-                6.112886592324839,
-                7.202723916218958,
-                8.382723891526915,
+                3.3047705823634708,
+                4.266736343870042,
+                5.171687595587037,
+                6.1128865923248386,
+                7.202723916218962,
+                8.382723891526913,
                 9.592678008203873,
-                10.775320522017816,
+                10.775320522017815,
                 11.920093303555236,
-                13.053190710872078,
+                13.05319071087208,
                 14.210652204099809,
-                15.394001964368739,
+                15.394001964368744,
                 16.588047356802633,
-                17.78585476922645,
-                18.987746641247288,
+                17.785854769226447,
+                18.98774664124729,
                 20.197756136081438,
-                21.414950182959394,
-                22.636550178635105,
-                23.861795525801593
+                21.414950182959398,
+                22.636550178635108,
+                23.86179552580159
             ]
         );
     }
@@ -305,24 +315,24 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.304771988576298,
-                4.26674590619742,
+                3.304771988576296,
+                4.266745906197422,
                 5.171704821259237,
-                6.112908403558029,
-                7.202742135696432,
-                8.382726276718957,
-                9.592657394452718,
-                10.775268057219629,
-                11.919998396210874,
-                13.05303299565686,
-                14.210410711288217,
+                6.112908403558026,
+                7.202742135696427,
+                8.382726276718955,
+                9.592657394452715,
+                10.775268057219623,
+                11.919998396210872,
+                13.053032995656858,
+                14.210410711288215,
                 15.393657185848332,
                 16.58758120337435,
-                17.785242049776528,
-                18.986958831631526,
-                20.196767018928398,
-                21.41372685773869,
-                22.63506631842194,
+                17.785242049776524,
+                18.986958831631522,
+                20.1967670189284,
+                21.413726857738695,
+                22.63506631842195,
                 23.86001594191292
             ]
         );
@@ -334,25 +344,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047719884495614,
-                4.26674590591349,
-                5.171704821041756,
-                6.112908403377997,
-                7.202742135604173,
-                8.382726276786672,
-                9.592657394623771,
+                3.304771988449559,
+                4.266745905913491,
+                5.171704821041752,
+                6.112908403377998,
+                7.202742135604172,
+                8.382726276786668,
+                9.592657394623767,
                 10.775268057417655,
-                11.919998396310769,
+                11.91999839631077,
                 13.053032995510076,
-                14.210410710551296,
-                15.393657183936186,
-                16.587581199503894,
-                17.785242043062084,
+                14.21041071055129,
+                15.393657183936188,
+                16.587581199503898,
+                17.785242043062077,
                 18.986958820998424,
                 20.196767002682407,
                 21.413726834087406,
                 22.635066284488612,
-                23.86001589490206
+                23.860015894902055
             ]
         );
     }
@@ -363,25 +373,25 @@ mod test {
         assert_eq!(
             frequencies,
             [
-                3.3047719884492697,
-                4.266745905912844,
-                5.171704821041253,
-                6.11290840337745,
-                7.202742135603518,
-                8.382726276785938,
-                9.592657394622938,
+                3.304771988449267,
+                4.266745905912847,
+                5.171704821041254,
+                6.1129084033774514,
+                7.2027421356035175,
+                8.38272627678594,
+                9.592657394622933,
                 10.77526805741672,
                 11.919998396309726,
-                13.053032995508843,
-                14.210410710549818,
-                15.39365718393442,
+                13.053032995508845,
+                14.210410710549814,
+                15.393657183934423,
                 16.5875811995018,
-                17.785242043059586,
-                18.986958820995447,
+                17.78524204305959,
+                18.986958820995444,
                 20.196767002678833,
                 21.413726834083093,
-                22.635066284483422,
-                23.860015894895806
+                22.635066284483425,
+                23.86001589489581
             ]
         );
     }
@@ -522,5 +532,28 @@ mod test {
 
         assert_eq!(results.len(), 1);
         assert!(dbg!(results[0].root / model.exact(0, 1) - 1.) < 1e-13);
+    }
+
+    #[test]
+    fn test_singularities() {
+        let model = Polytrope0 { gamma1: 5. / 3. };
+
+        let solver = ErasedSolver::new(
+            &model,
+            Rotating1D::new(0, 0),
+            DifferenceSchemes::Colloc6,
+            &[&linspace(0., 1., 10).collect_vec()],
+        );
+
+        let results = solver
+            .scan_and_optimize(
+                [3., 4., 5., 6., 7., 8., 9., 10., 11., 12., 13.].into_iter(),
+                Precision::Relative(1e-2),
+            )
+            .into_iter()
+            .map(|res| res.root)
+            .collect_vec();
+
+        assert_eq!(results.len(), 4);
     }
 }
