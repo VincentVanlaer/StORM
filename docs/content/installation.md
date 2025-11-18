@@ -5,8 +5,6 @@ title: "Installation"
 icon: "rocket_launch"
 ---
 
-{{< alert context="warning" text="Only Linux installs have been tested thus far" />}}
-
 StORM can be installed in two ways:
 
 - Prebuilt binaries, which contains all dependencies
@@ -14,11 +12,13 @@ StORM can be installed in two ways:
 
 ## Prebuilt binaries
 
+{{< alert context="warning" text="For the prebuilt binaries, only linux installs have been tested. We welcome contributions to extend this documentation with instructions for other platforms." />}}
+
 Prebuilt binaries of StORM are provided, and require no dependencies.
 
 1. Download the prebuilt binary below
 1. Make the binary executable by running `chmod +x storm` (on Linux)
-1. Place it in a folder that is in `PATH`, or refer to it directly
+1. Place it in a folder that is in `PATH`, or refer to the binary with its full path
 
 <div class="d-flex col-sm-6 pt-6">
     <a class="ms-auto" href="linux/storm">

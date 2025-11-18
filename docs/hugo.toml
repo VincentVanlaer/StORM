@@ -1,5 +1,6 @@
 contentDir = 'content'
 enableEmoji = true
+title = "StORM"
 
 [module]
     [[module.imports]]
@@ -34,7 +35,7 @@ enableEmoji = true
     themeColor = "cardinal"
     sidebarIcons = true
     descriptions = true
-    logoLinkURL = "/preview/docs"
+    logoLinkURL = "/latest/docs"
     extLinkNewTab = false
 
 [params]

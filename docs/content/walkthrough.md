@@ -13,7 +13,7 @@ StORM currently only supports HDF5 stellar models from the [MESA](https://mesast
 See the [GYRE documentation](https://gyre.readthedocs.io/en/stable/ref-guide/stellar-models/gsm-file-format.html) for more details.
 Other formats can be transformed to this format using the [tomso python package](https://github.com/warrickball/tomso).
 This walkthrough will make use of one of the models used for testing StORM (the `test-model-tams.GSM` model).
-You can find this model in the `test-data` folder of the source release, or you can directly [download it]().
+You can find this model in the `test-data` folder of the source release.
 
 ## Running StORM
 
@@ -31,6 +31,7 @@ If everything goes well, you should see the following:
 
 This is the StORM command line interface and this is where you will enter commands to let StORM do the oscillation calculations.
 If you want to know what all the available commands are, type in `help` and press enter.
+If at any point you want to stop storm, press `Ctrl-D` on an empty line, just like you would do for a normal terminal.
 We will cover most of the commands you see in your terminal in this walkthrough.
 For an online overview of all of these commands, see the [CLI reference](../reference).
 
@@ -42,7 +43,7 @@ StORM will now load the model and tell you the number of points that the model c
 
 ```shell
 [storm] > input test-model-tams.GSM
-Loaded model with 6200 points
+Loaded model with 6200 points (1 segments)
 ```
 
 ### Searching for oscillation frequencies
@@ -117,4 +118,4 @@ GROUP "/" {
 }
 ```
 
-This can read using packages such as `h5py` for Python.
+This can be read using packages such as `h5py` for Python.

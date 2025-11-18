@@ -16,6 +16,8 @@ When the star is no longer spherically symmetric, the oscillation equations are 
 Hence, a complete solution of the oscillation equations must be constructed from multiplet spherical harmonics.
 This is a complicated endeavour, and most analyses are done using perturbative approaches, or otherwise constrained solution sets.
 
+The next sections describe how StORM takes rotation into account.
+
 ## Coriolis acceleration
 
 The Coriolis acceleration is the only term that is first order in the rotation.
