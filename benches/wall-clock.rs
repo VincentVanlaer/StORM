@@ -41,6 +41,10 @@ fn polytrope_benchmark() -> impl IntoBenchmarks {
             let shooting = polytrope(DifferenceSchemes::Colloc6);
             b.iter(move || run_freq(&shooting))
         }),
+        benchmark_fn("polytrope_colloc8", |b| {
+            let shooting = polytrope(DifferenceSchemes::Colloc8);
+            b.iter(move || run_freq(&shooting))
+        }),
     ]
 }
 
@@ -56,6 +60,10 @@ fn polytrope_upper_benchmark() -> impl IntoBenchmarks {
         }),
         benchmark_fn("polytrope_upper_colloc6", |b| {
             let shooting = polytrope(DifferenceSchemes::Colloc6);
+            b.iter(move || run_upper(&shooting))
+        }),
+        benchmark_fn("polytrope_upper_colloc8", |b| {
+            let shooting = polytrope(DifferenceSchemes::Colloc8);
             b.iter(move || run_upper(&shooting))
         }),
     ]

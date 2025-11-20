@@ -32,6 +32,7 @@ fn run_upper(shooting: ErasedSolver) -> Vec<f64> {
 #[bench::colloc2(args = (DifferenceSchemes::Colloc2), setup=polytrope)]
 #[bench::colloc4(args = (DifferenceSchemes::Colloc4), setup=polytrope)]
 #[bench::colloc6(args = (DifferenceSchemes::Colloc6), setup=polytrope)]
+#[bench::colloc8(args = (DifferenceSchemes::Colloc8), setup=polytrope)]
 fn bench_polytrope(shooting: ErasedSolver) -> f64 {
     black_box(run_freq(shooting))
 }
@@ -40,6 +41,7 @@ fn bench_polytrope(shooting: ErasedSolver) -> f64 {
 #[bench::colloc2(args = (DifferenceSchemes::Colloc2), setup=polytrope)]
 #[bench::colloc4(args = (DifferenceSchemes::Colloc4), setup=polytrope)]
 #[bench::colloc6(args = (DifferenceSchemes::Colloc6), setup=polytrope)]
+#[bench::colloc8(args = (DifferenceSchemes::Colloc8), setup=polytrope)]
 fn bench_polytrope_eigen(shooting: ErasedSolver) -> Vec<f64> {
     black_box(run_upper(shooting))
 }
