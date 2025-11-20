@@ -14,7 +14,7 @@ use crate::linalg::storage::ArrayAllocator;
 use crate::model::ContinuousModel;
 use crate::solver::{UpperResult, determinant, determinant_with_upper};
 use crate::stepper::{Colloc2, Colloc4, Colloc6, Colloc8, ImplicitStepper};
-use crate::system::adiabatic::Rotating1D;
+use crate::system::adiabatic::{Radial, Rotating1D};
 use crate::system::discretized::DiscretizedSystemImpl;
 
 /// Supported difference schemes
@@ -40,23 +40,24 @@ impl ErasedSolver {
     /// Construct from a system, difference scheme and grid definition
     pub fn new(
         model: &(impl ContinuousModel + ?Sized),
-        system: Rotating1D,
+        degree: u64,
+        order: i64,
         scheme: DifferenceSchemes,
         solver_grid: &[&[f64]],
     ) -> ErasedSolver {
         #[allow(deprecated)]
         match scheme {
             DifferenceSchemes::Colloc2 => {
-                get_solvers_inner(model, system, || Colloc2 {}, solver_grid)
+                get_solvers_inner(model, degree, order, || Colloc2 {}, solver_grid)
             }
             DifferenceSchemes::Colloc4 => {
-                get_solvers_inner(model, system, || Colloc4 {}, solver_grid)
+                get_solvers_inner(model, degree, order, || Colloc4 {}, solver_grid)
             }
             DifferenceSchemes::Colloc6 => {
-                get_solvers_inner(model, system, || Colloc6 {}, solver_grid)
+                get_solvers_inner(model, degree, order, || Colloc6 {}, solver_grid)
             }
             DifferenceSchemes::Colloc8 => {
-                get_solvers_inner(model, system, || Colloc8 {}, solver_grid)
+                get_solvers_inner(model, degree, order, || Colloc8 {}, solver_grid)
             }
         }
     }
@@ -133,7 +134,8 @@ impl ErasedSolver {
 
 fn get_solvers_inner<T: ImplicitStepper + Sync + 'static>(
     model: &(impl ContinuousModel + ?Sized),
-    system: Rotating1D,
+    degree: u64,
+    order: i64,
     stepper: impl Fn() -> T,
     solver_grid: &[&[f64]],
 ) -> ErasedSolver
@@ -144,17 +146,41 @@ where
         + Allocator<<Const<4> as DimMul<Const<2>>>::Output, <Const<4> as DimAdd<Const<2>>>::Output>
         + Allocator<<Const<4> as DimMul<Const<2>>>::Output, Const<1>>
         + ArrayAllocator<Const<4>, Const<4>, Dyn>
-        + ArrayAllocator<Const<4>, Const<4>, T::Points>,
+        + ArrayAllocator<Const<4>, Const<4>, T::Points>
+        + Allocator<Const<2>, Const<2>>
+        + Allocator<Const<1>, Const<2>>
+        + Allocator<<Const<2> as DimSub<Const<1>>>::Output, Const<2>>
+        + Allocator<<Const<2> as DimMul<Const<2>>>::Output, <Const<2> as DimAdd<Const<1>>>::Output>
+        + Allocator<<Const<2> as DimMul<Const<2>>>::Output, Const<1>>
+        + ArrayAllocator<Const<2>, Const<2>, Dyn>
+        + ArrayAllocator<Const<2>, Const<2>, T::Points>,
 {
-    let system1 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
-    let system2 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
+    let det: Box<dyn Fn(f64) -> f64 + Sync> = if degree == 0 {
+        let system = DiscretizedSystemImpl::new(model, stepper(), Radial {}, solver_grid);
+        Box::new(move |freq: f64| determinant(&system, freq))
+    } else {
+        let system = DiscretizedSystemImpl::new(
+            model,
+            stepper(),
+            Rotating1D::new(degree, order),
+            solver_grid,
+        );
+        Box::new(move |freq: f64| determinant(&system, freq))
+    };
+
+    let system = DiscretizedSystemImpl::new(
+        model,
+        stepper(),
+        Rotating1D::new(degree, order),
+        solver_grid,
+    );
 
     ErasedSolver {
-        det: Box::new(move |freq: f64| determinant(&system1, freq)),
+        det,
         eigenvector: Box::new(move |freq: f64| {
-            let mut upper = UpperResult::new_from_system(&system2);
+            let mut upper = UpperResult::new_from_system(&system);
 
-            let det = determinant_with_upper(&system2, freq, &mut upper);
+            let det = determinant_with_upper(&system, freq, &mut upper);
 
             (det, upper.eigenvectors())
         }),
@@ -170,7 +196,6 @@ mod test {
     use crate::{
         bracket::Precision,
         model::{DiscreteModel, interpolate::LinearInterpolator, polytrope::Polytrope0},
-        system::adiabatic::Rotating1D,
     };
 
     use super::{DifferenceSchemes, ErasedSolver};
@@ -187,10 +212,10 @@ mod test {
             DiscreteModel::from_gsm(model_file).unwrap()
         };
 
-        let system = Rotating1D::new(degree, 0);
         let determinant = ErasedSolver::new(
             &LinearInterpolator::new(&model),
-            system,
+            degree,
+            0,
             scheme,
             &model
                 .segments
@@ -328,12 +353,42 @@ mod test {
     }
 
     #[test]
+    fn test_frequencies_radial() {
+        let frequencies = compute_frequencies(DifferenceSchemes::Colloc2, 0);
+        assert_eq!(
+            frequencies,
+            [
+                3.3047809428365422,
+                4.266748394071127,
+                5.171693107854907,
+                6.112890318645434,
+                7.202726484657045,
+                8.382725271699115,
+                9.592678470414542,
+                10.775320438533122,
+                11.92009299796021,
+                13.053190370072313,
+                14.210651892830096,
+                15.394001607990237,
+                16.588046889370663,
+                17.785854228084066,
+                18.98774612289027,
+                20.197755749714883,
+                21.41494993956211,
+                22.63655003007807,
+                23.861795461044103
+            ]
+        )
+    }
+
+    #[test]
     fn test_polytrope() {
         let model = Polytrope0 { gamma1: 5. / 3. };
 
         let solver = ErasedSolver::new(
             &model,
-            Rotating1D::new(0, 0),
+            0,
+            0,
             DifferenceSchemes::Colloc6,
             &[&linspace(0., 1., 10000).collect_vec()],
         );
@@ -351,7 +406,8 @@ mod test {
 
         let solver = ErasedSolver::new(
             &model,
-            Rotating1D::new(0, 0),
+            0,
+            0,
             DifferenceSchemes::Colloc6,
             &[&linspace(0., 1., 10).collect_vec()],
         );

@@ -399,7 +399,6 @@ mod tests {
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, ErasedSolver},
         model::{DiscreteModel, interpolate::LinearInterpolator},
-        system::adiabatic::Rotating1D,
     };
 
     use super::Rotating1DPostprocessing;
@@ -419,10 +418,10 @@ mod tests {
             DiscreteModel::from_gsm(model_file).unwrap()
         };
 
-        let system = Rotating1D::new(ell, m);
         let determinant = ErasedSolver::new(
             &LinearInterpolator::new(&model),
-            system,
+            ell,
+            m,
             DifferenceSchemes::Colloc2,
             &model
                 .segments

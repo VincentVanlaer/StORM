@@ -10,7 +10,6 @@ use storm::{
     },
     dynamic_interface::{DifferenceSchemes, ErasedSolver},
     model::{DiscreteModel, interpolate::LinearInterpolator},
-    system::adiabatic::Rotating1D,
 };
 
 struct IntermediateStateBalanced {
@@ -29,11 +28,11 @@ fn main() -> Result<()> {
     let difference_scheme = DifferenceSchemes::Colloc2;
 
     let model = DiscreteModel::from_gsm("test-data/test-model-tams.GSM")?;
-    let system = Rotating1D::new(0, 0);
     let searcher = &InverseQuadratic {};
     let determinant = ErasedSolver::new(
         &LinearInterpolator::new(&model),
-        system,
+        0,
+        0,
         difference_scheme,
         &model
             .segments

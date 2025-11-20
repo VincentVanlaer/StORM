@@ -515,7 +515,6 @@ mod tests {
         },
         perturbed::perturb_structure,
         postprocessing::Rotating1DPostprocessing,
-        system::adiabatic::Rotating1D,
     };
 
     use super::{ModeToPerturb, perturb_deformed};
@@ -579,7 +578,8 @@ mod tests {
         let runner = |ell: u64, scan: &[f64]| {
             let solver = ErasedSolver::new(
                 &LinearInterpolator::new(&poly3),
-                Rotating1D::new(ell, 0),
+                ell,
+                0,
                 DifferenceSchemes::Colloc6,
                 &grid,
             );
@@ -701,7 +701,8 @@ mod tests {
             if ell != 0 {
                 let solver_m1 = ErasedSolver::new(
                     &LinearInterpolator::new(&poly3),
-                    Rotating1D::new(ell, 1),
+                    ell,
+                    1,
                     DifferenceSchemes::Colloc6,
                     &grid,
                 );

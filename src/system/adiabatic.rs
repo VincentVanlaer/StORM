@@ -25,6 +25,13 @@ impl Rotating1D {
 }
 
 #[derive(Debug, Clone, Copy)]
+/// Radial stellar oscillations
+///
+/// Simplified system of equations for radial stellar oscillations. This is equivalent to
+/// [Rotating1D] (baring floating point errors), but less computationally expensive.
+pub struct Radial {}
+
+#[derive(Debug, Clone, Copy)]
 /// Structure coefficients needed for adiabatic calculations
 pub struct AdiabaticStructureCoefficients {
     /// Logarithmic derivative of the mass coordinate
@@ -258,5 +265,111 @@ impl<T: ComplexField + Copy> System<T> for Rotating1D {
         *right.index_mut((3, 1)) = zero;
         *right.index_mut((3, 2)) = zero;
         *right.index_mut((3, 3)) = -one;
+    }
+}
+
+impl<T: ComplexField + Copy> System<T> for Radial {
+    type ModelPoint = AdiabaticStructureCoefficients;
+    type N = Const<2>;
+    type NInner = Const<1>;
+
+    fn shape(&self) -> Self::N {
+        Const
+    }
+
+    fn shape_inner(&self) -> Self::NInner {
+        Const
+    }
+
+    fn shape_outer(&self) -> <Self::N as nalgebra::DimSub<Self::NInner>>::Output {
+        Const
+    }
+
+    fn eval(
+        &self,
+        point: Self::ModelPoint,
+        delta: f64,
+        output: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+    ) {
+        let one = T::from_subset(&1.);
+        let three = T::from_subset(&3.);
+        let delta = T::from_subset(&delta);
+        let v_gamma = T::from_subset(&point.v_gamma);
+        let u = T::from_subset(&point.u);
+        let a_star = T::from_subset(&point.a_star);
+
+        *output.index_mut((0, 0)) = delta * (v_gamma - one);
+        *output.index_mut((0, 1)) = -delta * v_gamma;
+
+        *output.index_mut((1, 0)) = delta * (u - a_star);
+        *output.index_mut((1, 1)) = delta * (a_star - u + three);
+    }
+
+    fn add_frequency(
+        &self,
+        freq: T,
+        point: Self::ModelPoint,
+        delta: f64,
+        matrix: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+    ) {
+        let delta = T::from_subset(&delta);
+        let c1 = T::from_subset(&point.c1);
+
+        let dc1 = delta * c1;
+
+        *matrix.index_mut((1, 0)) += dc1 * freq.powi(2);
+    }
+
+    fn inner_boundary(
+        &self,
+        frequency: T,
+        inner_point: Self::ModelPoint,
+        output: &mut Matrix<T, Self::NInner, Self::N, impl StorageMut<T, Self::NInner, Self::N>>,
+    ) {
+        let zero = T::from_subset(&0.);
+        let c1 = T::from_subset(&inner_point.c1);
+
+        *output.index_mut((0, 0)) = c1 * frequency * frequency;
+        *output.index_mut((0, 1)) = zero;
+    }
+
+    fn outer_boundary(
+        &self,
+        _frequency: T,
+        _outer_point: Self::ModelPoint,
+        output: &mut Matrix<
+            T,
+            <Self::N as nalgebra::DimSub<Self::NInner>>::Output,
+            Self::N,
+            impl StorageMut<T, <Self::N as nalgebra::DimSub<Self::NInner>>::Output, Self::N>,
+        >,
+    ) {
+        let one = T::from_subset(&1.);
+
+        *output.index_mut((0, 0)) = one;
+        *output.index_mut((0, 1)) = -one;
+    }
+
+    fn double_point(
+        &self,
+        inner_point: Self::ModelPoint,
+        outer_point: Self::ModelPoint,
+        left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+        right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
+    ) {
+        let zero = T::from_subset(&0.);
+        let one = T::from_subset(&1.);
+        let u_inner = T::from_subset(&inner_point.u);
+        let u_outer = T::from_subset(&outer_point.u);
+
+        *left.index_mut((0, 0)) = one;
+        *left.index_mut((0, 1)) = zero;
+        *left.index_mut((1, 0)) = -u_inner;
+        *left.index_mut((1, 1)) = u_inner;
+
+        *right.index_mut((0, 0)) = -one;
+        *right.index_mut((0, 1)) = zero;
+        *right.index_mut((1, 0)) = u_outer;
+        *right.index_mut((1, 1)) = -u_outer;
     }
 }

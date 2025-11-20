@@ -6,7 +6,6 @@ use storm::{
         interpolate::LinearInterpolator,
         polytrope::{IndexSegments, construct_polytrope},
     },
-    system::adiabatic::Rotating1D,
 };
 
 fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
@@ -14,7 +13,8 @@ fn polytrope(scheme: DifferenceSchemes) -> ErasedSolver {
 
     ErasedSolver::new(
         &LinearInterpolator::new(&poly),
-        Rotating1D::new(1, 0),
+        1,
+        0,
         scheme,
         &[&poly.segments[0].dimensionless.r_coord],
     )

@@ -478,7 +478,6 @@ mod tests {
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, ErasedSolver},
         model::interpolate::LinearInterpolator,
-        system::adiabatic::Rotating1D,
     };
 
     use super::{IndexSegments, Polytrope0, construct_polytrope};
@@ -499,7 +498,8 @@ mod tests {
 
         let solver = ErasedSolver::new(
             &LinearInterpolator::new(&polytrope),
-            Rotating1D::new(0, 0),
+            0,
+            0,
             DifferenceSchemes::Colloc6,
             &grid,
         );
@@ -513,6 +513,6 @@ mod tests {
             .map(|res| res.root)
             .collect_vec();
 
-        assert_eq!(solutions, [1.445054727775158, 3.5183813886332884])
+        assert_eq!(solutions, [1.4450476968953652, 3.5183761534717126])
     }
 }

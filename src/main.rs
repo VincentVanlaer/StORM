@@ -19,7 +19,6 @@ use storm::model::polytrope::{IndexSegments, Polytrope0, construct_polytrope};
 use storm::model::{ContinuousModel, DimensionedProperties, DiscreteModel};
 use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
 use storm::postprocessing::Rotating1DPostprocessing;
-use storm::system::adiabatic::Rotating1D;
 
 fn main() -> ExitCode {
     let mut state = StormState::default();
@@ -828,14 +827,14 @@ impl StormState {
             .as_mut()
             .ok_or_eyre("Input was not set. Please run `input` before running a scan.")?;
 
-        let system = Rotating1D::new(ell, m);
         let model = input.as_continuous();
         let upper = frequency_units.convert_to_natural(upper, &model.dimensions())?;
         let lower = frequency_units.convert_to_natural(lower, &model.dimensions())?;
 
         let determinant = ErasedSolver::new(
             model.as_ref(),
-            system,
+            ell,
+            m,
             difference_scheme,
             &input.grid().iter().map(AsRef::as_ref).collect_vec(),
         );
