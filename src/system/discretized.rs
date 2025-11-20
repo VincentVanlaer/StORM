@@ -7,7 +7,7 @@ use nalgebra::{
 use crate::{
     linalg::storage::{ArrayAllocator, ArrayStorage, MatrixArray},
     model::{ContinuousModel, DiscreteModelSegment},
-    stepper::{ExplicitStepper, ImplicitStepper},
+    stepper::ImplicitStepper,
 };
 
 use super::System;
@@ -53,16 +53,6 @@ pub(crate) trait DiscretizedSystem<T: ComplexField> {
         frequency: T,
         left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
         right: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
-    );
-}
-
-pub(crate) trait ExplicitDiscretizedSystem<T: ComplexField>: DiscretizedSystem<T> {
-    fn fill_explicit(
-        &self,
-        segment: usize,
-        step: usize,
-        frequency: T,
-        left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
     );
 }
 
@@ -258,47 +248,5 @@ where
         }
 
         self.stepper.apply(left, right, &matrix_array);
-    }
-}
-
-impl<
-    T: ComplexField + Copy,
-    S: System<T>,
-    Stepper: ExplicitStepper,
-    SArray: ArrayStorage<T, S::N, S::N, Dyn>,
-> ExplicitDiscretizedSystem<T> for DiscretizedSystemImpl<T, S, Stepper, SArray>
-where
-    DefaultAllocator: ArrayAllocator<S::N, S::N, Stepper::Points> + Allocator<S::N, S::N>,
-    S::ModelPoint: Copy,
-{
-    #[inline(always)]
-    fn fill_explicit(
-        &self,
-        segment: usize,
-        step: usize,
-        frequency: T,
-        left: &mut Matrix<T, Self::N, Self::N, impl StorageMut<T, Self::N, Self::N>>,
-    ) {
-        let segment = &self.segments[segment];
-        let points_per_step = Stepper::Points::dim();
-        let mut matrix_array =
-            MatrixArray::new_with(self.shape(), self.shape(), Stepper::Points::name(), || {
-                T::zero()
-            });
-
-        for i in 0..points_per_step {
-            matrix_array
-                .index_mut(i)
-                .copy_from(&segment.matrices.index(step * points_per_step + i));
-
-            self.system.add_frequency(
-                frequency,
-                segment.interpolated_points[step * points_per_step + i],
-                segment.delta[step] / segment.points[step * points_per_step + i],
-                &mut matrix_array.index_mut(i),
-            );
-        }
-
-        self.stepper.apply(left, &matrix_array);
     }
 }

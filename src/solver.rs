@@ -3,7 +3,7 @@ use nalgebra::{
     RawStorage, RawStorageMut, allocator::Allocator,
 };
 
-use crate::system::discretized::{DiscretizedSystem, ExplicitDiscretizedSystem};
+use crate::system::discretized::DiscretizedSystem;
 
 pub(crate) struct UpperResult<T> {
     data: Box<[T]>,
@@ -472,129 +472,6 @@ where
         );
 
         sweep!(bands, upper, n_step, n, n, k, pivot, pivot_row);
-    }
-
-    det * *bands.index((n - 1, n - 1))
-}
-
-pub(crate) fn determinant_explicit<
-    T: ComplexField + Copy,
-    System: ExplicitDiscretizedSystem<T, N: DimMul<Const<2>> + DimAdd<System::NInner>>,
->(
-    system: &System,
-    frequency: T,
-) -> T
-where
-    DefaultAllocator: Allocator<System::N, System::N>
-        + Allocator<System::NInner, System::N>
-        + Allocator<<System::N as DimSub<System::NInner>>::Output, System::N>
-        + Allocator<
-            <System::N as DimMul<Const<2>>>::Output,
-            <System::N as DimAdd<System::NInner>>::Output,
-        > + Allocator<<System::N as DimMul<Const<2>>>::Output, Const<1>>,
-{
-    let outer_boundary = {
-        let mut outer_boundary = OMatrix::zeros_generic(system.shape_outer(), system.shape());
-        system.outer_boundary(frequency, &mut outer_boundary);
-        outer_boundary
-    };
-    let inner_boundary = {
-        let mut inner_boundary = OMatrix::zeros_generic(system.shape_inner(), system.shape());
-        system.inner_boundary(frequency, &mut inner_boundary);
-        inner_boundary
-    };
-
-    let n_inner = inner_boundary.shape().0;
-    let n = system.shape().value();
-
-    let mut bands = Matrix::from_element_generic(
-        system.shape().mul(Const::<2>),
-        system.shape().add(inner_boundary.shape_generic().0),
-        T::zero(),
-    );
-
-    let mut left: OMatrix<T, System::N, System::N> =
-        OMatrix::zeros_generic(system.shape(), system.shape());
-    let mut right: OMatrix<T, System::N, System::N> =
-        OMatrix::zeros_generic(system.shape(), system.shape());
-    let mut accum: OMatrix<T, System::N, System::N> =
-        OMatrix::identity_generic(system.shape(), system.shape());
-    let mut accum2: OMatrix<T, System::N, System::N> =
-        OMatrix::zeros_generic(system.shape(), system.shape());
-
-    for i in 0..n_inner {
-        for j in 0..n {
-            *bands.index_mut((j, i)) = *inner_boundary.index((i, j));
-        }
-    }
-
-    let mut det = T::one();
-
-    for segment in 0..system.len_segments() {
-        for step in 0..system.len_steps(segment) {
-            system.fill_explicit(segment, step, frequency, &mut left);
-
-            accum2.clone_from(&accum);
-
-            accum.gemm(T::one(), &left, &accum2, T::zero());
-        }
-
-        if segment != system.len_segments() - 1 {
-            system.transition_segment(segment, &mut left, &mut right);
-
-            accum2.clone_from(&accum);
-            accum.gemm(T::one(), &left, &accum2, T::zero());
-            accum2.clone_from(&accum);
-            assert_eq!(right.try_inverse_mut(), true);
-            accum.gemm(T::one(), &right, &accum2, T::zero());
-        }
-    }
-
-    for r in 0..n {
-        for c in 0..n {
-            *bands.index_mut((c, r + n_inner)) = *accum.index((r, c));
-            *bands.index_mut((c + n, r + n_inner)) = if r == c { -T::one() } else { T::zero() };
-        }
-    }
-
-    for k in 0..n {
-        let (pivot, pivot_row) = row_pivot!(bands, det, n + n_inner, 2 * n, k);
-
-        det *= pivot;
-
-        debug_assert!(
-            det.is_finite() && det != T::zero(),
-            "det = {det}, pivot = {pivot}"
-        );
-
-        sweep!(bands, n + n_inner, 2 * n, k, pivot, pivot_row);
-    }
-
-    for i in 0..n_inner {
-        for j in 0..n {
-            *bands.index_mut((j, i)) = *bands.index((j + n, i + n));
-            *bands.index_mut((j + n, i)) = T::zero();
-        }
-    }
-
-    // Outer boundary
-    for r in 0..(n - n_inner) {
-        for c in 0..n {
-            *bands.index_mut((c, n_inner + r)) = *outer_boundary.index((r, c));
-        }
-    }
-
-    for k in 0..(n - 1) {
-        let (pivot, pivot_row) = row_pivot!(bands, det, n, n, k);
-
-        det *= pivot;
-
-        debug_assert!(
-            pivot.is_finite() && det.is_finite(),
-            "det = {det}, pivot = {pivot}"
-        );
-
-        sweep!(bands, n, n, k, pivot, pivot_row);
     }
 
     det * *bands.index((n - 1, n - 1))

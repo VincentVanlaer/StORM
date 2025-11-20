@@ -12,8 +12,8 @@ use crate::bracket::{
 };
 use crate::linalg::storage::ArrayAllocator;
 use crate::model::ContinuousModel;
-use crate::solver::{UpperResult, determinant, determinant_explicit, determinant_with_upper};
-use crate::stepper::{Colloc2, Colloc4, Colloc6, Colloc8, ExplicitStepper, ImplicitStepper};
+use crate::solver::{UpperResult, determinant, determinant_with_upper};
+use crate::stepper::{Colloc2, Colloc4, Colloc6, Colloc8, ImplicitStepper};
 use crate::system::adiabatic::Rotating1D;
 use crate::system::discretized::DiscretizedSystemImpl;
 
@@ -151,36 +151,6 @@ where
 
     ErasedSolver {
         det: Box::new(move |freq: f64| determinant(&system1, freq)),
-        eigenvector: Box::new(move |freq: f64| {
-            let mut upper = UpperResult::new_from_system(&system2);
-
-            let det = determinant_with_upper(&system2, freq, &mut upper);
-
-            (det, upper.eigenvectors())
-        }),
-    }
-}
-
-fn get_solvers_inner_explicit<T: ExplicitStepper + Sync + 'static>(
-    model: &(impl ContinuousModel + ?Sized),
-    system: Rotating1D,
-    stepper: impl Fn() -> T,
-    solver_grid: &[&[f64]],
-) -> ErasedSolver
-where
-    DefaultAllocator: Allocator<Const<4>, Const<4>>
-        + Allocator<Const<2>, Const<4>>
-        + Allocator<<Const<4> as DimSub<Const<2>>>::Output, Const<4>>
-        + Allocator<<Const<4> as DimMul<Const<2>>>::Output, <Const<4> as DimAdd<Const<2>>>::Output>
-        + Allocator<<Const<4> as DimMul<Const<2>>>::Output, Const<1>>
-        + ArrayAllocator<Const<4>, Const<4>, Dyn>
-        + ArrayAllocator<Const<4>, Const<4>, T::Points>,
-{
-    let system1 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
-    let system2 = DiscretizedSystemImpl::new(model, stepper(), system, solver_grid);
-
-    ErasedSolver {
-        det: Box::new(move |freq: f64| determinant_explicit(&system1, freq)),
         eigenvector: Box::new(move |freq: f64| {
             let mut upper = UpperResult::new_from_system(&system2);
 
