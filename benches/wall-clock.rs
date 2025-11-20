@@ -41,22 +41,6 @@ fn polytrope_benchmark() -> impl IntoBenchmarks {
             let shooting = polytrope(DifferenceSchemes::Colloc6);
             b.iter(move || run_freq(&shooting))
         }),
-        benchmark_fn("polytrope_magnus2", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus2);
-            b.iter(move || run_freq(&shooting))
-        }),
-        benchmark_fn("polytrope_magnus4", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus4);
-            b.iter(move || run_freq(&shooting))
-        }),
-        benchmark_fn("polytrope_magnus6", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus6);
-            b.iter(move || run_freq(&shooting))
-        }),
-        benchmark_fn("polytrope_magnus8", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus8);
-            b.iter(move || run_freq(&shooting))
-        }),
     ]
 }
 
@@ -72,22 +56,6 @@ fn polytrope_upper_benchmark() -> impl IntoBenchmarks {
         }),
         benchmark_fn("polytrope_upper_colloc6", |b| {
             let shooting = polytrope(DifferenceSchemes::Colloc6);
-            b.iter(move || run_upper(&shooting))
-        }),
-        benchmark_fn("polytrope_upper_magnus2", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus2);
-            b.iter(move || run_upper(&shooting))
-        }),
-        benchmark_fn("polytrope_upper_magnus4", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus4);
-            b.iter(move || run_upper(&shooting))
-        }),
-        benchmark_fn("polytrope_upper_magnus6", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus6);
-            b.iter(move || run_upper(&shooting))
-        }),
-        benchmark_fn("polytrope_upper_magnus8", |b| {
-            let shooting = polytrope(DifferenceSchemes::Magnus8);
             b.iter(move || run_upper(&shooting))
         }),
     ]

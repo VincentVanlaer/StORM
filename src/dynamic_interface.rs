@@ -13,10 +13,7 @@ use crate::bracket::{
 use crate::linalg::storage::ArrayAllocator;
 use crate::model::ContinuousModel;
 use crate::solver::{UpperResult, determinant, determinant_explicit, determinant_with_upper};
-use crate::stepper::{
-    Colloc2, Colloc4, Colloc6, Colloc8, ExplicitStepper, ImplicitStepper, Magnus2, Magnus4,
-    Magnus6, Magnus8,
-};
+use crate::stepper::{Colloc2, Colloc4, Colloc6, Colloc8, ExplicitStepper, ImplicitStepper};
 use crate::system::adiabatic::Rotating1D;
 use crate::system::discretized::DiscretizedSystemImpl;
 
@@ -31,30 +28,6 @@ pub enum DifferenceSchemes {
     Colloc6,
     /// Eight-order collocation method
     Colloc8,
-    /// Second-order magnus method
-    #[deprecated(
-        note = "magnus methods do not converge properly, use the collocation methods instead"
-    )]
-    #[clap(hide = true)]
-    Magnus2,
-    /// Fourth-order magnus method
-    #[deprecated(
-        note = "magnus methods do not converge properly, use the collocation methods instead"
-    )]
-    #[clap(hide = true)]
-    Magnus4,
-    /// Sixth-order magnus method
-    #[deprecated(
-        note = "magnus methods do not converge properly, use the collocation methods instead"
-    )]
-    #[clap(hide = true)]
-    Magnus6,
-    /// Eight-order magnus method
-    #[deprecated(
-        note = "magnus methods do not converge properly, use the collocation methods instead"
-    )]
-    #[clap(hide = true)]
-    Magnus8,
 }
 
 /// Type erased interface for computing the determinant and the eigenvector of a problem
@@ -78,18 +51,6 @@ impl ErasedSolver {
             }
             DifferenceSchemes::Colloc4 => {
                 get_solvers_inner(model, system, || Colloc4 {}, solver_grid)
-            }
-            DifferenceSchemes::Magnus2 => {
-                get_solvers_inner_explicit(model, system, || Magnus2 {}, solver_grid)
-            }
-            DifferenceSchemes::Magnus4 => {
-                get_solvers_inner_explicit(model, system, || Magnus4 {}, solver_grid)
-            }
-            DifferenceSchemes::Magnus6 => {
-                get_solvers_inner_explicit(model, system, || Magnus6 {}, solver_grid)
-            }
-            DifferenceSchemes::Magnus8 => {
-                get_solvers_inner_explicit(model, system, || Magnus8 {}, solver_grid)
             }
             DifferenceSchemes::Colloc6 => {
                 get_solvers_inner(model, system, || Colloc6 {}, solver_grid)
@@ -392,126 +353,6 @@ mod test {
                 21.413726834083093,
                 22.635066284483425,
                 23.86001589489581
-            ]
-        );
-    }
-
-    #[test]
-    fn test_frequencies_magnus2() {
-        #[allow(deprecated)]
-        let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus2);
-        assert_eq!(
-            frequencies,
-            [
-                3.3047756048134764,
-                4.266752820276893,
-                5.171709250026434,
-                6.112913476223278,
-                7.202747530027676,
-                8.38273305853886,
-                9.592661929656748,
-                10.77527050786098,
-                11.91999975979777,
-                13.053037065684244,
-                14.210416226382524,
-                15.393662887763972,
-                16.58758484269586,
-                17.785246466563454,
-                18.986966870916923,
-                20.19677540774143,
-                21.41373972509688,
-                22.635077815112005,
-                23.86002962270805
-            ]
-        );
-    }
-
-    #[test]
-    fn test_frequencies_magnus4() {
-        #[allow(deprecated)]
-        let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus4);
-        assert_eq!(
-            frequencies,
-            [
-                3.304772012427685,
-                4.266745956768099,
-                5.171704858907576,
-                6.112908443504287,
-                7.202742181746013,
-                8.38272632643045,
-                9.592657448952124,
-                10.775268115902444,
-                11.919998459648216,
-                13.053033067751512,
-                14.210410794463336,
-                15.393657280481298,
-                16.587581309350604,
-                17.78524216815943,
-                18.986958964378562,
-                20.196767166248403,
-                21.413727021261945,
-                22.635066496264685,
-                23.860016134637675
-            ]
-        );
-    }
-
-    #[test]
-    fn test_frequencies_magnus6() {
-        #[allow(deprecated)]
-        let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus6);
-        assert_eq!(
-            frequencies,
-            [
-                3.304771972030555,
-                4.266745871223452,
-                5.171704795330556,
-                6.112908376281986,
-                7.20274210464388,
-                8.382726243761287,
-                9.592657358777672,
-                10.775268019154412,
-                11.919998355259096,
-                13.053032949294519,
-                14.210410657550867,
-                15.393657123646523,
-                16.587581131578123,
-                17.785241966752977,
-                18.986958735119533,
-                20.19676690620731,
-                21.41372672568609,
-                22.63506616329432,
-                23.860015759836728
-            ]
-        );
-    }
-
-    #[test]
-    fn test_frequencies_magnus8() {
-        #[allow(deprecated)]
-        let frequencies = compute_frequencies_radial(DifferenceSchemes::Magnus8);
-        assert_eq!(
-            frequencies,
-            [
-                3.3047719968014135,
-                4.266745923559007,
-                5.171704834119887,
-                6.112908417160295,
-                7.202742151351703,
-                8.382726293584165,
-                9.592657412855438,
-                10.775268076878126,
-                11.919998417188772,
-                13.053033019013561,
-                14.210410737504352,
-                15.393657214594954,
-                16.587581234044354,
-                17.785242081863778,
-                18.98695886466423,
-                20.196767051733598,
-                21.41372688919957,
-                22.635066346101432,
-                23.860015963562738
             ]
         );
     }

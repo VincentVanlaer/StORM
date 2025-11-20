@@ -1,14 +1,10 @@
-use std::{borrow::Borrow, marker::PhantomData, mem::MaybeUninit, ops::Add, ptr::NonNull};
+use std::{marker::PhantomData, mem::MaybeUninit, ptr::NonNull};
 
 use nalgebra::{
-    ComplexField, Const, DefaultAllocator, Dim, Dyn, Field, RealField, Scalar, Storage, StorageMut,
-    ViewStorage, ViewStorageMut,
-    allocator::Allocator,
+    Const, DefaultAllocator, Dim, Dyn, Scalar, Storage, StorageMut, ViewStorage, ViewStorageMut,
     base::Matrix,
     uninit::{InitStatus, Uninit},
 };
-use num_traits::Float;
-use simba::scalar::SupersetOf;
 
 pub(crate) struct MatrixArray<T, R, C, L, S> {
     data: S,
@@ -318,48 +314,6 @@ where
     }
 }
 
-const T18_COEFFICIENTS: [[f64; 5]; 5] = [
-    [
-        0.,
-        -0.100_365_581_030_144_62,
-        -0.008_029_246_482_411_57,
-        -0.000_892_138_498_045_73,
-        0.,
-    ],
-    [
-        0.,
-        0.397_849_749_499_645_1,
-        1.367_837_784_604_117_2,
-        0.498_289_622_525_382_67,
-        -0.000_637_898_194_594_723_3,
-    ],
-    [
-        -10.967_639_605_296_206,
-        1.680_158_138_789_062,
-        0.057_177_984_647_886_55,
-        -0.006_982_101_224_880_520_6,
-        0.00003349750170860705,
-    ],
-    [
-        -0.090_431_683_239_081_06,
-        -0.067_640_451_907_138_19,
-        0.067_596_130_177_045_97,
-        0.029_555_257_042_931_552,
-        -0.00001391802575160607,
-    ],
-    [
-        0.,
-        0.,
-        -0.092_336_461_936_711_86,
-        -0.016_936_493_900_208_172,
-        -0.00001400867981820361,
-    ],
-];
-
-pub(crate) trait Exp {
-    fn exp(&mut self);
-}
-
 pub(crate) fn assign_matrix<T: Scalar, N: Dim, M: Dim>(
     m1: &mut nalgebra::Matrix<T, N, M, impl StorageMut<T, N, M>>,
     m2: nalgebra::Matrix<T, N, M, impl Storage<T, N, M>>,
@@ -371,151 +325,16 @@ pub(crate) fn assign_matrix<T: Scalar, N: Dim, M: Dim>(
     }
 }
 
-impl<T: ComplexField, N: Dim, S: StorageMut<T, N, N>> Exp for nalgebra::Matrix<T, N, N, S>
-where
-    DefaultAllocator: Allocator<N, N>,
-{
-    // Matrix exponential using the scaling and squaring algorithm, with an 18th order Taylor
-    // expansion as approximation. The bounds on the scaling where chosen such that the expansion
-    // is accurate to machine precision for a 64-bit floating point number (see Blanes, Kopylov,
-    // and Seydao ̆glu, 'Efficient scaling and squaring method for the matrix exponential', 2024).
-    // For the constants used in the approximation, see Eqn. (13) of Bader, Blanes and Casas
-    // (2018), 'An improved algorithm to compute the exponential of a matrix'.
-    //
-    // Rational for choosing this algorithm:
-    //
-    // - Scaling and squaring is computationally simple, compared to e.g. the eigenvalue method in
-    //   GYRE
-    // - Numerical stability is also better compared to other iterative methods for small changes
-    //   in the frequency
-    // - The choice for the t18 approximation instead of the more commonly considered Padé
-    //   approximations comes from the balance between the cost of a matrix inverse vs. a matrix
-    //   multiplication. Blanes et al. (2024) assumes that a matrix inverse is ~1.33 times the
-    //   cost of a matrix multiplication. For the small matrices we are dealing with, that is not
-    //   the case. While the matrix multiplication is done branchless, this cannot be done for the
-    //   matrix inverse. The number of branches is O(N^2), and hence will become less important
-    //   for large matrices.
-    //
-    //   NOTE: nalgebra does non-branchy inverses for matrices up to size 4, and one inverse can be
-    //   left to be dealt with by the determinant calculation, which makes Padé methods free
-    //   compared to Taylor methods
-    fn exp(&mut self) {
-        assert_eq!(self.nrows(), self.ncols());
-
-        let norm: f64 = self
-            .column_iter()
-            .map(|x| {
-                x.iter().map(|x| x.clone().abs()).fold(
-                    <T::RealField as SupersetOf<f64>>::from_subset(&0.),
-                    <T::RealField as Add<T::RealField>>::add,
-                )
-            })
-            .reduce(<T::RealField as RealField>::max)
-            .expect("at least one item")
-            .to_subset()
-            .expect("should be real");
-
-        let (mantissa, mut exponent, _) = norm.integer_decode();
-
-        exponent +=
-            i16::try_from(mantissa.next_power_of_two().ilog2()).expect("max 64 leading zeroes");
-
-        if exponent > 0 {
-            *self *= T::from_subset(&f64::powi(2., (-exponent).into()));
-        }
-
-        let eye = &nalgebra::Matrix::<T, N, N, _>::identity_generic(
-            self.shape_generic().0,
-            self.shape_generic().1,
-        );
-        let a2 = &(&*self * &*self);
-        let a3 = &(a2 * &*self);
-        let a6 = &(a3 * a3);
-
-        let b1 = eye * T::from_subset(&(T18_COEFFICIENTS[0][0]))
-            + &*self * T::from_subset(&(T18_COEFFICIENTS[0][1]))
-            + a2 * T::from_subset(&(T18_COEFFICIENTS[0][2]))
-            + a3 * T::from_subset(&(T18_COEFFICIENTS[0][3]))
-            + a6 * T::from_subset(&(T18_COEFFICIENTS[0][4]));
-        let b2 = eye * T::from_subset(&(T18_COEFFICIENTS[1][0]))
-            + &*self * T::from_subset(&(T18_COEFFICIENTS[1][1]))
-            + a2 * T::from_subset(&(T18_COEFFICIENTS[1][2]))
-            + a3 * T::from_subset(&(T18_COEFFICIENTS[1][3]))
-            + a6 * T::from_subset(&(T18_COEFFICIENTS[1][4]));
-        let b3 = eye * T::from_subset(&(T18_COEFFICIENTS[2][0]))
-            + &*self * T::from_subset(&(T18_COEFFICIENTS[2][1]))
-            + a2 * T::from_subset(&(T18_COEFFICIENTS[2][2]))
-            + a3 * T::from_subset(&(T18_COEFFICIENTS[2][3]))
-            + a6 * T::from_subset(&(T18_COEFFICIENTS[2][4]));
-        let b4 = eye * T::from_subset(&(T18_COEFFICIENTS[3][0]))
-            + &*self * T::from_subset(&(T18_COEFFICIENTS[3][1]))
-            + a2 * T::from_subset(&(T18_COEFFICIENTS[3][2]))
-            + a3 * T::from_subset(&(T18_COEFFICIENTS[3][3]))
-            + a6 * T::from_subset(&(T18_COEFFICIENTS[3][4]));
-        let b5 = eye * T::from_subset(&(T18_COEFFICIENTS[4][0]))
-            + &*self * T::from_subset(&(T18_COEFFICIENTS[4][1]))
-            + a2 * T::from_subset(&(T18_COEFFICIENTS[4][2]))
-            + a3 * T::from_subset(&(T18_COEFFICIENTS[4][3]))
-            + a6 * T::from_subset(&(T18_COEFFICIENTS[4][4]));
-
-        let a9 = &(b1 * b5 + b4);
-
-        assign_matrix(self, b2 + (b3 + a9) * a9);
-
-        if exponent > 0 {
-            for _ in 0..exponent {
-                assign_matrix(self, &*self * &*self);
-            }
-        }
-    }
-}
-
-pub(crate) fn commutator<T: Scalar + Field, N: Dim, S1: Storage<T, N, N>, S2: Storage<T, N, N>>(
-    m1: impl Borrow<Matrix<T, N, N, S1>>,
-    m2: impl Borrow<Matrix<T, N, N, S2>>,
-) -> Matrix<T, N, N, <DefaultAllocator as Allocator<N, N>>::Buffer<T>>
-where
-    DefaultAllocator: nalgebra::allocator::Allocator<N, N>,
-{
-    let m1 = m1.borrow();
-    let m2 = m2.borrow();
-    m1 * m2 - m2 * m1
-}
-
 #[cfg(test)]
 mod tests {
-    use nalgebra::{Const, Dyn, OMatrix};
+    use nalgebra::{Const, Dyn};
 
-    use super::{Exp, OMatrixArray};
+    use super::OMatrixArray;
 
     #[test]
     fn test_unsized_matrix_array() {
         let matrix_array = OMatrixArray::new_with(Const::<4> {}, Const::<4> {}, Dyn(600), || 1.);
 
         assert_eq!(matrix_array.index(10)[(2, 2)], 1.);
-    }
-
-    #[test]
-    fn test_matrix_exponential() {
-        let mut mat = OMatrix::<_, Const<3>, Const<3>>::from_row_slice(&[
-            21., 17., 6., -5., -1., -6., 4., 4., 16.,
-        ]);
-
-        mat.exp();
-
-        assert_eq!(
-            mat,
-            OMatrix::<_, Const<3>, Const<3>>::from_column_slice(&[
-                28879845.54211301,
-                -19993735.021605186,
-                35544442.08203147,
-                28879790.94396299,
-                -19993680.42345516,
-                35544442.08203148,
-                4443027.961178895,
-                -4443027.961178911,
-                8886110.520507863
-            ])
-        );
     }
 }

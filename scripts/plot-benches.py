@@ -10,19 +10,11 @@ DIFF_SCHEMES = [
     "COLLOC_GL2",
     "COLLOC_GL4",
     "COLLOC_GL6",
-    "MAGNUS_GL2",
-    "MAGNUS_GL4",
-    "MAGNUS_GL6",
-    "MAGNUS_GL8",
 ]
 STORM_SCHEMES = [
     "colloc2",
     "colloc4",
     "colloc6",
-    "magnus2",
-    "magnus4",
-    "magnus6",
-    "magnus8",
 ]
 
 results_band = []
