@@ -2,6 +2,7 @@
 , hdf5
 , pkg-config
 , autoPatchelfHook
+, cmake
 , lib
 }:
 buildRustPackage {
@@ -14,11 +15,14 @@ buildRustPackage {
       ../Cargo.toml
       ../Cargo.lock
       ../src
+      ../benches
+      ../vendor
     ];
   };
 
   nativeBuildInputs = [
     pkg-config
+    cmake
     autoPatchelfHook
   ];
   buildInputs = [ hdf5.dev ];
