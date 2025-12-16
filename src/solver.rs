@@ -142,33 +142,59 @@ impl<T: ComplexField + Copy> UpperResult<T> {
     }
 }
 
-trait SetUpperResult<T> {
-    fn set(&mut self, point: usize, k: usize, i: usize, val: T);
-    fn column_pivot(&mut self, c1: usize, c2: usize);
-}
-
-impl<T> SetUpperResult<T> for UpperResult<T> {
-    fn set(&mut self, point: usize, k: usize, i: usize, val: T) {
+impl<T> UpperResult<T> {
+    // Note, the indices k and i are not the same as above
+    fn index(&self, point: usize, k: usize, i: usize) -> usize {
         if point != self.n_systems {
-            self.data[point * gauss(self.n, 2 * self.n - 1)
-                + gauss(2 * self.n - 1 - k, 2 * self.n - 1)
+            // Full blocks before
+            point * gauss(self.n, 2 * self.n - 1) +
+            // Part of block before (excluding therefore this line)
+                gauss(2 * self.n - 1 - k, 2 * self.n - 1)
                 - (2 * self.n - 1 - k)
-                + (i - 1)] = val;
+            // This line
+                + (i - 1)
         } else {
-            self.data[point * gauss(self.n, 2 * self.n - 1) + gauss(self.n - 1 - k, self.n - 1)
+            point * gauss(self.n, 2 * self.n - 1) + gauss(self.n - 1 - k, self.n - 1)
                 - (self.n - 1 - k)
-                + (i - 1)] = val;
+                + (i - 1)
         }
     }
+}
 
-    fn column_pivot(&mut self, c1: usize, c2: usize) {
-        self.column_pivot.push((c1, c2));
+trait SetUpperResult<T> {
+    fn set(&mut self, point: usize, k: usize, i: usize, val: T);
+    fn column_pivot(&mut self, point: usize, c1: usize, c2: usize);
+}
+
+impl<T: Copy> SetUpperResult<T> for UpperResult<T> {
+    fn set(&mut self, point: usize, k: usize, i: usize, val: T) {
+        self.data[self.index(point, k, i)] = val;
+    }
+
+    fn column_pivot(&mut self, point: usize, pivot: usize, new_pivot: usize) {
+        self.column_pivot.push((point + pivot, point + new_pivot));
+
+        if point != 0 {
+            for k in 0..self.n {
+                let idx1 = self.index(point - 1, k, pivot - k + self.n);
+                let idx2 = self.index(point - 1, k, new_pivot - k + self.n);
+
+                (self.data[idx1], self.data[idx2]) = (self.data[idx2], self.data[idx1]);
+            }
+        }
+
+        for k in 0..pivot {
+            let idx1 = self.index(point, k, pivot - k);
+            let idx2 = self.index(point, k, new_pivot - k);
+
+            (self.data[idx1], self.data[idx2]) = (self.data[idx2], self.data[idx1]);
+        }
     }
 }
 
 impl<T> SetUpperResult<T> for () {
     fn set(&mut self, _point: usize, _k: usize, _i: usize, _val: T) {}
-    fn column_pivot(&mut self, _c1: usize, _c2: usize) {}
+    fn column_pivot(&mut self, _point: usize, _c1: usize, _c2: usize) {}
 }
 
 macro_rules! sweep {
@@ -201,7 +227,7 @@ macro_rules! sweep {
 }
 
 macro_rules! column_pivot {
-    ($bands: ident, $upper: ident, $det: ident, $rows: expr, $cols: expr, $idx: ident) => {{
+    ($bands: ident, $n_step: ident, $upper: ident, $det: ident, $rows: expr, $cols: expr, $idx: ident) => {{
         let mut max_idx = $idx;
         let mut max_val: T::RealField = unsafe { $bands.get_unchecked(($idx, $idx)) }.abs();
 
@@ -217,7 +243,7 @@ macro_rules! column_pivot {
             Matrix::from_element_generic($bands.shape_generic().0, Const::<1>, T::zero());
 
         if max_idx != $idx {
-            $upper.column_pivot(max_idx, $idx);
+            $upper.column_pivot($n_step, $idx, max_idx);
             for i in $idx..$rows {
                 unsafe {
                     let c1 = *$bands.get_unchecked((max_idx, i));
@@ -363,7 +389,7 @@ where
 
         for k in 0..n {
             let (pivot, pivot_row) = if k < n_inner {
-                column_pivot!(bands, upper, det, n + n_inner, 2 * n, k)
+                column_pivot!(bands, n_step, upper, det, n + n_inner, 2 * n, k)
             } else {
                 row_pivot!(bands, det, n + n_inner, 2 * n, k)
             };
