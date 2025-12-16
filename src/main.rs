@@ -672,20 +672,11 @@ impl Model {
                         .collect_vec()
                 })
                 .collect_vec(),
-            Model::Continuous(model, scale) => {
-                let lower = model.segments().first().unwrap().lower;
-                let upper = model.segments().last().unwrap().upper;
-                let delta = (upper - lower) / *scale as f64;
-
-                model
-                    .segments()
-                    .iter()
-                    .map(|x| {
-                        linspace(x.lower, x.upper, (delta * (x.upper - x.lower)) as usize)
-                            .collect_vec()
-                    })
-                    .collect_vec()
-            }
+            Model::Continuous(model, scale) => model
+                .segments()
+                .iter()
+                .map(|x| linspace(x.lower, x.upper, *scale).collect_vec())
+                .collect_vec(),
         }
     }
 
