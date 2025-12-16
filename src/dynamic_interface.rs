@@ -124,7 +124,7 @@ impl ErasedSolver {
 
         if has_invalid_numbers {
             println!(
-                "Invalid numbers encountered in initial scan, suspected rotation too high for scan."
+                "Invalid numbers encountered in initial scan, suspected low resolution or rotation too high for scan."
             )
         }
 
