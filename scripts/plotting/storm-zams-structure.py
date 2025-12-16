@@ -24,11 +24,7 @@ def load_order(
     modes = np.array(
         [
             np.outer(
-                (
-                    sol[str(key)]["pressure"][r_idx]
-                    - sol[str(key)]["xi_r"][r_idx] * density[r_idx] * g[r_idx]
-                )
-                / pressure[r_idx],
+                sol[str(key)]["divergence"][r_idx] * gamma1,
                 leg[(degree[key], order)],
             )
             for key in select
@@ -101,7 +97,7 @@ if len(sys.argv) == 2 and sys.argv[1] == "rerun":
     perturb-deformed -1
     perturb-deformed 1
 
-    output test-data/generated/storm-zams-structure/even.hdf5 --frequency-units=cycles-per-day --properties frequency,degree,azimuthal-order,deformed-frequency,deformed-eigenvector,coupling-matrix --profiles radial-coordinate,y1,y2,y3,y4,xi_r,xi_h,pressure,density --model-properties dynamical-frequency,deformation-beta,deformation-dbeta,deformation-ddbeta,deformation-rotation-frequency
+    output test-data/generated/storm-zams-structure/even.hdf5 --frequency-units=cycles-per-day --properties frequency,degree,azimuthal-order,deformed-frequency,deformed-eigenvector,coupling-matrix --profiles radial-coordinate,y1,y2,y3,y4,xi_r,xi_h,pressure,density,divergence --model-properties dynamical-frequency,deformation-beta,deformation-dbeta,deformation-ddbeta,deformation-rotation-frequency
 
     scan --frequency-units=cycles-per-day 1 0 5. 30. 100
     scan --frequency-units=cycles-per-day 3 0 5. 30. 100
@@ -122,7 +118,7 @@ if len(sys.argv) == 2 and sys.argv[1] == "rerun":
     perturb-deformed -1
     perturb-deformed 1
 
-    output test-data/generated/storm-zams-structure/odd.hdf5 --frequency-units=cycles-per-day --properties frequency,degree,azimuthal-order,deformed-frequency,deformed-eigenvector,coupling-matrix --profiles radial-coordinate,y1,y2,y3,y4,xi_r,xi_h,pressure,density --model-properties dynamical-frequency,deformation-beta,deformation-dbeta,deformation-ddbeta,deformation-rotation-frequency
+    output test-data/generated/storm-zams-structure/odd.hdf5 --frequency-units=cycles-per-day --properties frequency,degree,azimuthal-order,deformed-frequency,deformed-eigenvector,coupling-matrix --profiles radial-coordinate,y1,y2,y3,y4,xi_r,xi_h,pressure,density,divergence --model-properties dynamical-frequency,deformation-beta,deformation-dbeta,deformation-ddbeta,deformation-rotation-frequency
     """
 
     run(["cargo", "run", "--release", "--bin=storm"], input=input, text=True)
@@ -132,6 +128,7 @@ f = h5py.File(model)
 
 pressure = f["P"][:]
 density = f["rho"][:]
+gamma1 = f["Gamma_1"][:]
 G = 6.67430e-8
 r = f["r"][:]
 g = G * f["M_r"][:] / r**2

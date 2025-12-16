@@ -41,15 +41,9 @@ def plot_circle_segment(
 
     if norm is None:
         data_max = np.max(np.abs(data))
-        norm = SymLogNorm(linthresh=data_max * 1e-4)
+        norm = SymLogNorm(linthresh=data_max * 1e-4, vmax=data_max, vmin=-data_max)
 
-    ax.pcolormesh(
-        theta,
-        r,
-        data,
-        cmap="RdBu",
-        norm=norm,
-    )
+    ax.pcolormesh(theta, r, data, cmap="RdBu", norm=norm, rasterized=True)
 
     return ax
 
