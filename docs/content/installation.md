@@ -17,7 +17,9 @@ StORM can be installed in two ways:
 Prebuilt binaries of StORM are provided, and require no dependencies.
 
 1. Download the prebuilt binary below
-1. Make the binary executable by running `chmod +x storm` (on Linux)
+1. Make the binary executable by
+   - On Linux: running `chmod +x storm`
+   - On MacOS: running `chmod +x storm && xattr -d com.apple.quarantine storm`. MacOS does not allow you to execute unvalidated files downloaded through your browser. The second command removes the "this file has been downloaded from the internet" information.
 1. Place it in a folder that is in `PATH`, or refer to the binary with its full path
 
 <div class="d-flex col-sm-6 pt-6">
