@@ -186,11 +186,6 @@ impl Rotating1DPostprocessing {
         }
 
         // Handle central point
-        y1[0] = eigenvector[0];
-        y2[0] = eigenvector[1];
-        y3[0] = eigenvector[2];
-        y4[0] = eigenvector[3];
-
         let s = &model[0].dimensionless;
 
         if ell != 1 {
