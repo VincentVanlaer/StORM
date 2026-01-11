@@ -63,6 +63,9 @@ jobs:
     env:
       HUGO_VERSION: 0.147.1
     steps:
+      - name: Determine base
+        id: branch-name
+        run: echo base=${{ github.ref_name }} | sed 's|base=\([0-9]*\)/merge|base=pr-\1|' | sed 's|base=release/\(.*\)|base=v\1|' >> $GITHUB_OUTPUT
       - name: Install Hugo CLI
         run: |
           wget -O ${{ runner.temp }}/hugo.deb https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
@@ -76,12 +79,14 @@ jobs:
         run: chmod +x storm && echo "generate-markdown ./docs/content/reference.md" | ./storm
       - name: Build
         run: |
-          cd docs && hugo --gc --minify --baseURL "https://storm.stellar-oscillations.org/docs/latest/"
+          cd docs && hugo --gc --minify --baseURL "https://storm.stellar-oscillations.org/docs/${{ steps.branch-name.outputs.base }}/"
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: site
           path: ./docs/public
+    outputs:
+      url-base: ${{ steps.branch-name.outputs.base }}
   deploy:
     needs:
       - site-build
@@ -95,21 +100,21 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: site
-          path: ./docs/landing/docs/latest
+          path: ${{ needs.site-build.outputs.url-base }}
       - uses: actions/download-artifact@v5
         with:
           name: binary-linux
-          path: ./docs/landing/docs/latest/installation/linux/
+          path: ${{ needs.site-build.outputs.url-base }}/installation/linux/
       - uses: actions/download-artifact@v5
         with:
           name: binary-windows
-          path: ./docs/landing/docs/latest/installation/windows/
+          path: ${{ needs.site-build.outputs.url-base }}/installation/windows/
       - uses: actions/download-artifact@v5
         with:
           name: binary-macos
-          path: ./docs/landing/docs/latest/installation/macos/
+          path: ${{ needs.site-build.outputs.url-base }}/installation/macos/
       - name: Make source archive
-        run: git archive HEAD --format=tar.gz > docs/landing/docs/latest/installation/storm.tar.gz
+        run: git archive HEAD --format=tar.gz > ${{ needs.site-build.outputs.url-base }}/installation/storm.tar.gz
       - name: Set SSH key
         run: echo "$SSH_KEY" > key && chmod 600 key
         env:
@@ -117,4 +122,4 @@ jobs:
       - name: Set known hosts
         run: mkdir -p ~/.ssh/ && echo "stellar-oscillations.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILClmFHy/1PILQqrfQftA4n3Qgjv+/UnGhno1hp65Q03" >> ~/.ssh/known_hosts
       - name: Copy files
-        run: rsync -e "ssh -i key" --delete-after -cvrl docs/landing/ oscillations@stellar-oscillations.org:storm
+        run: rsync -e "ssh -i key" --delete-after -cvrl ${{ needs.site-build.outputs.url-base }} oscillations@stellar-oscillations.org:storm/docs

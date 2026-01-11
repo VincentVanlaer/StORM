@@ -1,0 +1,23 @@
+name: Deploy landing
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-landing:
+    runs-on: ubuntu-latest
+    environment:
+      name: stellar-oscillations.org
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set SSH key
+        run: echo "$SSH_KEY" > key && chmod 600 key
+        env:
+          SSH_KEY: ${{secrets.MAIN_SITE_KEY}}
+      - name: Set known hosts
+        run: mkdir -p ~/.ssh/ && echo "stellar-oscillations.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILClmFHy/1PILQqrfQftA4n3Qgjv+/UnGhno1hp65Q03" >> ~/.ssh/known_hosts
+      - name: Copy files
+        run: rsync -e "ssh -i key" --delete-after -cvrl docs/landing/ --exclude /docs oscillations@stellar-oscillations.org:storm
