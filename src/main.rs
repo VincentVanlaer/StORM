@@ -7,6 +7,7 @@ use itertools::Itertools;
 use nalgebra::ComplexField;
 use ndarray::aview0;
 use nshare::AsNdarray2;
+#[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::fs::write;
 use std::io::{self, IsTerminal};
@@ -844,9 +845,22 @@ impl StormState {
             &mut linspace(lower, upper, steps) as &mut (dyn Iterator<Item = f64> + Send)
         };
 
+        #[cfg(feature = "parallel")]
         let solutions: Vec<_> = determinant
             .scan_and_optimize(points, Precision::Relative(precision))
             .into_par_iter()
+            .map(|res| Solution {
+                eigenvector: determinant.eigenvector(res.root),
+                bracket: res,
+                ell,
+                m,
+            })
+            .collect();
+
+        #[cfg(not(feature = "parallel"))]
+        let solutions: Vec<_> = determinant
+            .scan_and_optimize(points, Precision::Relative(precision))
+            .into_iter()
             .map(|res| Solution {
                 eigenvector: determinant.eigenvector(res.root),
                 bracket: res,
@@ -913,21 +927,25 @@ impl StormState {
             "Input was not set. Please run `input` and `scan` before running `post-process`.",
         )?;
 
+        #[cfg(feature = "parallel")]
+        let iter = self.solutions.par_iter();
+
+        #[cfg(not(feature = "parallel"))]
+        let iter = self.solutions.iter();
+
         self.postprocessing = Some(
-            self.solutions
-                .par_iter()
-                .map(|sol| -> Result<Rotating1DPostprocessing> {
-                    Ok(Rotating1DPostprocessing::new(
-                        sol.bracket.root,
-                        &sol.eigenvector,
-                        sol.ell,
-                        sol.m,
-                        &input
-                            .as_continuous()
-                            .eval_all(&input.grid().iter().map(AsRef::as_ref).collect_vec()),
-                    ))
-                })
-                .collect::<Result<Vec<_>, _>>()?,
+            iter.map(|sol| -> Result<Rotating1DPostprocessing> {
+                Ok(Rotating1DPostprocessing::new(
+                    sol.bracket.root,
+                    &sol.eigenvector,
+                    sol.ell,
+                    sol.m,
+                    &input
+                        .as_continuous()
+                        .eval_all(&input.grid().iter().map(AsRef::as_ref).collect_vec()),
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         );
 
         Ok(())
