@@ -62,7 +62,7 @@ To compile from source, you must install the following dependencies first:
 Download [the source archive](storm.tar.gz) and extract it.
 This will create a new directory `storm`, which you can rename if you want.
 Open a terminal and enter this directory.
-You can compile StORM by running `cargo build --release` or run it directly with `cargo run --release --bin storm`.
+You can compile StORM by running `cargo build --release --all-features` or run it directly with `cargo run --release --all-features --bin storm`.
 The resulting binary can be found at `target/release/storm`.
 You can run it directly from there, or place it somewhere in your `PATH`.
 

@@ -35,7 +35,7 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ matrix.platform.name }}-${{ hashFiles('**/Cargo.lock') }}
-      - run: CFLAGS="-D_GNU_SOURCE" cargo zigbuild --target ${{ matrix.platform.target }} --profile=release
+      - run: CFLAGS="-D_GNU_SOURCE" cargo zigbuild --target ${{ matrix.platform.target }} --profile=release --all-features
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

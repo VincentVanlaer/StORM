@@ -4,6 +4,7 @@ use std::convert::Infallible;
 
 use nalgebra::allocator::Allocator;
 use nalgebra::{Const, DefaultAllocator, DimAdd, DimMul, DimSub, Dyn};
+#[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::bracket::{
@@ -82,6 +83,8 @@ impl ErasedSolver {
         precision: Precision,
     ) -> Vec<BracketResult> {
         let mut has_invalid_numbers = false;
+
+        #[cfg(feature = "parallel")]
         let results = freq_grid
             .into_iter()
             .collect::<Vec<_>>()
@@ -100,6 +103,41 @@ impl ErasedSolver {
             })
             .collect::<Vec<_>>()
             .into_par_iter()
+            .filter_map(move |(point1, point2)| {
+                (InverseQuadratic {})
+                    .optimize(
+                        point1,
+                        point2,
+                        |point| Ok::<_, Infallible>(self.det(point)),
+                        precision,
+                        None,
+                    )
+                    .inspect_err(|err| match err {
+                        BracketError::Eval(_) => {
+                            unreachable!()
+                        }
+                        BracketError::Singularity => println!(
+                            "Singularity between {:?} and {:?}, increase resolution",
+                            point1, point2
+                        ),
+                    })
+                    .ok()
+            })
+            .collect();
+
+        #[cfg(not(feature = "parallel"))]
+        let results = freq_grid
+            .into_iter()
+            .map(|x| Point { x, f: self.det(x) })
+            .filter_sign_swap()
+            .filter(|pair| {
+                if pair.0.f.is_finite() && pair.1.f.is_finite() {
+                    true
+                } else {
+                    has_invalid_numbers = true;
+                    false
+                }
+            })
             .filter_map(move |(point1, point2)| {
                 (InverseQuadratic {})
                     .optimize(
