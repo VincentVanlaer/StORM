@@ -195,7 +195,10 @@ mod test {
 
     use crate::{
         bracket::Precision,
-        model::{DiscreteModel, interpolate::LinearInterpolator, polytrope::Polytrope0},
+        model::{
+            DiscreteModel, interpolate::LinearInterpolator, loader::ModelFormat,
+            polytrope::Polytrope0,
+        },
     };
 
     use super::{DifferenceSchemes, ErasedSolver};
@@ -209,7 +212,7 @@ mod test {
             let main_dir: PathBuf = std::env::var("CARGO_MANIFEST_DIR").unwrap().into();
             let model_file = main_dir.join("test-data/test-model-zams.GSM");
 
-            DiscreteModel::from_gsm(model_file).unwrap()
+            DiscreteModel::load(&model_file, ModelFormat::GSM).unwrap()
         };
 
         let determinant = ErasedSolver::new(

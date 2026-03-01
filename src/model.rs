@@ -20,7 +20,7 @@ pub struct DiscreteModel {
 pub struct DiscreteModelSegment {
     /// Dimensionless properties of the model. This field information is always present
     pub dimensionless: DimensionlessProperties,
-    /// Metric paramters of the model
+    /// Metric parameters of the model
     pub metric: Option<PerturbedMetric>,
 }
 
@@ -174,7 +174,7 @@ impl DimensionedProperties {
 /// Interpolation of stellar models. Turns a [DiscreteModel] into a [ContinuousModel]
 pub mod interpolate;
 
-/// GYRE stellar model support
-pub mod gsm;
+/// Loading models from disk
+pub mod loader;
 /// Polytrope support
 pub mod polytrope;
