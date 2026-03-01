@@ -9,7 +9,7 @@ use storm::{
         Precision,
     },
     dynamic_interface::{DifferenceSchemes, ErasedSolver},
-    model::{DiscreteModel, interpolate::LinearInterpolator},
+    model::{DiscreteModel, interpolate::LinearInterpolator, loader::ModelFormat},
 };
 
 struct IntermediateStateBalanced {
@@ -27,7 +27,7 @@ fn main() -> Result<()> {
     let steps: usize = 25;
     let difference_scheme = DifferenceSchemes::Colloc2;
 
-    let model = DiscreteModel::from_gsm("test-data/test-model-tams.GSM")?;
+    let model = DiscreteModel::load("test-data/test-model-tams.GSM".as_ref(), ModelFormat::GSM)?;
     let searcher = &InverseQuadratic {};
     let determinant = ErasedSolver::new(
         &LinearInterpolator::new(&model),

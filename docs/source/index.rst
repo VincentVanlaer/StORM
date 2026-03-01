@@ -21,4 +21,5 @@ To get started using StORM, have a look at
    rotation.rst
    features.rst
    faq.rst
+   CHANGELOG.rst
    reference.rst

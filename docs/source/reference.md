@@ -16,6 +16,16 @@ Load a stellar model
 * `--resample <RESAMPLE>` — How many times should each datapoint of the input model be subdivided
 
   Default value: `1`
+* `--format <FORMAT>` — Format of the file
+
+  Default value: `gsm`
+
+  Possible values:
+  - `gyre`:
+    The MESA - GYRE plain text format
+  - `gsm`:
+    The MESA - GYRE HDF5 format
+
 
 
 

@@ -393,7 +393,7 @@ mod tests {
     use crate::{
         bracket::Precision,
         dynamic_interface::{DifferenceSchemes, ErasedSolver},
-        model::{DiscreteModel, interpolate::LinearInterpolator},
+        model::{DiscreteModel, interpolate::LinearInterpolator, loader::ModelFormat},
     };
 
     use super::Rotating1DPostprocessing;
@@ -410,7 +410,7 @@ mod tests {
             let main_dir: PathBuf = std::env::var("CARGO_MANIFEST_DIR").unwrap().into();
             let model_file = main_dir.join(model);
 
-            DiscreteModel::from_gsm(model_file).unwrap()
+            DiscreteModel::load(&model_file, ModelFormat::GSM).unwrap()
         };
 
         let determinant = ErasedSolver::new(

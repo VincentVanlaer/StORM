@@ -15,6 +15,7 @@ use std::usize;
 use storm::bracket::{BracketResult, Precision};
 use storm::dynamic_interface::{DifferenceSchemes, ErasedSolver};
 use storm::model::interpolate::LinearInterpolator;
+use storm::model::loader::ModelFormat;
 use storm::model::polytrope::{IndexSegments, Polytrope0, construct_polytrope};
 use storm::model::{ContinuousModel, DimensionedProperties, DiscreteModel};
 use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
@@ -135,6 +136,9 @@ enum StormCommands {
         /// How many times should each datapoint of the input model be subdivided.
         #[arg(long, default_value = "1")]
         resample: usize,
+        /// Format of the file
+        #[arg(long, default_value = "gsm")]
+        format: ModelFormat,
     },
     /// Load a polytrope model
     InputPoly {
@@ -572,7 +576,11 @@ impl FrequencyUnits {
 impl StormCommands {
     fn run_command(self, state: &mut StormState) -> Result<(), Report> {
         match self {
-            Self::Input { file, resample } => state.input(&file, resample),
+            Self::Input {
+                file,
+                resample,
+                format,
+            } => state.input(&file, resample, format),
             Self::InputPoly {
                 index,
                 dx,
@@ -689,14 +697,15 @@ impl Model {
 }
 
 impl StormState {
-    fn input(&mut self, file: &str, resample: usize) -> Result<(), Report> {
+    fn input(&mut self, file: &str, resample: usize, format: ModelFormat) -> Result<(), Report> {
         if !self.solutions.is_empty() {
             return Err(eyre!(
                 "Changing input models with already computed solutions is not supported. Either first write out the results with the `output` command or remove all results using `clear`."
             ));
         }
 
-        let file = DiscreteModel::from_gsm(file).wrap_err(eyre!("Failed to load model"))?;
+        let file =
+            DiscreteModel::load(file.as_ref(), format).wrap_err(eyre!("Failed to load model"))?;
 
         eprintln!(
             "Loaded model with {} points ({} segments)",
