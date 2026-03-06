@@ -20,6 +20,10 @@ pub(crate) fn qz<T: RealField + Copy + LowerExp, D: Dim>(
 ) where
     DefaultAllocator: Allocator<D, D> + Allocator<D>,
 {
+    if a.shape() == (0, 0) {
+        return;
+    }
+
     let mut z = Matrix::identity_generic(a.shape_generic().0, a.shape_generic().1);
 
     general_qr(a, b);

@@ -62,6 +62,17 @@ pub fn perturb_deformed(
     modes: &[ModeToPerturb],
     m: i64,
 ) -> ModeCoupling {
+    if modes.len() == 0 {
+        return ModeCoupling {
+            freqs: Box::default(),
+            coupling: DMatrix::default(),
+            d: Default::default(),
+            r: Default::default(),
+            l: Default::default(),
+            m,
+        };
+    }
+
     let total_len = model.iter().map(|s| s.dimensionless.r_coord.len()).sum();
 
     let trapezoid = {

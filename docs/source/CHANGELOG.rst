@@ -20,4 +20,4 @@ Features
 Bug fixes
 ---------
 
-*None so far*
+- Fix crash on perturbing without any modes found.
