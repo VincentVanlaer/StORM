@@ -3,32 +3,37 @@
 set -euo pipefail
 
 DIFF_SCHEMES="COLLOC_GL2 COLLOC_GL4 COLLOC_GL6"
-MATRIX_TYPES="BAND"
 
-# for DIFF_SCHEME in $DIFF_SCHEMES; do
-#   for MATRIX_TYPE in $MATRIX_TYPES; do
-#     RUN_NAME="${DIFF_SCHEME}_${MATRIX_TYPE}"
-#     mkdir -p test-data/generated/$RUN_NAME
-#     sed test-data/gyre-inlist-template \
-#       -e "s/@DIFF_SCHEME@/$DIFF_SCHEME/" \
-#       -e "s/@MATRIX_TYPE@/$MATRIX_TYPE/" > test-data/generated/$RUN_NAME/inlist
-#     hyperfine --export-json=test-data/generated/$RUN_NAME.json -- \
-#       "pushd test-data/generated/$RUN_NAME; OMP_NUM_THREADS=1 gyre inlist; popd"
-#   done
-# done
+for DIFF_SCHEME in $DIFF_SCHEMES; do
+  RUN_NAME="${DIFF_SCHEME}_gyre9"
+  mkdir -p test-data/generated/storm-gyre/$RUN_NAME
+  sed test-data/gyre-inlist-template-9 \
+    -e "s/@DIFF_SCHEME@/$DIFF_SCHEME/" > test-data/generated/storm-gyre/$RUN_NAME/inlist
+  hyperfine --export-json=test-data/generated/storm-gyre/$RUN_NAME.json -- \
+    "pushd test-data/generated/storm-gyre/$RUN_NAME; OMP_NUM_THREADS=1 gyre-90 inlist; popd"
+done
+
+for DIFF_SCHEME in $DIFF_SCHEMES; do
+  RUN_NAME="${DIFF_SCHEME}_gyre8"
+  mkdir -p test-data/generated/storm-gyre/$RUN_NAME
+  sed test-data/gyre-inlist-template-8 \
+    -e "s/@DIFF_SCHEME@/$DIFF_SCHEME/" > test-data/generated/storm-gyre/$RUN_NAME/inlist
+  hyperfine --export-json=test-data/generated/storm-gyre/$RUN_NAME.json -- \
+    "pushd test-data/generated/storm-gyre/$RUN_NAME; OMP_NUM_THREADS=1 gyre-81 inlist; popd"
+done
 
 cargo build --release
 
-DIFF_SCHEMES_STORM="colloc2 colloc4 colloc6 colloc8"
+DIFF_SCHEMES_STORM="colloc2 colloc4 colloc6"
 for DIFF_SCHEME in $DIFF_SCHEMES_STORM; do
     RUN_NAME="${DIFF_SCHEME}_storm"
-    mkdir -p test-data/generated/$RUN_NAME
-    cat >test-data/generated/$RUN_NAME/input <<EOF
+    mkdir -p test-data/generated/storm-gyre/$RUN_NAME
+    cat >test-data/generated/storm-gyre/$RUN_NAME/input <<EOF
 input test-data/test-model-tams.GSM
-scan 0 0 1 25 25 --difference-scheme $DIFF_SCHEME
+scan 1 0 1 25 25 --difference-scheme $DIFF_SCHEME
 post-process
-output --properties=degree,radial-order,frequency test-data/generated/$RUN_NAME/summary.hdf5
+output --properties=degree,radial-order,frequency test-data/generated/storm-gyre/$RUN_NAME/summary.hdf5
 EOF
-  RUST_BACKTRACE=0 RAYON_NUM_THREADS=1 hyperfine --export-json=test-data/generated/$RUN_NAME.json -- \
-      "./target/release/storm  test-data/generated/$RUN_NAME/input"
+  RUST_BACKTRACE=0 RAYON_NUM_THREADS=1 hyperfine --export-json=test-data/generated/storm-gyre/$RUN_NAME.json -- \
+      "./target/release/storm test-data/generated/storm-gyre/$RUN_NAME/input"
 done
