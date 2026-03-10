@@ -1,6 +1,7 @@
-{ pkgs ? (import ./nix/pins.nix { }).pkgs
-, fenix ? (import ./nix/pins.nix { }).fenix
-, gyre ? (import ./nix/pins.nix { }).gyre
+{
+  pkgs ? (import ./nix/pins.nix { }).pkgs,
+  fenix ? (import ./nix/pins.nix { }).fenix,
+  gyre ? (import ./nix/pins.nix { }).gyre,
 }:
 let
   rust-toolchain = fenix.combine [
@@ -18,11 +19,10 @@ let
   ];
   package = (import ./default.nix { inherit rust-toolchain; });
 
-  rustPlatform =
-    pkgs.makeRustPlatform {
-      cargo = rust-toolchain;
-      rustc = rust-toolchain;
-    };
+  rustPlatform = pkgs.makeRustPlatform {
+    cargo = rust-toolchain;
+    rustc = rust-toolchain;
+  };
 
   iai-callgrind-runner = pkgs.callPackage ./nix/iai-callgrind.nix { inherit rustPlatform; };
   cargo-export = pkgs.callPackage ./nix/cargo-export.nix { inherit rustPlatform; };
@@ -46,6 +46,15 @@ let
 
     jj edit $cur
   '';
+
+  gyre-90 = pkgs.runCommand "gyre-90" { } ''
+    mkdir -p $out/bin
+    ln -s ${gyre.gyre-90}/bin/gyre $out/bin/gyre-90
+  '';
+  gyre-81 = pkgs.runCommand "gyre-81" { } ''
+    mkdir -p $out/bin
+    ln -s ${gyre.gyre-81}/bin/gyre $out/bin/gyre-81
+  '';
 in
 
 package.overrideAttrs (attrs: {
@@ -66,7 +75,10 @@ package.overrideAttrs (attrs: {
       maxima
       bacon
       nodePackages.browser-sync
-      gyre
+      gyre.gyre-90
+      # Only the main executable
+      gyre-90
+      gyre-81
       # Benchmark
       valgrind
       libclang
