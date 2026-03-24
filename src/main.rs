@@ -19,7 +19,9 @@ use storm::model::interpolate::LinearInterpolator;
 use storm::model::loader::ModelFormat;
 use storm::model::polytrope::{IndexSegments, Polytrope0, construct_polytrope};
 use storm::model::{ContinuousModel, DimensionedProperties, DiscreteModel};
-use storm::perturbed::{ModeCoupling, ModeToPerturb, perturb_deformed, perturb_structure};
+use storm::perturbed::{
+    ModeCoupling, ModeToPerturb, TidalParams, perturb_deformed, perturb_structure,
+};
 use storm::postprocessing::Rotating1DPostprocessing;
 
 fn main() -> ExitCode {
@@ -209,11 +211,17 @@ enum StormCommands {
         #[arg(long, default_value = "dynamical")]
         frequency_units: FrequencyUnits,
     },
-    /// Compute the P2 deformation of the stellar model
+    /// Compute the deformation of the stellar model from rotation and tides.
+    ///
+    /// The tidal calculations require the eccentricity, mass ratio, and semi-major axis of the
+    /// orbit.
     Deform {
         /// Rotation frequency
         ///
-        /// This parameter should match the rotation frequency of the model.
+        /// This parameter should match the rotation frequency of the model. If the model has
+        /// differential rotation, use the near-surface rotation rate as the deformation by
+        /// rotation will mostly act on the outer layers.
+        #[arg(long)]
         rotation: f64,
         /// Units of rotation
         #[arg(long, default_value = "dynamical")]
@@ -224,6 +232,15 @@ enum StormCommands {
         /// Disable the P2 component of the deformation
         #[arg(long)]
         disable_p2: bool,
+        /// Eccentricity
+        #[arg(long, requires = "mass_ratio", requires = "semi_major_axis")]
+        eccentricity: Option<f64>,
+        // Mass ratio
+        #[arg(long, requires = "eccentricity", requires = "semi_major_axis")]
+        mass_ratio: Option<f64>,
+        // Semi-major axis
+        #[arg(long, requires = "eccentricity", requires = "mass_ratio")]
+        semi_major_axis: Option<f64>,
     },
     /// Compute derived properties from the eigenfunctions
     ///
@@ -620,7 +637,28 @@ impl StormCommands {
                 frequency_units,
                 disable_symmetric,
                 disable_p2,
-            } => state.deform(rotation, frequency_units, disable_symmetric, disable_p2),
+                eccentricity,
+                mass_ratio,
+                semi_major_axis,
+            } => {
+                let tidal = if eccentricity.is_some() {
+                    Some(TidalParams {
+                        e: eccentricity.unwrap(),
+                        a: semi_major_axis.unwrap(),
+                        q: mass_ratio.unwrap(),
+                    })
+                } else {
+                    None
+                };
+
+                state.deform(
+                    rotation,
+                    frequency_units,
+                    disable_symmetric,
+                    disable_p2,
+                    tidal,
+                )
+            }
             Self::PostProcess {} => state.post_process(),
             Self::PerturbDeformed { m } => state.perturb_deformed(m),
             Self::Output {
@@ -882,6 +920,7 @@ impl StormState {
         frequency_units: FrequencyUnits,
         disable_symmetric: bool,
         disable_p2: bool,
+        tidal: Option<TidalParams>,
     ) -> Result<(), Report> {
         let input = self
             .input
@@ -895,7 +934,7 @@ impl StormState {
         };
         let rotation = frequency_units.convert_to_natural(rotation, &model.scale)?;
 
-        perturb_structure(model, rotation);
+        perturb_structure(model, rotation, tidal);
 
         if disable_symmetric {
             for s in model.segments.iter_mut() {

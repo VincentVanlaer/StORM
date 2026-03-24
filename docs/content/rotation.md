@@ -35,7 +35,7 @@ The second command loads the rotation rate from an HDF5 file with the same GSM f
 
 ## Centrifugal deformation
 
-The centrifugal acceleration counteracts part of the gravitional acceleration.
+The centrifugal acceleration counteracts part of the gravitational acceleration.
 This increases the equatorial radius of the star compared to the polar radius, deforming the star.
 These changes to the structure of the star affect the pulsation frequencies.
 Whether this effect is relevant depends on the particular science case (and the properties of the star and the oscillation modes).
@@ -71,6 +71,13 @@ These components are computed analytically from the poloidal components, which r
 
 To then perturb the oscillation equations, StORM expands the oscillation equations with the sum defined above, which results in a matrix equation.
 The eigenvalues and eigenvectors of this equations give us the perturbed oscillation frequencies and the parameters $a_{kk'}$ defined above.
+
+## Tidal deformation
+
+StORM can take some of the tidal deformation into account in addition to the rotation deformation.
+The principle is similar to the centrifugal deformation, but with the gravitational potential of the second stars as the source of perturbation.
+The only component of the tide that is taken into account is the time-averaged $P_2$ component of the potential.
+The implementation in StORM is based on the expressions of [Saio 1981](https://ui.adsabs.harvard.edu/abs/1981ApJ...244..299S) but with corrections for eccentric orbits.
 
 ## Example
 

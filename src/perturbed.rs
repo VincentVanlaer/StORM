@@ -353,8 +353,8 @@ pub fn perturb_deformed(
     }
 }
 
-/// Deform the stellar structure of a model for a give rotation frequency
-pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
+/// Deform the stellar structure of a model for given rotation frequency and tidal parameters
+pub fn perturb_structure(model: &mut DiscreteModel, rot: f64, tidal: Option<TidalParams>) {
     let diag2 = Matrix2::from_diagonal_element(1.);
     let diag3 = Matrix3::from_diagonal_element(1.);
 
@@ -423,6 +423,13 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
     let a2 = -5. / 6. / (3. * upper.x + upper.y);
     let mut mass_delta = 0.;
 
+    // Integrated over the orbit
+    let p2_factor = rot.powi(2)
+        + 3. / 2.
+            * tidal.map_or(0., |x| {
+                x.q / x.a.powi(3) / (1. - x.e.powi(2)).sqrt().powi(3)
+            });
+
     for segment in 0..layer.segments().len() {
         let s = &mut model.segments[segment];
         let grid = &s.dimensionless.r_coord;
@@ -475,7 +482,7 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
             let ddpsi =
                 ((6. + d.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y) / d.r_coord[i] * a2;
 
-            beta[i] = 2. * d.r_coord[i] / d.m_coord[i] * psi * rot.powi(2);
+            beta[i] = 2. * d.r_coord[i] / d.m_coord[i] * psi * p2_factor;
             dbeta[i] = beta[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi);
             ddbeta[i] = dbeta[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi)
                 + beta[i]
@@ -512,6 +519,17 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
     model.perturbed = Some(PerturbedParameters { mass_delta, rot });
 }
 
+/// Tidal parameters for the tidal deformation
+#[derive(Debug, Clone)]
+pub struct TidalParams {
+    /// Eccentricity
+    pub e: f64,
+    /// Semi-major axis
+    pub a: f64,
+    /// Mass ratio
+    pub q: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use itertools::{Itertools, izip};
@@ -546,7 +564,7 @@ mod tests {
         // Low rotation rate to supress higher order effects
         poly3.segments[0].dimensionless.rot.fill(ROT);
         let mut poly3_rot = poly3.clone();
-        perturb_structure(&mut poly3_rot, ROT);
+        perturb_structure(&mut poly3_rot, ROT, None);
 
         let mut poly3_symm = poly3_rot.clone();
         let mut poly3_p2 = poly3_rot.clone();
