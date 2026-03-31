@@ -18,6 +18,7 @@ Features
 - Plain text GYRE stellar models are now supported. You can set the stellar model format with the ``--format`` option to the :doc:`input command <reference>`. Support for all versions the format (including the ones for the GSM format) has been added.
 - Parallelisation is an optional feature now (and disabled by default). This is to improve backtraces when testing and profiling. Most users will want to have the feature enabled. This is the case for the pre-built binaries, and the commands for the source installation will do so as well.
 - Commands are now saved in a history file. This only applies to interactive sessions (i.e. not when piping commands). The `location of the history file <https://docs.rs/directories/latest/directories/struct.ProjectDirs.html#method.data_local_dir>`_ depends on the OS.
+- Rotation rates can now be set as the equatorial velocity.
 
 Bug fixes
 ---------

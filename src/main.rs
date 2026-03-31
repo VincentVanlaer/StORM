@@ -294,6 +294,8 @@ enum FrequencyUnits {
     Hertz,
     /// Cycles per day [1/d]
     CyclesPerDay,
+    /// Equatorial velocity (rotation rate) [km/s]
+    EquatorialVelocity,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq)]
@@ -564,6 +566,11 @@ impl FrequencyUnits {
                 )),
             FrequencyUnits::CyclesPerDay => model
                 .map(|model| model.freq_scale() * 86400. / 2. / std::f64::consts::PI)
+                .ok_or(eyre!(
+                    "Input model is dimensionless, only dynamical frequency is supported"
+                )),
+            FrequencyUnits::EquatorialVelocity => model
+                .map(|model| model.radius / 1000_00.0 * model.freq_scale())
                 .ok_or(eyre!(
                     "Input model is dimensionless, only dynamical frequency is supported"
                 )),
