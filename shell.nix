@@ -1,6 +1,7 @@
-{ pkgs ? (import ./nix/pins.nix { }).pkgs
-, fenix ? (import ./nix/pins.nix { }).fenix
-, gyre ? (import ./nix/pins.nix { }).gyre
+{
+  pkgs ? (import ./nix/pins.nix { }).pkgs,
+  fenix ? (import ./nix/pins.nix { }).fenix,
+  gyre ? (import ./nix/pins.nix { }).gyre,
 }:
 let
   rust-toolchain = fenix.combine [
@@ -18,11 +19,10 @@ let
   ];
   package = (import ./default.nix { inherit rust-toolchain; });
 
-  rustPlatform =
-    pkgs.makeRustPlatform {
-      cargo = rust-toolchain;
-      rustc = rust-toolchain;
-    };
+  rustPlatform = pkgs.makeRustPlatform {
+    cargo = rust-toolchain;
+    rustc = rust-toolchain;
+  };
 
   iai-callgrind-runner = pkgs.callPackage ./nix/iai-callgrind.nix { inherit rustPlatform; };
   cargo-export = pkgs.callPackage ./nix/cargo-export.nix { inherit rustPlatform; };
@@ -62,6 +62,10 @@ package.overrideAttrs (attrs: {
         p.pyqt6
         p.h5py
         p.tqdm
+        p.sphinxcontrib-katex
+        p.sphinx-autobuild
+        p.myst-parser
+        p.furo
       ]))
       maxima
       bacon
@@ -76,8 +80,7 @@ package.overrideAttrs (attrs: {
       gnuplot
       bench
       # Docs
-      hugo
-      go
+      nodejs
     ];
 
   RUST_BACKTRACE = 1;

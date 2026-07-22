@@ -144,10 +144,7 @@ fn write_help_markdown(
     // Write the document title
     //----------------------------------
 
-    writeln!(buffer, "{}", "---").unwrap();
-    writeln!(buffer, "{}", "title: CLI Reference").unwrap();
-    writeln!(buffer, "{}", "icon: terminal").unwrap();
-    writeln!(buffer, "{}", "---").unwrap();
+    writeln!(buffer, "{}", "# CLI Reference").unwrap();
 
     let title_name = get_canonical_name(command);
     writeln!(
@@ -324,7 +321,7 @@ fn build_command_markdown(
     */
 
     if !command.is_multicall_set() {
-        writeln!(buffer, "# {}\n", command_path.join(" "))?;
+        writeln!(buffer, "## {}\n", command_path.join(" "))?;
 
         if let Some(long_about) = command.get_long_about() {
             writeln!(buffer, "{}\n", long_about)?;
@@ -406,7 +403,7 @@ fn build_command_markdown(
         //----------------------------------
 
         if command.get_positionals().next().is_some() {
-            writeln!(buffer, "###### **Arguments:**\n")?;
+            writeln!(buffer, "**Arguments:**\n")?;
 
             for pos_arg in command.get_positionals() {
                 write_arg_markdown(buffer, pos_arg)?;
@@ -425,7 +422,7 @@ fn build_command_markdown(
             .collect();
 
         if !non_pos.is_empty() {
-            writeln!(buffer, "###### **Options:**\n")?;
+            writeln!(buffer, "**Options:**\n")?;
 
             for arg in non_pos {
                 write_arg_markdown(buffer, arg)?;
