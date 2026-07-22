@@ -19,8 +19,8 @@ Prebuilt binaries of StORM are provided, and require no dependencies.
 1. Download the prebuilt binary for your operating system and architecture:
 
    - `Linux (x86-64) <linux/storm>`_.
-   - `MacOS (universe) <macos/storm>`_.
-   - `Windows (x86-64) <windows/storm>`_.
+   - `MacOS (x86-64, AArch64) <macos/storm>`_.
+   - `Windows (x86-64) <windows/storm.exe>`_.
 
    If your operating system (or architecture) isn't listed here, use the from-source installation instructions below.
 2. Make the binary executable by
