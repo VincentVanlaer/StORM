@@ -83,6 +83,52 @@ impl ErasedSolver {
         precision: Precision,
     ) -> Vec<BracketResult> {
         let mut has_invalid_numbers = false;
+        let mut singularity_lower = f64::INFINITY;
+        let mut singularity_upper = f64::NEG_INFINITY;
+        let mut singularity_count = 0;
+
+        let find_brackets = |pair: &(Point, Point)| {
+            if pair.0.f.is_finite() && pair.1.f.is_finite() {
+                true
+            } else {
+                has_invalid_numbers = true;
+                false
+            }
+        };
+
+        let bracket = |(point1, point2)| {
+            (
+                point1,
+                point2,
+                (InverseQuadratic {}).optimize(
+                    point1,
+                    point2,
+                    |point| Ok::<_, Infallible>(self.det(point)),
+                    precision,
+                    None,
+                ),
+            )
+        };
+
+        let process_results = |(point1, point2, result): (Point, Point, Result<_, _>)| {
+            result
+                .inspect_err(|err| match err {
+                    BracketError::Eval(_) => {
+                        unreachable!()
+                    }
+                    BracketError::Singularity => {
+                        if singularity_lower > point1.x {
+                            singularity_lower = point1.x;
+                        }
+
+                        if singularity_upper < point2.x {
+                            singularity_upper = point2.x
+                        }
+                        singularity_count += 1;
+                    }
+                })
+                .ok()
+        };
 
         #[cfg(feature = "parallel")]
         let results = freq_grid
@@ -93,36 +139,13 @@ impl ErasedSolver {
             .collect::<Vec<_>>()
             .into_iter()
             .filter_sign_swap()
-            .filter(|pair| {
-                if pair.0.f.is_finite() && pair.1.f.is_finite() {
-                    true
-                } else {
-                    has_invalid_numbers = true;
-                    false
-                }
-            })
+            .filter(find_brackets)
             .collect::<Vec<_>>()
             .into_par_iter()
-            .filter_map(move |(point1, point2)| {
-                (InverseQuadratic {})
-                    .optimize(
-                        point1,
-                        point2,
-                        |point| Ok::<_, Infallible>(self.det(point)),
-                        precision,
-                        None,
-                    )
-                    .inspect_err(|err| match err {
-                        BracketError::Eval(_) => {
-                            unreachable!()
-                        }
-                        BracketError::Singularity => println!(
-                            "Singularity between {:?} and {:?}, increase resolution",
-                            point1, point2
-                        ),
-                    })
-                    .ok()
-            })
+            .map(bracket)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter_map(process_results)
             .collect();
 
         #[cfg(not(feature = "parallel"))]
@@ -130,39 +153,24 @@ impl ErasedSolver {
             .into_iter()
             .map(|x| Point { x, f: self.det(x) })
             .filter_sign_swap()
-            .filter(|pair| {
-                if pair.0.f.is_finite() && pair.1.f.is_finite() {
-                    true
-                } else {
-                    has_invalid_numbers = true;
-                    false
-                }
-            })
-            .filter_map(move |(point1, point2)| {
-                (InverseQuadratic {})
-                    .optimize(
-                        point1,
-                        point2,
-                        |point| Ok::<_, Infallible>(self.det(point)),
-                        precision,
-                        None,
-                    )
-                    .inspect_err(|err| match err {
-                        BracketError::Eval(_) => {
-                            unreachable!()
-                        }
-                        BracketError::Singularity => println!(
-                            "Singularity between {:?} and {:?}, increase resolution",
-                            point1, point2
-                        ),
-                    })
-                    .ok()
-            })
+            .filter(find_brackets)
+            .map(bracket)
+            .filter_map(process_results)
             .collect();
 
         if has_invalid_numbers {
             println!(
                 "Invalid numbers encountered in initial scan, suspected low resolution or rotation too high for scan."
+            )
+        }
+
+        if singularity_count > 0 {
+            println!(
+                "{} singularities encountered between {} and {}",
+                singularity_count, singularity_lower, singularity_upper
+            );
+            println!(
+                "This typically indicates that the model grid resolution is too low or the frequency scan range is too low for the rotation rate. See the FAQ page on the documentation website for more info."
             )
         }
 
