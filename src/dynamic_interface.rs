@@ -193,9 +193,22 @@ where
         + ArrayAllocator<Const<2>, Const<2>, Dyn>
         + ArrayAllocator<Const<2>, Const<2>, T::Points>,
 {
-    let det: Box<dyn Fn(f64) -> f64 + Sync> = if degree == 0 {
+    let (det, eigenvector): (
+        Box<dyn Fn(f64) -> f64 + Sync>,
+        Box<dyn Fn(f64) -> (f64, Vec<f64>) + Sync>,
+    ) = if degree == 0 {
         let system = DiscretizedSystemImpl::new(model, stepper(), Radial {}, solver_grid);
-        Box::new(move |freq: f64| determinant(&system, freq))
+        let det = Box::new(move |freq: f64| determinant(&system, freq));
+
+        let system = DiscretizedSystemImpl::new(model, stepper(), Radial {}, solver_grid);
+        let eigenvector = Box::new(move |freq: f64| {
+            let mut upper = UpperResult::new_from_system(&system);
+            let det = determinant_with_upper(&system, freq, &mut upper);
+
+            (det, upper.eigenvectors())
+        });
+
+        (det, eigenvector)
     } else {
         let system = DiscretizedSystemImpl::new(
             model,
@@ -203,26 +216,26 @@ where
             Rotating1D::new(degree, order),
             solver_grid,
         );
-        Box::new(move |freq: f64| determinant(&system, freq))
-    };
+        let det = Box::new(move |freq: f64| determinant(&system, freq));
 
-    let system = DiscretizedSystemImpl::new(
-        model,
-        stepper(),
-        Rotating1D::new(degree, order),
-        solver_grid,
-    );
+        let system = DiscretizedSystemImpl::new(
+            model,
+            stepper(),
+            Rotating1D::new(degree, order),
+            solver_grid,
+        );
 
-    ErasedSolver {
-        det,
-        eigenvector: Box::new(move |freq: f64| {
+        let eigenvector = Box::new(move |freq: f64| {
             let mut upper = UpperResult::new_from_system(&system);
-
             let det = determinant_with_upper(&system, freq, &mut upper);
 
             (det, upper.eigenvectors())
-        }),
-    }
+        });
+
+        (det, eigenvector)
+    };
+
+    ErasedSolver { det, eigenvector }
 }
 
 #[cfg(test)]

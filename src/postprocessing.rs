@@ -62,9 +62,14 @@ impl Rotating1DPostprocessing {
         m: i64,
         model: &[DiscreteModelSegment],
     ) -> Rotating1DPostprocessing {
-        assert!(eigenvector.len().is_multiple_of(4));
         let total_len = model.iter().map(|s| s.dimensionless.r_coord.len()).sum();
-        assert_eq!(total_len * 4, eigenvector.len());
+        let radial_hack = if eigenvector.len() == total_len * 2 {
+            true
+        } else if eigenvector.len() == total_len * 4 {
+            false
+        } else {
+            panic!("Eigenvector length is not correct????")
+        };
 
         let mut r_coord = vec![0.; total_len].into_boxed_slice();
         let mut y1 = vec![0.; total_len].into_boxed_slice();
@@ -96,6 +101,61 @@ impl Rotating1DPostprocessing {
             .try_into()
             .expect("ell is never going to be so big to cause problems here");
 
+        if radial_hack {
+            let mut idx = 0;
+
+            for s in model {
+                let s = &s.dimensionless;
+                for p_idx in 0..s.r_coord.len() {
+                    y1[idx] = eigenvector[idx * 2];
+                    y2[idx] = eigenvector[idx * 2 + 1];
+                    y4[idx] = -s.u[p_idx] * eigenvector[idx * 2];
+
+                    idx += 1;
+                }
+            }
+            idx -= 1;
+
+            y3[idx] = -y4[idx] - model.last().unwrap().dimensionless.u.last().unwrap() * y1[idx];
+
+            for s in model.iter().rev() {
+                let s = &s.dimensionless;
+
+                for p_idx in (1..s.r_coord.len()).rev() {
+                    idx -= 1;
+
+                    if s.r_coord[p_idx - 1] == 0. {
+                        y3[idx] = y3[idx + 1]
+                            - 0.5
+                                * (s.r_coord[p_idx] - s.r_coord[p_idx - 1])
+                                * (y4[idx + 1] / (s.c1[p_idx] * s.r_coord[p_idx]));
+                    } else {
+                        y3[idx] = y3[idx + 1]
+                            - 0.5
+                                * (s.r_coord[p_idx] - s.r_coord[p_idx - 1])
+                                * (y4[idx] / (s.c1[p_idx - 1] * s.r_coord[p_idx - 1])
+                                    + y4[idx + 1] / (s.c1[p_idx] * s.r_coord[p_idx]));
+                    }
+
+                    y3[idx + 1] *= s.c1[p_idx];
+                }
+
+                if idx > 0 {
+                    y3[idx - 1] = y3[idx];
+                }
+
+                y3[idx] *= s.c1[0];
+                idx = idx.saturating_sub(1);
+            }
+        } else {
+            for idx in 0..total_len {
+                y1[idx] = eigenvector[idx * 4];
+                y2[idx] = eigenvector[idx * 4 + 1];
+                y3[idx] = eigenvector[idx * 4 + 2];
+                y4[idx] = eigenvector[idx * 4 + 3];
+            }
+        }
+
         let mut norm = 0.;
         let mut idx = 0;
 
@@ -119,10 +179,6 @@ impl Rotating1DPostprocessing {
             for p_idx in 0..s.r_coord.len() {
                 r_coord[idx] = s.r_coord[p_idx];
                 u[idx] = s.u[p_idx];
-                y1[idx] = eigenvector[idx * 4];
-                y2[idx] = eigenvector[idx * 4 + 1];
-                y3[idx] = eigenvector[idx * 4 + 2];
-                y4[idx] = eigenvector[idx * 4 + 3];
 
                 let dphi = s.m_coord[p_idx] / s.r_coord[p_idx].powi(2);
 

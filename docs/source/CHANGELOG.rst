@@ -22,3 +22,4 @@ Bug fixes
 ---------
 
 - Fix crash on perturbing without any modes found.
+- Fix radial mode eigenfunctions being slightly wrong. This was caused by switching between the reduced order system and the full system after bracketing. The discretization error of both systems is slightly different, and hence the locations of the solutions will be slightly different. This causes the computed eigenfunctions to be computed for the incorrect frequency. This caused some incorrect mode identifications as well.
