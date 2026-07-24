@@ -396,11 +396,6 @@ where
 
             det *= pivot;
 
-            debug_assert!(
-                det.is_finite() && det != T::zero(),
-                "det = {det}, pivot = {pivot}, n = {n_step}"
-            );
-
             sweep!(
                 bands,
                 upper,
@@ -427,11 +422,6 @@ where
 
                 det *= pivot;
 
-                debug_assert!(
-                    pivot.is_finite() && det.is_finite(),
-                    "det = {det}, pivot = {pivot}, n = {n_step}"
-                );
-
                 sweep!(
                     bands,
                     upper,
@@ -457,11 +447,6 @@ where
                 let (pivot, pivot_row) = row_pivot!(bands, det, n + n_inner, 2 * n, k);
 
                 det *= pivot;
-
-                debug_assert!(
-                    pivot.is_finite() && det.is_finite(),
-                    "det = {det}, pivot = {pivot}, n = {n_step}"
-                );
 
                 sweep!(
                     bands,
@@ -491,11 +476,6 @@ where
         let (pivot, pivot_row) = row_pivot!(bands, det, n, n, k);
 
         det *= pivot;
-
-        debug_assert!(
-            pivot.is_finite() && det.is_finite(),
-            "det = {det}, pivot = {pivot}, n = {n_step}"
-        );
 
         sweep!(bands, upper, n_step, n, n, k, pivot, pivot_row);
     }

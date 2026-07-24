@@ -71,6 +71,10 @@ pub struct Point {
 /// Use inverse quadratic interpolation to obtain the next value at which to evaluate the function
 pub struct InverseQuadratic {}
 
+fn evaluate_bisect(x1: Point, x2: Point) -> f64 {
+    0.5 * (x1.x + x2.x)
+}
+
 fn evaluate_secant(x1: Point, x2: Point, y: f64) -> f64 {
     (y - x2.f) / (x1.f - x2.f) * x1.x + (y - x1.f) / (x2.f - x1.f) * x2.x
 }
@@ -176,14 +180,32 @@ impl BracketOptimizer for InverseQuadratic {
             let x = match previous {
                 None => evaluate_secant(lower, upper, 0.),
                 Some(p) => {
-                    let mut x = evaluate_inverse_quadratic(lower, upper, p, 0.);
+                    // If the value of the determinant got worse, we might be too far away from the
+                    // root, and neither inverse quadratic or secant will be accurate. Switch to
+                    // bisection to prevent some pathalogical cases from converging very slowly
+                    if (p.x > upper.x && p.f.abs() < upper.f.abs())
+                        || (p.x < lower.x && p.f.abs() < lower.f.abs())
+                    {
+                        evaluate_bisect(lower, upper)
+                    } else {
+                        let x = evaluate_inverse_quadratic(lower, upper, p, 0.);
 
-                    if x <= lower.x || x >= upper.x {
-                        x = evaluate_secant(lower, upper, 0.);
+                        // In certain cases, the inverse quadratic fit may lead to estimated zeros
+                        // outside the bracket. Secant method does not do this.
+                        if x <= lower.x || x >= upper.x {
+                            evaluate_secant(lower, upper, 0.)
+                        } else {
+                            x
+                        }
                     }
-
-                    x
                 }
+            };
+
+            // Stopgap to prevent large determinants from causing problems
+            let x = if !x.is_finite() {
+                evaluate_bisect(lower, upper)
+            } else {
+                x
             };
 
             let x = match ensure_maximal_bracket(upper.x, lower.x, x, requested_ulp_precision) {
@@ -268,5 +290,79 @@ impl<T: Iterator<Item = Point>> FilterSignSwap for T {
                 }
             })
             .flatten()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZeroU64;
+
+    use itertools::Itertools;
+
+    use crate::{
+        bracket::Precision,
+        dynamic_interface::{DifferenceSchemes, ErasedSolver},
+        model::{
+            interpolate::LinearInterpolator,
+            polytrope::{IndexSegments, construct_polytrope},
+        },
+    };
+
+    #[test]
+    fn test_bracketing_convergence() {
+        let poly = construct_polytrope(IndexSegments::central(3.), 5. / 3., 0.01);
+
+        let determinant = ErasedSolver::new(
+            &LinearInterpolator::new(&poly),
+            1,
+            0,
+            DifferenceSchemes::Colloc4,
+            &poly
+                .segments
+                .iter()
+                .map(|x| x.dimensionless.r_coord.as_ref())
+                .collect_vec(),
+        );
+
+        let points = rev_linspace(0.001, 1., 1000).chain(linspace(1., 500., 1000));
+
+        assert_eq!(
+            determinant
+                .scan_and_optimize(
+                    points,
+                    Precision::ULP(const { NonZeroU64::new(1).unwrap() }),
+                )
+                .into_iter()
+                .map(|res| res.evals)
+                .collect_vec(),
+            [
+                7, 8, 9, 6, 7, 8, 6, 7, 7, 7, 9, 8, 6, 7, 10, 7, 7, 6, 6, 8, 10, 10, 10, 6, 8, 8,
+                8, 13, 16, 20, 25, 31, 36, 40, 43, 43, 44, 42, 43, 43, 42, 44, 43, 43, 42, 44, 44,
+                44, 43, 43, 43, 43, 42, 42, 42, 42, 43, 43, 43, 43, 43, 44, 44, 44, 41, 44, 44, 44,
+                44, 43, 44, 44, 42, 44, 44, 43, 44, 44, 44, 44, 43, 44, 43, 44, 44, 44, 44, 44, 44,
+                44, 44, 43, 44, 44, 45, 44, 44, 47, 48, 47, 44, 13, 8, 5, 10, 12, 6, 7, 5, 6, 7, 6,
+                6, 6, 5, 6, 6, 6, 6, 6, 6, 6, 7, 6, 6, 8, 9, 7, 6, 6, 5, 6, 6, 6, 6, 6, 6, 7, 6, 6,
+                7, 5, 6, 6, 7, 7, 6, 6, 6, 6, 5, 6, 7, 7, 6, 6, 7, 8, 7, 7, 6, 7, 6, 7, 6, 6, 7, 7,
+                8, 9, 6, 9, 7, 6, 10, 6, 8, 8, 8, 9, 9, 8, 6, 7, 6, 5, 9, 8, 7, 9, 9, 9, 9, 7, 6,
+                5, 7, 9, 8, 6, 10, 8, 7, 7, 7, 6, 7, 7, 7, 6, 6, 7, 7, 7, 7, 7, 8, 6, 5, 7, 7, 7,
+                7, 7, 8, 7, 8, 6, 7, 7, 7, 7, 7, 6, 7, 7, 7, 9, 6, 7, 7, 8, 8, 8, 6, 6, 8, 7, 7, 7,
+                7, 7, 8, 6, 7, 7, 7, 7, 8, 9, 6, 8, 7, 7, 7, 9, 7, 7, 8, 7, 7, 7, 7, 8, 7, 6, 8, 6,
+                6, 6, 9, 7, 7, 9, 7, 7, 8, 7, 8, 8, 8, 7, 7, 7, 7, 7, 8, 7, 6, 5, 8, 6, 6, 7, 7, 7,
+                8, 7, 8, 8, 9, 7, 9, 8, 7, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 7, 6, 6, 7, 7,
+                7, 7, 8, 6, 8, 8, 9, 11, 17, 20, 23, 24, 25, 29, 35, 39, 42, 44, 44, 43, 43, 40,
+                44, 43, 43, 44, 44, 43, 42, 44, 44, 42, 38, 44, 43, 42, 44, 43, 42, 44, 43, 43, 44,
+                43, 42, 44, 43, 40, 44, 43, 44, 44, 42, 44, 43, 44, 44, 43, 44, 43, 44, 43, 42, 44,
+                42, 44, 43, 44, 43, 44, 43, 40, 44, 42, 43, 41, 43, 42, 44, 42, 43, 41, 43, 39, 43,
+                44, 43, 44, 43, 44, 43, 44, 41, 43, 44, 44, 44, 42, 44, 44, 43, 44, 42, 44, 44, 43
+            ]
+        );
+    }
+
+    fn linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
+        (0..n).map(move |x| lower + (upper - lower) * (x as f64) / ((n - 1) as f64))
+    }
+
+    fn rev_linspace(lower: f64, upper: f64, n: usize) -> impl Iterator<Item = f64> {
+        linspace(1. / lower, 1. / upper, n).map(|x| 1. / x)
     }
 }
