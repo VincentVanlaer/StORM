@@ -9,7 +9,7 @@ use ndarray::aview0;
 use nshare::AsNdarray2;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use std::fs::write;
+use std::fs::{self, write};
 use std::io::{self, IsTerminal};
 use std::process::ExitCode;
 use std::usize;
@@ -25,6 +25,7 @@ use storm::postprocessing::Rotating1DPostprocessing;
 fn main() -> ExitCode {
     let mut state = StormState::default();
     let mut rl = rustyline::DefaultEditor::new().unwrap();
+    let history_location = directories::ProjectDirs::from("", "", "storm");
     let interactive_input = io::stdin().is_terminal();
     color_eyre::install().unwrap();
 
@@ -37,6 +38,11 @@ fn main() -> ExitCode {
             .into_iter()
     });
 
+    if interactive_input && let Some(ref history_location) = history_location {
+        _ = fs::create_dir_all(history_location.data_local_dir());
+        _ = rl.load_history(&history_location.data_local_dir().join("history"));
+    }
+
     loop {
         let command = if let Some(ref mut arg) = arg {
             let Some(command) = arg.next() else { break };
@@ -47,6 +53,9 @@ fn main() -> ExitCode {
             match readline {
                 Ok(line) => {
                     let _ = rl.add_history_entry(&line);
+                    if interactive_input && let Some(ref history_location) = history_location {
+                        _ = rl.append_history(&history_location.data_local_dir().join("history"));
+                    }
                     line
                 }
                 Err(rustyline::error::ReadlineError::Interrupted) => {
