@@ -172,7 +172,8 @@ impl<T: Copy> SetUpperResult<T> for UpperResult<T> {
     }
 
     fn column_pivot(&mut self, point: usize, pivot: usize, new_pivot: usize) {
-        self.column_pivot.push((point + pivot, point + new_pivot));
+        self.column_pivot
+            .push((point * self.n + pivot, point * self.n + new_pivot));
 
         if point != 0 {
             for k in 0..self.n {
