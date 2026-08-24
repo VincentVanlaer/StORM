@@ -796,6 +796,17 @@ impl StormState {
             ));
         };
 
+        if model.consistent_spherical_rot
+            && model
+                .segments
+                .iter()
+                .any(|s| s.dimensionless.rot.iter().any(|&x| x != 0.))
+        {
+            return Err(eyre!(
+                "Original model is rotating and has this included in hydrostatic support. Changing the rotation rate would result in an inconsistent model."
+            ));
+        }
+
         model
             .overlay_rot(file)
             .wrap_err(eyre!("Failed to set rotation profile"))?;
@@ -818,11 +829,24 @@ impl StormState {
             ));
         };
 
+        if model.consistent_spherical_rot
+            && model
+                .segments
+                .iter()
+                .any(|s| s.dimensionless.rot.iter().any(|&x| x != 0.))
+        {
+            return Err(eyre!(
+                "Original model is rotating and has this included in hydrostatic support. Changing the rotation rate would result in an inconsistent model."
+            ));
+        }
+
         for s in &mut model.segments {
             s.dimensionless
                 .rot
                 .fill(frequency_units.convert_to_natural(value, &model.scale)?);
         }
+
+        model.consistent_spherical_rot = false;
 
         Ok(())
     }

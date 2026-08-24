@@ -497,14 +497,25 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
             debug_assert!(ddbeta[i].is_finite());
         }
 
-        s.metric = Some(PerturbedMetric {
-            alpha: alpha.into(),
-            dalpha: dalpha.into(),
-            ddalpha: ddalpha.into(),
-            beta: beta.into(),
-            dbeta: dbeta.into(),
-            ddbeta: ddbeta.into(),
-        });
+        if model.consistent_spherical_rot {
+            s.metric = Some(PerturbedMetric {
+                alpha: vec![0.; grid.len()].into(),
+                dalpha: vec![0.; grid.len()].into(),
+                ddalpha: vec![0.; grid.len()].into(),
+                beta: beta.into(),
+                dbeta: dbeta.into(),
+                ddbeta: ddbeta.into(),
+            });
+        } else {
+            s.metric = Some(PerturbedMetric {
+                alpha: alpha.into(),
+                dalpha: dalpha.into(),
+                ddalpha: ddalpha.into(),
+                beta: beta.into(),
+                dbeta: dbeta.into(),
+                ddbeta: ddbeta.into(),
+            });
+        }
     }
 
     mass_delta *= 4. * PI;
@@ -545,6 +556,7 @@ mod tests {
 
         // Low rotation rate to supress higher order effects
         poly3.segments[0].dimensionless.rot.fill(ROT);
+        poly3.consistent_spherical_rot = false;
         let mut poly3_rot = poly3.clone();
         perturb_structure(&mut poly3_rot, ROT);
 

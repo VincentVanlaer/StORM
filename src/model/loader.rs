@@ -41,6 +41,7 @@ impl DiscreteModel {
             segments,
             scale: model.scale,
             perturbed: None,
+            consistent_spherical_rot: model.consistent_spherical_rot,
         })
     }
 
@@ -277,6 +278,8 @@ mod gyre {
             idx += l;
         }
 
+        model.consistent_spherical_rot = false;
+
         Ok(())
     }
 
@@ -295,7 +298,8 @@ mod gyre {
         c1[0] = mass / radius.powi(3) * 3. / (4. * PI * rho[0]);
         let mut a_star = r_coord.mapv(|r: f64| r.powi(3)) / (GRAV * m_coord) * nsqrd;
         a_star[0] = 0.;
-        let mut v = GRAV * m_coord * rho / (p * r_coord);
+        let mut v = (GRAV * m_coord - 2. / 3. * r_coord.mapv(|r| r.powi(3)) * rot.powi(2)) * rho
+            / (p * r_coord);
         v[0] = 0.;
         let mut u = 4. * PI * rho * r_coord.mapv(|r| r.powi(3)) / m_coord;
         u[0] = 3.;
@@ -325,6 +329,7 @@ mod gyre {
                 grav: GRAV,
             }),
             perturbed: None,
+            consistent_spherical_rot: true,
         }
     }
 

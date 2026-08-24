@@ -382,6 +382,7 @@ pub fn construct_polytrope(segments: IndexSegments, gamma1: f64, step_size: f64)
         segments,
         perturbed: None,
         scale: None,
+        consistent_spherical_rot: true,
     }
 }
 

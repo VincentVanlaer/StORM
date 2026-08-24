@@ -11,6 +11,11 @@ pub struct DiscreteModel {
     pub scale: Option<DimensionedProperties>,
     /// Global perturbation parameters
     pub perturbed: Option<PerturbedParameters>,
+    /// Whether all quantities are corrected for the inclusion of the spherical component of the
+    /// rotation rate. If this is the case, we shouldn't compute the P0 deformation. In the future,
+    /// StORM will always computing the spherical deformation through the oscillation equations and
+    /// update the stellar model appropriately, at which point this parameter will become obsolete.
+    pub consistent_spherical_rot: bool,
 }
 
 /// Segment of a model
