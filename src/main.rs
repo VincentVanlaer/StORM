@@ -1093,7 +1093,7 @@ impl StormState {
         }
 
         macro_rules! dataset {
-            ($group: ident, $name: expr, $val: expr) => {
+            ($group: expr, $name: expr, $val: expr) => {
                 $group.new_dataset_builder().with_data($val).create($name)
             };
         }
@@ -1189,7 +1189,8 @@ impl StormState {
         let mut radial_order = Vec::new();
 
         for (i, solution) in self.solutions.iter().enumerate() {
-            let group = solution_group.create_group(format!("{i}").as_str())?;
+            let mut group = None;
+            let make_group = || solution_group.create_group(format!("{i}").as_str());
 
             freq.push(
                 frequency_units.convert_from_natural(solution.bracket.root, &cont.dimensions())?,
@@ -1201,61 +1202,40 @@ impl StormState {
                 let postprocessing = &postprocessing[i];
                 radial_order.push(postprocessing.radial_order);
 
-                if profiles.y1 {
-                    dataset!(group, "y1", &postprocessing.y1)?;
+                macro_rules! wr {
+                    ($name: expr, $data: expr, $switch: expr) => {
+                        if $switch {
+                            if group.is_none() {
+                                group = Some(make_group()?)
+                            }
+
+                            dataset!(group.as_ref().unwrap(), $name, $data)?;
+                        }
+                    };
                 }
 
-                if profiles.y2 {
-                    dataset!(group, "y2", &postprocessing.y2)?;
-                }
-
-                if profiles.y3 {
-                    dataset!(group, "y3", &postprocessing.y3)?;
-                }
-
-                if profiles.y4 {
-                    dataset!(group, "y4", &postprocessing.y4)?;
-                }
-
-                if profiles.xi_r {
-                    dataset!(group, "xi_r", &postprocessing.xi_r)?;
-                }
-
-                if profiles.xi_h {
-                    dataset!(group, "xi_h", &postprocessing.xi_h)?;
-                }
-
-                if profiles.xi_tp {
-                    dataset!(group, "xi_tp", &postprocessing.xi_tp)?;
-                }
-
-                if profiles.xi_tn {
-                    dataset!(group, "xi_tn", &postprocessing.xi_tn)?;
-                }
-
-                if profiles.pressure {
-                    dataset!(group, "pressure", &postprocessing.p)?;
-                }
-
-                if profiles.density {
-                    dataset!(group, "density", &postprocessing.rho)?;
-                }
-
-                if profiles.gravity_potential {
-                    dataset!(group, "gravity-acceleration", &postprocessing.dpsi)?;
-                }
-
-                if profiles.gravity_potential {
-                    dataset!(group, "gravity-potential", &postprocessing.psi)?;
-                }
-
-                if profiles.divergence {
-                    dataset!(group, "divergence", &postprocessing.chi)?;
-                }
-
-                if profiles.nodes {
-                    dataset!(group, "nodes", &postprocessing.nodes)?;
-                }
+                wr!("y1", &postprocessing.y1, profiles.y1);
+                wr!("y2", &postprocessing.y2, profiles.y2);
+                wr!("y3", &postprocessing.y3, profiles.y3);
+                wr!("y4", &postprocessing.y4, profiles.y4);
+                wr!("xi_r", &postprocessing.xi_r, profiles.xi_r);
+                wr!("xi_h", &postprocessing.xi_h, profiles.xi_h);
+                wr!("xi_tp", &postprocessing.xi_tp, profiles.xi_tp);
+                wr!("xi_tn", &postprocessing.xi_tn, profiles.xi_tn);
+                wr!("pressure", &postprocessing.p, profiles.pressure);
+                wr!("density", &postprocessing.rho, profiles.density);
+                wr!(
+                    "gravity-potential",
+                    &postprocessing.psi,
+                    profiles.gravity_potential
+                );
+                wr!(
+                    "gravity-acceleration",
+                    &postprocessing.dpsi,
+                    profiles.gravity_acceleration
+                );
+                wr!("divergence", &postprocessing.chi, profiles.divergence);
+                wr!("nodes", &postprocessing.nodes, profiles.nodes);
             }
         }
 
