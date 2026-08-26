@@ -223,6 +223,7 @@ enum StormCommands {
         /// Rotation frequency
         ///
         /// This parameter should match the rotation frequency of the model.
+        #[arg(long, required = true, default_value = "0")]
         rotation: f64,
         /// Units of rotation
         #[arg(long, default_value = "dynamical")]
@@ -233,6 +234,9 @@ enum StormCommands {
         /// Disable the P2 component of the deformation
         #[arg(long)]
         disable_p2: bool,
+        /// Use the surface rotation rate of the loaded model
+        #[arg(long, conflicts_with = "rotation")]
+        surface_rotation: bool,
     },
     /// Compute derived properties from the eigenfunctions
     ///
@@ -636,7 +640,14 @@ impl StormCommands {
                 frequency_units,
                 disable_symmetric,
                 disable_p2,
-            } => state.deform(rotation, frequency_units, disable_symmetric, disable_p2),
+                surface_rotation,
+            } => state.deform(
+                rotation,
+                frequency_units,
+                disable_symmetric,
+                disable_p2,
+                surface_rotation,
+            ),
             Self::PostProcess {} => state.post_process(),
             Self::PerturbDeformed { m } => state.perturb_deformed(m),
             Self::Output {
@@ -922,6 +933,7 @@ impl StormState {
         frequency_units: FrequencyUnits,
         disable_symmetric: bool,
         disable_p2: bool,
+        surface_rotation: bool,
     ) -> Result<(), Report> {
         let input = self
             .input
@@ -933,7 +945,18 @@ impl StormState {
                 "Setting the rotation profile for analytical polytropes is not supported"
             ));
         };
-        let rotation = frequency_units.convert_to_natural(rotation, &model.scale)?;
+        let rotation = if surface_rotation {
+            *model
+                .segments
+                .last()
+                .unwrap()
+                .dimensionless
+                .rot
+                .last()
+                .unwrap()
+        } else {
+            frequency_units.convert_to_natural(rotation, &model.scale)?
+        };
 
         perturb_structure(model, rotation);
 

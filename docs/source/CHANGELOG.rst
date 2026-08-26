@@ -12,7 +12,7 @@ StORM now correctly assumes that input models include the spherical component of
 Breaking changes
 ----------------
 
-*None so far*
+- Rotation rate in the deform command must be set with the flag ``--rotation`` rather than using a positional argument. This is to accomodate the ``--surface-rotation`` flag as a holdover until StORM supports deformation with differential rotation.
 
 Features
 --------
@@ -21,6 +21,7 @@ Features
 - Parallelisation is an optional feature now (and disabled by default). This is to improve backtraces when testing and profiling. Most users will want to have the feature enabled. This is the case for the pre-built binaries, and the commands for the source installation will do so as well.
 - Commands are now saved in a history file. This only applies to interactive sessions (i.e. not when piping commands). The `location of the history file <https://docs.rs/directories/latest/directories/struct.ProjectDirs.html#method.data_local_dir>`_ depends on the OS.
 - Rotation rates can now be set as the equatorial velocity.
+- The ``deform`` command now accepts an additional flag to use the surface rotation rate. Because the deformation method used by StORM requires uniform rotation (or rather cylindrical differential rotation), ``deform`` required the user to specify the rotation rate for the deformation. In practice however, this comes down to the surface rotation rate, which is most important for the deformation. Hence, this additional flag provides an easy way to select the surface rotation rate. This makes it easier to use StORM for a large grid of models, as one no longer needs to read in the stellar model to determine the rotation rate at the surface. In the future ``deform`` will no longer accept a rotation rate, as the intent is to fully support differential rotation. The rotation rate used for the deformation will then just be the rotation rate of the model (potentially set by ``set-rotation-constant`` or ``set-rotation-overlay``.
 
 Bug fixes
 ---------
