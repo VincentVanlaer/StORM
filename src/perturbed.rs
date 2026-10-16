@@ -380,8 +380,8 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
 
         if segment != 0 {
             let lower = layer.eval(segment, &grid[0..1]).dimensionless;
-            init_y0.y += 4. * PI / lower.m_coord[0] * lower.rho[0];
-            init_y2.y += 4. * PI / lower.m_coord[0] * lower.rho[0];
+            init_y0.y += lower.u[0] * init_y0.x;
+            init_y2.y += lower.u[0] * init_y2.x;
         }
 
         y0[0] = init_y0;
@@ -413,8 +413,8 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
         init_y2 = *y2.last().unwrap();
 
         let upper = layer.eval(segment, &[*grid.last().unwrap()]).dimensionless;
-        init_y0.y -= 4. * PI / upper.m_coord[0] * upper.rho[0];
-        init_y2.y -= 4. * PI / upper.m_coord[0] * upper.rho[0];
+        init_y0.y -= upper.u[0] * init_y0.x;
+        init_y2.y -= upper.u[0] * init_y2.x;
 
         segments.push((y0, y2));
     }
