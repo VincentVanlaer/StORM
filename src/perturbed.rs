@@ -458,7 +458,8 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
 
             let psi = y0[i].x * d.r_coord[i];
             let dpsi = y0[i].y;
-            let ddpsi = (d.r_coord[i].powi(2) * k * y0[i].x - 2. * y0[i].y) / d.r_coord[i] + 1.;
+            let ddpsi =
+                (0.5 * d.r_coord[i].powi(2) * k * y0[i].x - 2. * y0[i].y) / d.r_coord[i] + 1.;
 
             alpha[i] = 2. * d.r_coord[i] / d.m_coord[i] * psi * rot.powi(2);
             dalpha[i] = alpha[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi);
@@ -472,8 +473,9 @@ pub fn perturb_structure(model: &mut DiscreteModel, rot: f64) {
 
             let psi = y2[i].x * d.r_coord[i] * a2;
             let dpsi = y2[i].y * a2;
-            let ddpsi =
-                ((6. + d.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y) / d.r_coord[i] * a2;
+            let ddpsi = ((6. + 0.5 * d.r_coord[i].powi(2) * k) * y2[i].x - 2. * y2[i].y)
+                / d.r_coord[i]
+                * a2;
 
             beta[i] = 2. * d.r_coord[i] / d.m_coord[i] * psi * rot.powi(2);
             dbeta[i] = beta[i] * (1. - d.u[i] + d.r_coord[i] * dpsi / psi);
